@@ -4,6 +4,7 @@
 package notice
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -40,6 +41,18 @@ func TestAFenceThatWillNotDrawSaysWhy(t *testing.T) {
 		if c.wantNumbers && !strings.ContainsAny(joined, "0123456789") {
 			t.Fatalf("%s: notice carries no measurement: %q", c.name, joined)
 		}
+	}
+}
+
+// A deadline that ran out at the door is not a fence anybody wrote wrong.
+// The reason used to be graphviz's own error text, which said "context
+// deadline exceeded" under a heading that blamed the source.
+func TestADeadlineIsNotABadFence(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	got := Reason(ctx, "digraph { a -> b }", 90, 8)
+	if got != "the layout ran out of time" {
+		t.Fatalf("a spent context yields %q", got)
 	}
 }
 

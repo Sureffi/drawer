@@ -12,6 +12,7 @@ package notice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -97,6 +98,13 @@ func wrapWords(s string, width int) []string {
 func Reason(ctx context.Context, src string, width, region int) string {
 	l, err := layout.DOT(ctx, src, "")
 	if err != nil {
+		// A door that refused on the deadline has read nothing and has
+		// nothing to say about the source. Reporting it as graphviz could
+		// not read this sends a reader hunting a typo in a fence that is
+		// fine, when what happened is that the process ran out of time.
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return "the layout ran out of time"
+		}
 		return "graphviz could not read this: " + firstLine(err.Error())
 	}
 	if l == nil {
