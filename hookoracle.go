@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -43,6 +44,12 @@ func RunDeltas(path string, w, rows int, m Mode) int {
 	emit := func(src string) []string { return m.Emit(src, w, rows) }
 	var in, shown strings.Builder
 	var st State
+	// A recording is in the order the hook processes wrote it, which is the
+	// order Claude Code started them and not the order of the deltas —
+	// fixtures/deltas-race.jsonl has the second before the first. The hook
+	// takes its turn by index, so the transducer sees a message's deltas in
+	// index order, and the replay does the same.
+	var deltas []hookIn
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 1<<20), 1<<20)
 	line := 0
@@ -57,6 +64,22 @@ func RunDeltas(path string, w, rows int, m Mode) int {
 			fmt.Fprintf(os.Stderr, "-deltas: %s:%d: %v\n", path, line, err)
 			return 1
 		}
+		deltas = append(deltas, p)
+	}
+	first := map[string]int{}
+	for i, p := range deltas {
+		if _, ok := first[p.MessageID]; !ok {
+			first[p.MessageID] = i
+		}
+	}
+	sort.SliceStable(deltas, func(i, j int) bool {
+		a, b := deltas[i], deltas[j]
+		if a.MessageID != b.MessageID {
+			return first[a.MessageID] < first[b.MessageID]
+		}
+		return a.Index < b.Index
+	})
+	for _, p := range deltas {
 		in.WriteString(p.Delta)
 		shown.WriteString(Stream(p.Delta, p.Final, &st, emit))
 	}

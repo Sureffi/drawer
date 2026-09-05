@@ -171,18 +171,20 @@ func RunHook(m Mode) int {
 		return 0
 	}
 	hookSession = in.SessionID
-	st := loadState(in.MessageID)
-	before := *&st
 	width, rows := hookSize()
 	// The first delta of a message is the first thing the hook hears after
 	// a theme switch; pixelledger.go says why, and what is repainted.
 	if in.Index == 0 && pickRung() == "pixels" {
 		repaintPictures(hookSession, parentTTYOut(), ProbeRaster("auto"))
 	}
+	st, done := takeTurn(in.MessageID, in.Index, turnPatience)
+	defer done()
+	before := st
 	text := Stream(in.Delta, in.Final, &st, func(src string) []string {
 		return m.Emit(src, width, rows)
 	})
-	saveState(in.MessageID, st)
+	st.Next = max(st.Next, in.Index+1)
+	saveState(in.MessageID, st, in.Final)
 	// Nothing held, nothing drawn, nothing suppressed: let CC display its
 	// own delta rather than handing back a copy of it.
 	if !before.InFence && !before.PendingClose && before.Buf == "" &&

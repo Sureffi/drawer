@@ -28,7 +28,11 @@ an assistant message before laying it out and takes back replacement text.
 The substitution is display-only — the transcript keeps the fence the model
 wrote — and a hook is a fresh process per piece, so the fence is reassembled
 through a small state file keyed by message id, because CC splits a reply
-where it likes and the split is not repeatable.
+where it likes and the split is not repeatable. The processes are not one
+after another either: measured, two pieces' processes started eleven
+microseconds apart. So each takes its turn — the state counts the piece it
+expects next, a lock per message serialises the readers, and a process
+ahead of the count waits for the one before it, the draw included.
 
 Layout is graphviz, compiled to WebAssembly and carried inside the binary
 (`goccy/go-graphviz` through `wazero`). There is no `dot` to install. A

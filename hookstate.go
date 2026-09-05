@@ -7,6 +7,17 @@ package drawer
 // that reassembles the fence has to keep its half-finished work somewhere
 // the next process can find it.
 //
+// And the processes are not one after another. Measured: the processes
+// for a reply's two deltas started eleven microseconds apart and ran side
+// by side, so the second read an empty state, saw no fence open and gave
+// its half of the source back raw, while the first opened a fence nothing
+// ever closed. So a process takes its turn: the state carries the index
+// of the delta it expects next, a lock file per message serialises the
+// readers, and a process whose delta is ahead of the count waits for the
+// one before it — a few milliseconds, the draw included — before it reads.
+// A turn nobody takes is waited for only so long, then taken anyway,
+// which is the old behaviour and its old hazard.
+//
 // What that costs, stated plainly: a file per message id, and one hazard
 // — suppressed deltas are content taken off the screen on the promise of
 // putting something better back. If the promise
@@ -18,6 +29,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -84,13 +96,44 @@ func loadState(msgID string) State {
 	return s
 }
 
-func saveState(msgID string, s State) {
-	if !s.InFence && !s.PendingClose && s.Buf == "" {
+// saveState keeps the state for the next delta's process, or at the
+// message's final delta takes it away, lock and all.
+func saveState(msgID string, s State, final bool) {
+	if final {
 		os.Remove(statePath(msgID))
+		os.Remove(lockPath(msgID))
 		return
 	}
 	b, _ := json.Marshal(s)
 	os.WriteFile(statePath(msgID), b, 0o600)
+}
+
+func lockPath(msgID string) string { return statePath(msgID) + ".lock" }
+
+// turnPatience is how long a process waits for the delta before its own.
+// Claude Code allows a hook far longer, and a turn nobody is coming to
+// take should not hold a reply that long.
+const turnPatience = 2 * time.Second
+
+// takeTurn waits for a delta's turn on its message and takes it: the
+// state as the process before left it, under the message's lock, which
+// the caller holds through the draw and releases with done. A delta the
+// state has already counted past — a repeat — takes its turn at once.
+func takeTurn(msgID string, index int, patience time.Duration) (State, func()) {
+	f, err := os.OpenFile(lockPath(msgID), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return loadState(msgID), func() {}
+	}
+	deadline := time.Now().Add(patience)
+	for {
+		syscall.Flock(int(f.Fd()), syscall.LOCK_EX)
+		st := loadState(msgID)
+		if index <= st.Next || !time.Now().Before(deadline) {
+			return st, func() { syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }
+		}
+		syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		time.Sleep(3 * time.Millisecond)
+	}
 }
 
 // State is the transducer's half-finished work between two deltas: what
@@ -110,6 +153,8 @@ type State struct {
 	// owed, so it is carried — the category of things kept precisely
 	// because no screen can derive them.
 	PendingClose bool `json:"pending_close"`
+	// Next is the index of the delta expected next: the turn.
+	Next int `json:"next"`
 }
 
 // completeLines reports how many bytes of s form whole, newline-terminated

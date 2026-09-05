@@ -9,7 +9,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
@@ -467,6 +469,55 @@ func TestThemeFileYieldsToTheModel(t *testing.T) {
 	}
 	if b := svgGroup(svg, "b"); !strings.Contains(b, `stroke="#111111"`) {
 		t.Errorf("the theme did not reach an unpainted node:\n%s", b)
+	}
+}
+
+// ---------- turns ----------
+
+// A delta's process waits for the one before it: started first with the
+// later index, it takes its turn after the earlier delta's process has
+// saved, and reads what that one saved. A turn nobody comes to take is
+// waited for only so long.
+func TestHookDeltasTakeTurns(t *testing.T) {
+	t.Setenv("DRAWER_STATE", t.TempDir())
+	var mu sync.Mutex
+	var order []int
+	took := func(i int) { mu.Lock(); order = append(order, i); mu.Unlock() }
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		st, done := takeTurn("m", 1, 2*time.Second)
+		defer done()
+		took(1)
+		if st.Next != 1 || st.Buf != "held by 0" {
+			t.Errorf("delta 1 took its turn on state %+v, not the one delta 0 saved", st)
+		}
+		st.Next = 2
+		saveState("m", st, true)
+	}()
+	time.Sleep(30 * time.Millisecond) // delta 1 is waiting
+	go func() {
+		defer wg.Done()
+		st, done := takeTurn("m", 0, 2*time.Second)
+		defer done()
+		took(0)
+		time.Sleep(40 * time.Millisecond) // the draw
+		st.Next, st.Buf = 1, "held by 0"
+		saveState("m", st, false)
+	}()
+	wg.Wait()
+	if len(order) != 2 || order[0] != 0 || order[1] != 1 {
+		t.Errorf("turns were taken in the order %v, want [0 1]", order)
+	}
+	if _, err := os.Stat(filepath.Join(os.Getenv("DRAWER_STATE"), "m.json.lock")); err == nil {
+		t.Error("the lock file outlived the message")
+	}
+	start := time.Now()
+	_, done := takeTurn("nobody", 3, 50*time.Millisecond)
+	done()
+	if waited := time.Since(start); waited < 50*time.Millisecond || waited > time.Second {
+		t.Errorf("a turn nobody takes was waited for %v, want about the patience", waited)
 	}
 }
 
