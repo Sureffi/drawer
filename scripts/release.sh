@@ -1,10 +1,11 @@
 #!/bin/sh
 # scripts/release.sh VERSION — the release, as one command.
 #
-# Four binaries, a checksums file, the plugin zipped with all four inside,
-# and the repo's own marketplace pointed at the zip: what a stranger's
-# `/plugin install drawer@drawer` downloads, sha256 checked, with no Go, no
-# build and nothing on their machine. The pins for the bare binaries go
+# Four binaries, each carrying at link time the version it was built as, a
+# checksums file, the plugin zipped with all four inside, and the repo's own
+# marketplace pointed at the zip: what a stranger's `/plugin install
+# drawer@drawer` downloads, sha256 checked, with no Go, no build and nothing
+# on their machine. `drawer -version` then names what they have. The pins for the bare binaries go
 # into scripts/drawer, so a checkout that arrived by git — an organisation
 # pushing the plugin can only point at git — downloads the same binary the
 # zip would have carried and checks it against the same sum.
@@ -38,12 +39,13 @@ sha256() {
 rm -rf dist
 mkdir -p dist/plugin/scripts/bin
 
-# The binaries: static, stripped, paths trimmed, one per platform the wrapper
-# knows how to name.
+# The binaries: static, stripped, paths trimmed, the version linked in, one
+# per platform the wrapper knows how to name.
 for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
 	os=${t%/*}
 	arch=${t#*/}
-	CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags='-s -w' \
+	CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath \
+		-ldflags="-s -w -X github.com/sureffi/drawer/internal/drawer.version=$v" \
 		-o "dist/drawer-$os-$arch" ./cmd/drawer
 	echo "built drawer-$os-$arch $(du -h "dist/drawer-$os-$arch" | cut -f1)"
 done

@@ -39,6 +39,7 @@ func Main(args []string) int {
 	cell := fs.String("cell", "10x24", "with -png: a terminal cell in pixels, WxH")
 	themePath := fs.String("theme", os.Getenv("DRAWER_THEME"), "a theme file: DOT graph/node/edge defaults for the pixels rung (DRAWER_THEME; default: Claude Code's own theme)")
 	showTheme := fs.Bool("show-theme", false, "print the theme in force as DOT and exit: Claude Code's, or the file given with -theme")
+	showVersion := fs.Bool("version", false, "print the version this binary was built from and exit")
 	fs.Parse(args)
 
 	// A theme the hook cannot read is the built-in one: the picture draws,
@@ -58,6 +59,8 @@ func Main(args []string) int {
 	w, h := parseSize(*size, 100, 40)
 
 	switch {
+	case *showVersion:
+		fmt.Println("drawer", version)
 	case *showTheme:
 		fmt.Print(r.theme.get().Source)
 	case *contextLine:
@@ -77,6 +80,12 @@ func Main(args []string) int {
 	}
 	return 0
 }
+
+// version is the release this binary was built from. scripts/release.sh
+// writes it in at link time with -X, so a binary a stranger downloaded can
+// say which one it is; a build out of a checkout says dev, which is what it
+// is.
+var version = "dev"
 
 // envOr is an environment variable, or the default where it is unset.
 func envOr(key, def string) string {

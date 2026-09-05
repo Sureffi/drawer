@@ -255,6 +255,7 @@ manifests and wrapper, and the recorded delta streams replayed. Offline:
     ./bin/drawer -dot FILE -png OUT [-cell 10x24]      # the pixels rung's picture, to a file
     ./bin/drawer -deltas FILE -render cells            # replay a recorded turn; nonzero if damaged
     ./bin/drawer -context                              # the line the model is handed
+    ./bin/drawer -version                              # the release this binary was built from
 
 `-deltas` is not a golden file: prose outside a fence must come back byte
 for byte, every fence must come back untouched or as one drawn block that
