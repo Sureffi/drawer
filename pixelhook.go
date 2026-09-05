@@ -154,11 +154,6 @@ func pixelFit(r *Raster, svg []byte, cols int, geom PxGeom) ([]byte, int, error)
 	return png, rows, nil
 }
 
-// parentTTYOut is the terminal on the parent's stdout, where the picture
-// goes. Its stdin is where the size was read; both are the same tty in an
-// interactive session and neither exists in an oracle.
-func parentTTYOut() string { return "/proc/" + strconv.Itoa(os.Getppid()) + "/fd/1" }
-
 // hookImageID names a picture by hashing its cut: derived, never minted. The low byte rides in the placeholder's 256-colour
 // foreground and the high byte in a third diacritic, because the display
 // wire quantises a truecolor foreground and would have mangled a 24-bit id

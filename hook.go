@@ -70,10 +70,6 @@ func ioctl(fd uintptr, req uintptr, arg unsafe.Pointer) error {
 	return nil
 }
 
-// parentTTY is the terminal the hook's parent is talking to, reached
-// through /proc. Empty when there is none, which is every offline oracle.
-func parentTTY() string { return "/proc/" + strconv.Itoa(os.Getppid()) + "/fd/0" }
-
 // hookGeom is what the window said about itself: cells, and the pixel
 // size of a cell where the terminal reports one (kitty does; most leave
 // it zero, which reads as no pixels).
@@ -136,11 +132,11 @@ type Mode struct {
 
 // Tee is where a live turn is written down, one payload per line, in
 // exactly the shape -deltas reads. One armed session therefore produces a
-// fixture rather than a log.
-//
-// It cannot be an environment variable. CC scrubs the environment before
-// running a hook (measured: a variable set in the parent shell arrives
-// empty), so the path has to ride the command line in settings.json.
+// fixture rather than a log. It is -hooktee on the command line, or
+// DRAWER_TEE in the environment: a variable set for claude — the shell's,
+// or settings.json's `env` — reaches a hook (measured on 2.1.261; an
+// earlier measurement said the environment was scrubbed, and on 2.1.257
+// it was not either way that mattered here).
 var Tee string
 
 func teePayload(raw []byte) {
@@ -214,4 +210,25 @@ func hookTerm() string {
 		}
 	}
 	return ""
+}
+
+// Context is what a model should know at the start of a session, for a
+// SessionStart hook to hand it: that a ```dot fence in a reply is drawn in
+// place, and what this terminal's rung can draw, which is what a graph
+// should be written for. Without it a model that has never heard of the
+// hook writes mermaid, or boxes out of hyphens, and neither is a picture.
+func Context() string {
+	hookSize()
+	var can string
+	switch pickRung() {
+	case "pixels":
+		can = "as graphviz's own picture, so everything dot draws, draws"
+	case "octants", "braille":
+		can = "in strokes: clusters, node shapes, multi-line labels and dashed edges draw; record and HTML labels print their markup, and node colours are not painted"
+	default:
+		can = "in box-drawing characters: boxes with one-line labels and routed edges; clusters and node shapes do not draw"
+	}
+	return "drawer: a ```dot fence in a reply is drawn in place, " + can +
+		". For any diagram, write graphviz DOT in a ```dot fence, not mermaid and not ASCII art. " +
+		"Up to about a dozen nodes it draws as written; past that it goes top-down and tall.\n"
 }

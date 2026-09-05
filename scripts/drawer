@@ -1,0 +1,132 @@
+#!/bin/sh
+# scripts/drawer — the plugin's two hooks, one script.
+#
+#   drawer session    SessionStart: put the binary in place, then print
+#                     what a model should know — stdout of this event goes
+#                     into the model's context.
+#   drawer hook       MessageDisplay: the payload on stdin, the drawing out.
+#
+# A plugin runs no install step, so the binary is put in place here, at
+# the first session after an install or an update, in the plugin's data
+# directory, which survives updates. Four ways it can get there, best
+# first, each falling to the next:
+#
+#   a built checkout   bin/drawer beside go.mod: a developer's tree, linked
+#                      so a rebuild is live in the next reply
+#   shipped            scripts/bin/drawer-OS-ARCH: the release zip
+#   downloaded         the release binary for this OS and ARCH, sha256
+#                      pinned below by release.sh
+#   built              go build, where Go is on the PATH: a checkout with
+#                      no release for this platform, or none reachable
+#
+# Until one of them lands every hook fails open: {} is "display the
+# original", and a session without the line of context is a fence that
+# shows its source.
+#
+# Claude Code puts CLAUDE_PLUGIN_ROOT (this checkout) and CLAUDE_PLUGIN_DATA
+# in a hook's environment, measured on 2.1.261, and so is every DRAWER_*
+# variable set for claude — settings.json's env, or the shell — which the
+# binary reads for itself.
+#
+# The binary is exec'd, never run as a child: it reads the terminal's size
+# through its parent, and its parent has to be claude.
+
+# release: rewritten by release.sh; the pins for this version's binaries.
+release=0.1.0
+release_url=https://github.com/sureffi/drawer/releases/download
+sha_darwin_amd64=
+sha_darwin_arm64=
+sha_linux_amd64=
+sha_linux_arm64=
+# release end
+
+mode=$1
+root=${CLAUDE_PLUGIN_ROOT:-$(dirname "$0")/..}
+root=$(cd "$root" && pwd) # absolute: a link into it must hold from anywhere
+data=$CLAUDE_PLUGIN_DATA
+bin=$data/drawer
+
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
+case $(uname -m) in
+x86_64 | amd64) arch=amd64 ;;
+aarch64 | arm64) arch=arm64 ;;
+*) arch= ;;
+esac
+plat=$os-$arch
+
+# stamp is what put the binary there, so the same route at the same
+# version does no work twice.
+stamp=$data/drawer.from
+stamped() { [ -x "$bin" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$1" ]; }
+# place FILE HOW — the binary arrives beside itself and moves over, so a
+# session mid-reply keeps the one it is running and two sessions starting
+# at once never share a half-written file.
+place() {
+	chmod +x "$1" && mv -f "$1" "$bin" && printf '%s\n' "$2" >"$stamp"
+}
+
+sha256() {
+	if command -v sha256sum >/dev/null 2>&1; then
+		sha256sum "$1" | cut -d' ' -f1
+	elif command -v shasum >/dev/null 2>&1; then
+		shasum -a 256 "$1" | cut -d' ' -f1
+	fi
+}
+
+# checkout: bin/drawer beside go.mod, linked, so check.sh's build is what
+# the next reply runs.
+from_checkout() {
+	[ -f "$root/go.mod" ] && [ -x "$root/bin/drawer" ] || return 1
+	rm -f "$bin" && ln -s "$root/bin/drawer" "$bin" && printf 'checkout\n' >"$stamp"
+}
+
+from_shipped() {
+	f=$root/scripts/bin/drawer-$plat
+	[ -x "$f" ] || return 1
+	stamped "shipped $release $plat" && return 0
+	cp "$f" "$bin.$$" && place "$bin.$$" "shipped $release $plat"
+}
+
+from_release() {
+	eval "want=\$sha_${os}_${arch}"
+	[ -n "$want" ] || return 1
+	stamped "release $release $plat" && return 0
+	command -v curl >/dev/null 2>&1 || return 1
+	curl -fsSL --retry 2 --max-time 120 -o "$bin.$$" \
+		"$release_url/v$release/drawer-$plat" 2>/dev/null || { rm -f "$bin.$$"; return 1; }
+	if [ "$(sha256 "$bin.$$")" != "$want" ]; then
+		rm -f "$bin.$$"
+		echo "drawer: the downloaded binary is not the one pinned for v$release; not used" >&2
+		return 1
+	fi
+	place "$bin.$$" "release $release $plat"
+}
+
+from_build() {
+	[ -f "$root/go.mod" ] && command -v go >/dev/null 2>&1 || return 1
+	if (cd "$root" && go build -o "$bin.$$" ./cmd/drawer) >&2; then
+		place "$bin.$$" "built"
+	else
+		rm -f "$bin.$$"
+		return 1
+	fi
+}
+
+case $mode in
+session)
+	[ -n "$data" ] || exit 0
+	mkdir -p "$data"
+	from_checkout || from_shipped || from_release || from_build ||
+		echo "drawer: no binary for $plat could be put in place; a dot fence shows its source" >&2
+	[ -x "$bin" ] || exit 0
+	exec "$bin" -context
+	;;
+hook)
+	[ -x "$bin" ] || { echo '{}'; exit 0; }
+	exec "$bin" -hook
+	;;
+*)
+	echo "usage: drawer session|hook" >&2
+	exit 2
+	;;
+esac

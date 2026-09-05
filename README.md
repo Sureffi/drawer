@@ -1,11 +1,10 @@
 # drawer
 
 A ```dot fence in Claude Code becomes a drawing, in place, as the reply
-streams. One binary, one line of settings, nothing else running.
+streams. One binary, nothing else running.
 
-    go build -o bin/drawer ./cmd/drawer
-    ./bin/drawer -install        # writes the hook into ~/.claude/settings.json, backup beside it
-    ./bin/drawer -uninstall      # takes it out
+    /plugin marketplace add sureffi/drawer      # or a checkout: /plugin marketplace add /path/to/drawer
+    /plugin install drawer@drawer
 
 Then ask for a graph. The model writes DOT; the reader sees the picture.
 
@@ -20,6 +19,56 @@ Then ask for a graph. The model writes DOT; the reader sees the picture.
       The cache and database sit downstream of both servers.
 
 That is a live session, sonnet writing, CC 2.1.257, captured off tmux.
+
+## the plugin
+
+Two hooks. `SessionStart` puts the binary in place and prints one line
+into the model's context: that a ```dot fence draws in place, and what
+this terminal's rung can draw. `MessageDisplay` draws. The line is what
+the plugin is for — a model that has not heard of the hook writes
+mermaid, or boxes out of hyphens, and neither is a picture — and
+`./bin/drawer -context` prints it.
+
+A plugin runs no install step, so `scripts/drawer` puts the binary in the
+plugin's data directory itself, at the first session, by the first of
+four ways that works: a built checkout's `bin/drawer`, linked, so a
+rebuild is live at the next reply; the binaries the release zip carries,
+one per platform; the release binary downloaded for this platform and
+checked against the sum `release.sh` pinned in the script; or `go build`,
+where Go is on the PATH. A stranger's install is the zip, and needs
+nothing on the machine. A checkout that arrived by git — an organisation
+pushing the plugin to its people can only point at git — downloads the
+same binary the zip would have carried. Until one of the four lands, both
+hooks fail open: a session without the line is a fence that shows its
+source. The script execs the binary rather than running it, because the
+binary reads the terminal's size as its parent's, and its parent has to
+be `claude`. Linux and macOS, amd64 and arm64; the hook wire is Unix
+through and through and Windows does not build.
+
+Three settings, read from the environment, which reaches a hook when set
+for `claude` in `settings.json`'s `env` or in the shell (measured on
+2.1.261): `DRAWER_RENDER` picks a rung, `DRAWER_THEME` names a theme
+file, `DRAWER_TEE` records a fixture.
+
+    { "env": { "DRAWER_THEME": "/home/me/.config/drawer/theme.dot" } }
+
+Developing: install from the checkout, `/plugin marketplace add
+/path/to/drawer` then `/plugin install drawer@drawer`. Claude Code copies
+the tree into its cache but runs the hooks with the checkout as the
+plugin root (measured on 2.1.261: the data directory's link points into
+the checkout), so the checkout's `bin/drawer` is what the next reply
+runs and `./check.sh` rebuilds it. A change to the script or the
+manifests is safest reinstalled. A checkout loaded with `--plugin-dir`
+beside an installed plugin is two hooks on every delta sharing the state
+files, and a fence split across deltas comes out doubled. The same
+doubling is an older `-install`'s entry in `settings.json` beside the
+plugin: `./bin/drawer -uninstall` takes it out, and the line of context
+says so when it finds one.
+
+`./release.sh VERSION` is the release as one command: four binaries, a
+checksums file, the plugin zipped with all four inside, the sums pinned
+into the script, the marketplace pointed at the zip, commit, tag, push,
+GitHub release.
 
 ## how it stands there
 
@@ -119,9 +168,10 @@ found by asking the terminal, which a hook cannot ask.
 
 prints the theme in force as DOT, which is where a theme file starts, and
 `fixtures/tokyonight.dot`, `fixtures/tokyonight-day.dot` and
-`fixtures/theme.dot` are three. A theme file goes on the hook line:
+`fixtures/theme.dot` are three. A theme file is named by `DRAWER_THEME`,
+set for `claude` in `settings.json`:
 
-    ./bin/drawer -install -theme ~/.config/drawer/theme.dot
+    { "env": { "DRAWER_THEME": "/home/me/.config/drawer/theme.dot" } }
 
 `graph [...]` is the root and every cluster alike. A theme file is the whole
 theme, not a patch on Claude Code's: what it leaves undeclared is
@@ -171,7 +221,7 @@ wrapper. The drawer takes the trade so that graphs work with nothing but
     ./bin/drawer -dot FILE -size WxH -render braille   # draw a file, name the size it needs
     ./bin/drawer -dot FILE -png OUT [-cell 10x24]      # the pixels rung's picture, to a file
     ./bin/drawer -deltas FILE -render cells            # replay a recorded turn; nonzero if damaged
-    ./bin/drawer -hook -hooktee FILE                   # a live session writes its own fixture
+    ./bin/drawer -hook -hooktee FILE                   # a live session writes its own fixture (DRAWER_TEE)
 
 `-deltas` is not a golden file: prose outside a fence must come back byte
 for byte, every fence must come back untouched or as one drawn block that
@@ -182,8 +232,11 @@ fits its width, and a notice must carry the source it is about.
 - A fence under a list item is drawn at the window's width less its
   indent. What Claude Code actually gives a code block inside a list item
   is not measured; if it is less, the drawing wraps there.
-- The hook's width comes from `/proc/$PPID/fd/0`, Linux only. macOS would
-  need the tty via `ps` and an open of the device; unverified.
+- The hook's width comes from the parent's tty: `/proc/$PPID/fd/0` on
+  Linux, and on macOS the device `ps` names for the parent. The macOS
+  path is written blind — nothing here runs it — and unverified; if it
+  is wrong the width falls to `COLUMNS` and then 100, and pixels do not
+  reach the terminal.
 - In the glyph rungs, record and HTML labels print their markup and node
   colours are not painted. The pixels rung draws both, but in an HTML label
   the space between two spans collapses — `<b>bold</b> and` sets as

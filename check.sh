@@ -45,6 +45,31 @@ for f in fixtures/theme.dot fixtures/tokyonight.dot fixtures/tokyonight-day.dot;
   stage "theme: $f" ./bin/drawer -theme $f -dot fixtures/chain.dot -size 100x14 -render cells || true
 done
 stage "show-theme" ./bin/drawer -show-theme || true
+stage "context" ./bin/drawer -context || true
+
+# The plugin's manifest and marketplace, as Claude Code reads them. Only
+# where claude is on the PATH; the files are still in the repo either way.
+if command -v claude >/dev/null 2>&1; then
+  stage "plugin: validate" claude plugin validate . --strict || true
+else
+  say "plugin: validate" "skipped (no claude)"
+fi
+# The wrapper, on this checkout: a built bin/drawer is linked into a scratch
+# data dir and the context line comes back through it, then the hook route
+# draws a fence through the same link.
+stage "plugin: sh -n" sh -n scripts/drawer release.sh || true
+rm -rf bin/pdata
+session_speaks() {
+  CLAUDE_PLUGIN_ROOT=. CLAUDE_PLUGIN_DATA=bin/pdata ./scripts/drawer session </dev/null |
+    grep -q '^drawer: a ```dot fence'
+}
+hook_draws() {
+  printf '{"delta":"```dot\\ndigraph{a->b}\\n```\\n","final":true,"message_id":"chk","index":0}' |
+    CLAUDE_PLUGIN_ROOT=. CLAUDE_PLUGIN_DATA=bin/pdata DRAWER_STATE=bin/pdata ./scripts/drawer hook |
+    grep -q displayContent
+}
+stage "plugin: session" session_speaks || true
+stage "plugin: hook" hook_draws || true
 
 # The pixels rung, to a file: the same cut the hook makes. Only where this
 # machine can rasterise; a box without cairo is not wrong, only glyph-bound.

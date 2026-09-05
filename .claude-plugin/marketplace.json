@@ -1,0 +1,12 @@
+{
+  "name": "drawer",
+  "owner": { "name": "Sureffi", "email": "sureffi@proton.me" },
+  "description": "drawer, from its own repository.",
+  "plugins": [
+    {
+      "name": "drawer",
+      "source": "./",
+      "description": "A ```dot fence in a reply is drawn in place."
+    }
+  ]
+}
