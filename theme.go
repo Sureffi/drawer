@@ -13,16 +13,15 @@
 // says how: fontname names the face the picture is set in, fontsize yields
 // to the cell when the theme has none, and a node's fill is a rule.
 //
-// The theme in force is Claude Code's own, unless a file is on the hook
-// line. Claude Code's theme is a palette of named colours — claude, text,
+// The theme in force is Claude Code's own, unless DRAWER_THEME names a
+// file. Claude Code's theme is a palette of named colours — claude, text,
 // subtle, inactive, success, userMessageBackground and some sixty more —
 // and six of them are the picture: what the transcript is drawn in, the
 // drawing is drawn in, and a theme switch reaches it. The four stock
 // palettes are carried here, read from the binary; a custom theme is its
 // base with the overrides its file declares laid over. `drawer -show-theme`
-// prints the result as DOT, which is where a theme file starts, and
-// `drawer -install -theme FILE` puts one on the hook line. A file the hook
-// cannot read at run time is Claude Code's theme — the picture draws;
+// prints the result as DOT, which is where a theme file starts. A file the
+// hook cannot read at run time is Claude Code's theme — the picture draws;
 // `drawer -theme FILE -dot ...` says what is wrong with it.
 
 package drawer
@@ -30,7 +29,6 @@ package drawer
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -188,34 +186,25 @@ const (
 // parsed inside a graph of their own, and what that graph declares as its
 // defaults is the theme.
 func ParseTheme(src string) (*Theme, error) {
-	graphvizMu.Lock()
-	defer graphvizMu.Unlock()
-	ctx := context.Background()
-	g, err := graphviz.New(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer g.Close()
-	graph, err := graphviz.ParseBytes([]byte("digraph {\n" + src + "\n}\n"))
-	if err != nil {
-		return nil, err
-	}
-	if graph == nil {
-		return nil, errors.New("no declarations")
-	}
-	defer graph.Close()
 	th := &Theme{Graph: map[string]string{}, Node: map[string]string{}, Edge: map[string]string{}, Source: src}
-	for kind, m := range map[int]map[string]string{agGraph: th.Graph, agNode: th.Node, agEdge: th.Edge} {
-		var sym *cgraph.Symbol
-		for {
-			if sym, err = graph.NextAttr(kind, sym); err != nil {
-				return nil, err
+	err := door("digraph {\n"+src+"\n}\n", func(_ context.Context, _ *graphviz.Graphviz, graph *cgraph.Graph) error {
+		for kind, m := range map[int]map[string]string{agGraph: th.Graph, agNode: th.Node, agEdge: th.Edge} {
+			var sym *cgraph.Symbol
+			for {
+				var err error
+				if sym, err = graph.NextAttr(kind, sym); err != nil {
+					return err
+				}
+				if sym == nil {
+					break
+				}
+				m[sym.Name()] = sym.DefaultValue()
 			}
-			if sym == nil {
-				break
-			}
-			m[sym.Name()] = sym.DefaultValue()
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return th, nil
 }

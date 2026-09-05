@@ -162,9 +162,6 @@ func pxFontPt(cellW int) float64 {
 }
 
 // renderThemedSVG lays the source out and writes graphviz's SVG for it.
-// Through the same door as every other graphviz call: two concurrent
-// graphviz.New calls are a `fatal error: concurrent map writes`, which
-// takes the process and the session with it.
 //
 // Node sizes are graphviz's own here, unlike the cell renderer's, which
 // forces every box to its label's width in cells. There the cells do the
@@ -174,116 +171,102 @@ func pxFontPt(cellW int) float64 {
 // force overrides the orientation the source asked for; empty leaves the
 // author's choice alone.
 func renderThemedSVG(src string, fontPt float64, force cgraph.RankDir) ([]byte, error) {
-	th := currentTheme()
-	graphvizMu.Lock()
-	defer graphvizMu.Unlock()
-	ctx := context.Background()
-	g, err := graphviz.New(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer g.Close()
-	graph, err := graphviz.ParseBytes([]byte(src))
-	if err != nil {
-		return nil, err
-	}
-	// A fence the model opened and closed parses to (nil, nil): nothing was
-	// wrong with what graphviz was asked, there was simply no graph in it.
-	if graph == nil {
-		return nil, errors.New("no graph in source")
-	}
-	defer graph.Close()
-	if force != "" {
-		graph.SetRankDir(force)
-	}
-	inlineEdgeLabels(graph, th, fontPt, isDigraph(src))
+	th := currentTheme() // before the door: parsing a fresh theme goes through it
+	var svg []byte
+	err := door(src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
+		if force != "" {
+			graph.SetRankDir(force)
+		}
+		inlineEdgeLabels(graph, th, fontPt, isDigraph(src))
 
-	type getter = func(string) string
-	type setter = func(string, string, string) error
-	// unset writes an attribute only where the source left it empty. An
-	// attribute the source declared at `node [...]` reads as set on every
-	// node, which is what the model meant by declaring it there.
-	unset := func(get getter, set setter, key, val string) {
-		if val != "" && get(key) == "" {
-			set(key, val, "")
-		}
-	}
-	// apply is a theme's declarations, less the ones that are rules.
-	apply := func(get getter, set setter, decl map[string]string, rules ...string) {
-		for k, v := range decl {
-			if !slices.Contains(rules, k) {
-				unset(get, set, k, v)
+		type getter = func(string) string
+		type setter = func(string, string, string) error
+		// unset writes an attribute only where the source left it empty. An
+		// attribute the source declared at `node [...]` reads as set on every
+		// node, which is what the model meant by declaring it there.
+		unset := func(get getter, set setter, key, val string) {
+			if val != "" && get(key) == "" {
+				set(key, val, "")
 			}
 		}
-	}
-	size := ""
-	if fontPt > 0 {
-		size = strconv.FormatFloat(fontPt, 'f', 2, 64)
-	}
-	// typeset is the two type rules: always Courier, and the theme's size
-	// where it has one, else the cell's.
-	typeset := func(get getter, set setter, decl map[string]string) {
-		set("fontname", pxLayoutFont, "")
-		if fs := decl["fontsize"]; fs != "" {
-			unset(get, set, "fontsize", fs)
-		} else {
-			unset(get, set, "fontsize", size)
-		}
-	}
-	for n, _ := graph.FirstNode(); n != nil; n, _ = graph.NextNode(n) {
-		apply(n.GetStr, n.SafeSet, th.Node, "fillcolor", "style", "fontcolor", "fontname", "fontsize")
-		// The fill rule. A node the model filled, or styled filled, is the
-		// model's: its fill, its style and its text colour stay as graphviz
-		// would give them. Any other node takes the theme's fill, with
-		// "filled" added to whichever style it has, and the theme's text.
-		style := n.GetStr("style")
-		modelFilled := n.GetStr("fillcolor") != "" || strings.Contains(style, "filled")
-		switch fill := th.Node["fillcolor"]; {
-		case fill == "":
-			unset(n.GetStr, n.SafeSet, "style", th.Node["style"])
-			unset(n.GetStr, n.SafeSet, "fontcolor", th.Node["fontcolor"])
-		case !modelFilled:
-			if style == "" {
-				style = th.Node["style"]
+		// apply is a theme's declarations, less the ones that are rules.
+		apply := func(get getter, set setter, decl map[string]string, rules ...string) {
+			for k, v := range decl {
+				if !slices.Contains(rules, k) {
+					unset(get, set, k, v)
+				}
 			}
-			if !strings.Contains(style, "filled") {
-				style = strings.TrimPrefix(style+",filled", ",")
+		}
+		size := ""
+		if fontPt > 0 {
+			size = strconv.FormatFloat(fontPt, 'f', 2, 64)
+		}
+		// typeset is the two type rules: always Courier, and the theme's size
+		// where it has one, else the cell's.
+		typeset := func(get getter, set setter, decl map[string]string) {
+			set("fontname", pxLayoutFont, "")
+			if fs := decl["fontsize"]; fs != "" {
+				unset(get, set, "fontsize", fs)
+			} else {
+				unset(get, set, "fontsize", size)
 			}
-			n.SafeSet("style", style, "")
-			n.SafeSet("fillcolor", fill, "")
-			unset(n.GetStr, n.SafeSet, "fontcolor", th.Node["fontcolor"])
 		}
-		typeset(n.GetStr, n.SafeSet, th.Node)
-		for e, _ := graph.FirstOut(n); e != nil; e, _ = graph.NextOut(e) {
-			apply(e.GetStr, e.SafeSet, th.Edge, "fontname", "fontsize")
-			typeset(e.GetStr, e.SafeSet, th.Edge)
+		for n, _ := graph.FirstNode(); n != nil; n, _ = graph.NextNode(n) {
+			apply(n.GetStr, n.SafeSet, th.Node, "fillcolor", "style", "fontcolor", "fontname", "fontsize")
+			// The fill rule. A node the model filled, or styled filled, is the
+			// model's: its fill, its style and its text colour stay as graphviz
+			// would give them. Any other node takes the theme's fill, with
+			// "filled" added to whichever style it has, and the theme's text.
+			style := n.GetStr("style")
+			modelFilled := n.GetStr("fillcolor") != "" || strings.Contains(style, "filled")
+			switch fill := th.Node["fillcolor"]; {
+			case fill == "":
+				unset(n.GetStr, n.SafeSet, "style", th.Node["style"])
+				unset(n.GetStr, n.SafeSet, "fontcolor", th.Node["fontcolor"])
+			case !modelFilled:
+				if style == "" {
+					style = th.Node["style"]
+				}
+				if !strings.Contains(style, "filled") {
+					style = strings.TrimPrefix(style+",filled", ",")
+				}
+				n.SafeSet("style", style, "")
+				n.SafeSet("fillcolor", fill, "")
+				unset(n.GetStr, n.SafeSet, "fontcolor", th.Node["fontcolor"])
+			}
+			typeset(n.GetStr, n.SafeSet, th.Node)
+			for e, _ := graph.FirstOut(n); e != nil; e, _ = graph.NextOut(e) {
+				apply(e.GetStr, e.SafeSet, th.Edge, "fontname", "fontsize")
+				typeset(e.GetStr, e.SafeSet, th.Edge)
+			}
 		}
-	}
-	// Clusters before the root. A subgraph answers GetStr with the root's
-	// value for anything it never set itself, but graphviz paints it from
-	// its own record, which is empty — measured as a black serif "kitty"
-	// over an otherwise themed cluster. Read the clusters while the root is
-	// still the model's, then theme the root.
-	var clusters func(*cgraph.Graph)
-	clusters = func(sg *cgraph.Graph) {
-		for c, _ := sg.FirstSubGraph(); c != nil; c, _ = c.NextSubGraph() {
-			apply(c.GetStr, c.SafeSet, th.Graph, "fontname", "fontsize")
-			typeset(c.GetStr, c.SafeSet, th.Graph)
-			clusters(c)
+		// Clusters before the root. A subgraph answers GetStr with the root's
+		// value for anything it never set itself, but graphviz paints it from
+		// its own record, which is empty — measured as a black serif "kitty"
+		// over an otherwise themed cluster. Read the clusters while the root is
+		// still the model's, then theme the root.
+		var clusters func(*cgraph.Graph)
+		clusters = func(sg *cgraph.Graph) {
+			for c, _ := sg.FirstSubGraph(); c != nil; c, _ = c.NextSubGraph() {
+				apply(c.GetStr, c.SafeSet, th.Graph, "fontname", "fontsize")
+				typeset(c.GetStr, c.SafeSet, th.Graph)
+				clusters(c)
+			}
 		}
-	}
-	clusters(graph)
-	apply(graph.GetStr, graph.SafeSet, th.Graph, "fontname", "fontsize")
-	typeset(graph.GetStr, graph.SafeSet, th.Graph)
+		clusters(graph)
+		apply(graph.GetStr, graph.SafeSet, th.Graph, "fontname", "fontsize")
+		typeset(graph.GetStr, graph.SafeSet, th.Graph)
 
-	var buf bytes.Buffer
-	if err := g.Render(ctx, graph, graphviz.SVG, &buf); err != nil {
-		return nil, err
-	}
-	// graphviz writes Courier as a family with its generic behind it.
-	svg := bytes.ReplaceAll(buf.Bytes(),
-		[]byte(`font-family="`+pxLayoutFont+`,monospace"`), []byte(`font-family="`+th.Face()+`"`))
-	return svg, nil
+		var buf bytes.Buffer
+		if err := g.Render(ctx, graph, graphviz.SVG, &buf); err != nil {
+			return err
+		}
+		// graphviz writes Courier as a family with its generic behind it.
+		svg = bytes.ReplaceAll(buf.Bytes(),
+			[]byte(`font-family="`+pxLayoutFont+`,monospace"`), []byte(`font-family="`+th.Face()+`"`))
+		return nil
+	})
+	return svg, err
 }
 
 // ---------- pixels ----------

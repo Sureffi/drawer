@@ -76,15 +76,11 @@ func pixelCut(r *Raster, src string, width int, geom PxGeom) ([]byte, picture, e
 	if width > len(RowColumnDiacritics) {
 		width = len(RowColumnDiacritics)
 	}
-	rungs := []cgraph.RankDir{""}
-	if rankdirOf(src) != cgraph.TBRank {
-		rungs = append(rungs, cgraph.TBRank)
-	}
 	var svg []byte
 	cols, zoom := 0, 0.0
 	rd := cgraph.RankDir("")
 	var last error
-	for _, try := range rungs {
+	for _, try := range orientations(src) {
 		s, err := renderThemedSVG(src, pxFontPt(geom.CellW), try)
 		if err != nil {
 			return nil, picture{}, err

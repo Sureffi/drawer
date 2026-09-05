@@ -689,8 +689,7 @@ func renderDiagramInk(l *dlayout, w, h int) ([]string, [][]uint8) {
 			floated = append(floated, e)
 		}
 	}
-	for i, n := range l.nodes {
-		_ = i
+	for _, n := range l.nodes {
 		drawNode(cv, n.label, boxes[n.name])
 	}
 	for _, e := range floated {

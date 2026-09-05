@@ -42,9 +42,53 @@ import (
 // overlaps itself; a program embedding the package may well call in from
 // two goroutines.
 //
-// layoutDOT is the only door through this border. A layout measures ~1ms;
+// door is the only way through this border. A layout measures ~1ms;
 // serialising them costs nothing worth having.
 var graphvizMu sync.Mutex
+
+// door takes the lock, opens graphviz, parses the source and hands the
+// graph to fn, closing everything after it. A source with no graph in it
+// parses to (nil, nil): graphviz reports nothing wrong because nothing was
+// asked of it. Every caller dereferences the result, so the nil dies here —
+// an empty ```dot fence is one the model opened and closed, not a diagram.
+func door(src string, fn func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error) error {
+	graphvizMu.Lock()
+	defer graphvizMu.Unlock()
+	ctx := context.Background()
+	g, err := graphviz.New(ctx)
+	if err != nil {
+		return err
+	}
+	defer g.Close()
+	graph, err := graphviz.ParseBytes([]byte(src))
+	if err != nil {
+		return err
+	}
+	if graph == nil {
+		return errors.New("no graph in source")
+	}
+	defer graph.Close()
+	return fn(ctx, g, graph)
+}
+
+// orientations is the order a graph is tried in: as written, then top-down
+// where it was not already, because rows scroll and columns run out.
+func orientations(src string) []cgraph.RankDir {
+	if rankdirOf(src) == cgraph.TBRank {
+		return []cgraph.RankDir{""}
+	}
+	return []cgraph.RankDir{"", cgraph.TBRank}
+}
+
+// labelOf is a node's label as graphviz would print it: what it declares,
+// else its name, which is what `\N` means.
+func labelOf(n *cgraph.Node) string {
+	if l := n.Label(); l != "" && l != `\N` {
+		return l
+	}
+	name, _ := n.Name()
+	return name
+}
 
 type dnode struct {
 	name  string
@@ -93,43 +137,26 @@ const (
 // force overrides the orientation the source asked for; empty leaves the
 // author's choice alone.
 func layoutDOT(src string, force cgraph.RankDir) (*dlayout, error) {
-	graphvizMu.Lock()
-	defer graphvizMu.Unlock()
-	ctx := context.Background()
-	g, err := graphviz.New(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer g.Close()
-	graph, err := graphviz.ParseBytes([]byte(src))
-	if err != nil {
-		return nil, err
-	}
-	// A source with no graph in it parses to (nil, nil): graphviz reports
-	// nothing wrong because nothing was asked of it. Every line below
-	// dereferences the result, so the nil has to die here. An empty ```dot
-	// fence is one the model opened and closed, not a diagram, and the
-	// fallback already knows what to do with a source it cannot lay out.
-	if graph == nil {
-		return nil, errors.New("no graph in source")
-	}
-	defer graph.Close()
-	rd := force
-	if rd == "" {
-		rd = rankdirOf(src)
-	} else {
-		graph.SetRankDir(rd)
-	}
-	sizeNodesInCells(graph)
-	setSeparation(graph, rd)
-	var buf bytes.Buffer
-	if err := g.Render(ctx, graph, "plain", &buf); err != nil {
-		return nil, err
-	}
-	l := parsePlain(buf.String())
-	l.horiz = rd == cgraph.LRRank || rd == cgraph.RLRank
-	l.directed = directedRe.MatchString(src)
-	return l, nil
+	var l *dlayout
+	err := door(src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
+		rd := force
+		if rd == "" {
+			rd = rankdirOf(src)
+		} else {
+			graph.SetRankDir(rd)
+		}
+		sizeNodesInCells(graph)
+		setSeparation(graph, rd)
+		var buf bytes.Buffer
+		if err := g.Render(ctx, graph, "plain", &buf); err != nil {
+			return err
+		}
+		l = parsePlain(buf.String())
+		l.horiz = rd == cgraph.LRRank || rd == cgraph.RLRank
+		l.directed = directedRe.MatchString(src)
+		return nil
+	})
+	return l, err
 }
 
 // sizeNodesInCells fixes every node's footprint to the space its label
@@ -138,10 +165,7 @@ func layoutDOT(src string, force cgraph.RankDir) (*dlayout, error) {
 // at typography we do not have.
 func sizeNodesInCells(g *cgraph.Graph) {
 	for n, _ := g.FirstNode(); n != nil; n, _ = g.NextNode(n) {
-		label := n.Label()
-		if label == "" || label == `\N` {
-			label, _ = n.Name()
-		}
+		label := labelOf(n)
 		n.SetLabel(label)
 		n.SetShape(cgraph.BoxShape)
 		n.SetFixedSize(true)
@@ -555,11 +579,7 @@ func footprint(l *dlayout) (w, h int) {
 // graphviz a second time to rediscover what this call already knows would
 // be the plainest waste in the file.
 func fit(src string, width, maxRows int) (*dlayout, int, bool) {
-	rungs := []cgraph.RankDir{""}
-	if rankdirOf(src) != cgraph.TBRank {
-		rungs = append(rungs, cgraph.TBRank) // already top-down: one rung is all there is
-	}
-	for _, rd := range rungs {
+	for _, rd := range orientations(src) {
 		l, err := layoutDOT(src, rd)
 		if err != nil {
 			continue

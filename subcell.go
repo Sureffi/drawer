@@ -89,76 +89,54 @@ const (
 
 // layoutInk runs graphviz and reads back what it would have drawn.
 func layoutInk(src string, force cgraph.RankDir) (*jgraph, error) {
-	graphvizMu.Lock()
-	defer graphvizMu.Unlock()
-	ctx := context.Background()
-	g, err := graphviz.New(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer g.Close()
-	graph, err := graphviz.ParseBytes([]byte(src))
-	if err != nil {
-		return nil, err
-	}
-	if graph == nil {
-		return nil, errors.New("no graph in source")
-	}
-	defer graph.Close()
-	rd := force
-	if rd == "" {
-		rd = rankdirOf(src)
-	} else {
-		graph.SetRankDir(rd)
-	}
-	graph.SetFontName(inkFont)
-	graph.SetFontSize(inkSize)
-	for n, _ := graph.FirstNode(); n != nil; n, _ = graph.NextNode(n) {
-		label := n.Label()
-		if label == "" || label == `\N` {
-			label, _ = n.Name()
-		}
-		n.SetLabel(label)
-		n.SetFontName(inkFont)
-		n.SetFontSize(inkSize)
-		// Minimums, not fixed sizes: an ellipse or a diamond needs more
-		// room than a box for the same label, and graphviz knows how much.
-		n.SetWidth(float64(textCells(label)+2) / cellsPerInchX)
-		n.SetHeight(nodeRows / rowsPerInchY)
-		for e, _ := graph.FirstOut(n); e != nil; e, _ = graph.NextOut(e) {
-			e.SetFontName(inkFont)
-			e.SetFontSize(inkSize)
-		}
-	}
-	setSeparation(graph, rd)
-	// A cluster's frame sits eight points off its nodes by default — one
-	// cell, so the frame and a box wall share a cell and read as one thick
-	// stroke. Two cells is air.
-	for sg, _ := graph.FirstSubGraph(); sg != nil; sg, _ = sg.NextSubGraph() {
-		sg.SafeSet("margin", strconv.FormatFloat(2*ptPerCell, 'f', 1, 64), "")
-	}
-	var buf bytes.Buffer
-	if err := g.Render(ctx, graph, graphviz.Format("json"), &buf); err != nil {
-		return nil, err
-	}
 	var jg jgraph
-	if err := json.Unmarshal(buf.Bytes(), &jg); err != nil {
+	err := door(src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
+		rd := force
+		if rd == "" {
+			rd = rankdirOf(src)
+		} else {
+			graph.SetRankDir(rd)
+		}
+		graph.SetFontName(inkFont)
+		graph.SetFontSize(inkSize)
+		for n, _ := graph.FirstNode(); n != nil; n, _ = graph.NextNode(n) {
+			label := labelOf(n)
+			n.SetLabel(label)
+			n.SetFontName(inkFont)
+			n.SetFontSize(inkSize)
+			// Minimums, not fixed sizes: an ellipse or a diamond needs more
+			// room than a box for the same label, and graphviz knows how much.
+			n.SetWidth(float64(textCells(label)+2) / cellsPerInchX)
+			n.SetHeight(nodeRows / rowsPerInchY)
+			for e, _ := graph.FirstOut(n); e != nil; e, _ = graph.NextOut(e) {
+				e.SetFontName(inkFont)
+				e.SetFontSize(inkSize)
+			}
+		}
+		setSeparation(graph, rd)
+		// A cluster's frame sits eight points off its nodes by default — one
+		// cell, so the frame and a box wall share a cell and read as one thick
+		// stroke. Two cells is air.
+		for sg, _ := graph.FirstSubGraph(); sg != nil; sg, _ = sg.NextSubGraph() {
+			sg.SafeSet("margin", strconv.FormatFloat(2*ptPerCell, 'f', 1, 64), "")
+		}
+		var buf bytes.Buffer
+		if err := g.Render(ctx, graph, graphviz.Format("json"), &buf); err != nil {
+			return err
+		}
+		return json.Unmarshal(buf.Bytes(), &jg)
+	})
+	if err != nil {
 		return nil, err
 	}
-	var x0, y0 float64
-	if n, _ := sscanBB(jg.BB, &x0, &y0, &jg.w, &jg.h); n != 4 || jg.w <= 0 || jg.h <= 0 {
+	// bb is "x0,y0,x1,y1" with the origin at 0,0: the far corner is the size.
+	if f := strings.Split(jg.BB, ","); len(f) == 4 {
+		jg.w, jg.h = atof(f[2]), atof(f[3])
+	}
+	if jg.w <= 0 || jg.h <= 0 {
 		return nil, errors.New("layout has no bounding box")
 	}
 	return &jg, nil
-}
-
-func sscanBB(s string, x0, y0, x1, y1 *float64) (int, error) {
-	f := strings.Split(s, ",")
-	if len(f) != 4 {
-		return 0, errors.New("bb")
-	}
-	*x0, *y0, *x1, *y1 = atof(f[0]), atof(f[1]), atof(f[2]), atof(f[3])
-	return 4, nil
 }
 
 // inkFootprint is the cell box the drawing occupies.
@@ -169,11 +147,7 @@ func inkFootprint(jg *jgraph) (cols, rows int) {
 // fitInk is fit for this renderer: as written, then top-down, the first
 // that fits the width and the height wins.
 func fitInk(src string, width, maxRows int) (*jgraph, int, int, bool) {
-	rungs := []cgraph.RankDir{""}
-	if rankdirOf(src) != cgraph.TBRank {
-		rungs = append(rungs, cgraph.TBRank)
-	}
-	for _, rd := range rungs {
+	for _, rd := range orientations(src) {
 		jg, err := layoutInk(src, rd)
 		if err != nil {
 			continue
