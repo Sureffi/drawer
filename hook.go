@@ -28,10 +28,10 @@ import (
 )
 
 // hookIn is CC's payload. Only the fields we use are named; the rest of
-// the key set (session_id, transcript_path, cwd, prompt_id, turn_id,
-// hook_event_name) is measured and deliberately unread — a hook that
-// binds to more of the payload than it needs is a hook that breaks on
-// more of CC's changes than it has to.
+// the key set (transcript_path, cwd, prompt_id, turn_id, hook_event_name)
+// is measured and deliberately unread — a hook that binds to more of the
+// payload than it needs is a hook that breaks on more of CC's changes than
+// it has to. The session id keys the ledger of pictures drawn.
 type hookIn struct {
 	Delta     string `json:"delta"`
 	Final     bool   `json:"final"`
@@ -54,12 +54,12 @@ type hookSpecific struct {
 	DisplayContent string `json:"displayContent"`
 }
 
-// hookWidth is the one genuinely awkward part of standing here. A command
+// hookSize is the one genuinely awkward part of standing here. A command
 // hook has no controlling terminal: fds 0/1/2 are pipes and /dev/tty
 // fails. But the parent process is `claude`, which does have one, so the
-// window size is readable through /proc. Linux-only, and named as such
-// rather than hidden behind a fallback that would quietly draw at 80.
-// winsize is TIOCGWINSZ's answer: rows, columns, and the window's pixel
+// window size is readable through it — /proc on Linux, the device ps names
+// on macOS — and falls to COLUMNS, then 100, rather than quietly drawing at
+// 80. winsize is TIOCGWINSZ's answer: rows, columns, and the window's pixel
 // size, which kitty fills in and most terminals leave at zero.
 type winsize struct{ rows, cols, x, y uint16 }
 

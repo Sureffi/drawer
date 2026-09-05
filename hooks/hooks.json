@@ -1,5 +1,5 @@
 {
-  "description": "SessionStart builds the binary and tells the model a dot fence draws; MessageDisplay draws it.",
+  "description": "SessionStart puts the binary in place and tells the model a dot fence draws; MessageDisplay draws it.",
   "hooks": {
     "SessionStart": [
       {
@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/drawer\" session",
-            "statusMessage": "drawer: building"
+            "statusMessage": "drawer: putting the binary in place"
           }
         ]
       }

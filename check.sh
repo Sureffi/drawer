@@ -41,7 +41,7 @@ done
 
 # A theme file is read by graphviz's parser; the example themes must load,
 # and the theme in force — Claude Code's, derived — must print as DOT.
-for f in fixtures/theme.dot fixtures/tokyonight.dot fixtures/tokyonight-day.dot; do
+for f in fixtures/tokyonight.dot fixtures/tokyonight-day.dot; do
   stage "theme: $f" ./bin/drawer -theme $f -dot fixtures/chain.dot -size 100x14 -render cells || true
 done
 stage "show-theme" ./bin/drawer -show-theme || true

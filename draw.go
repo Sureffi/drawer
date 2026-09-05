@@ -19,7 +19,7 @@
 // at the width it was drawn for, shreds narrower, and comes back when the
 // window does. A terminal wrapper that sees the window could re-derive the
 // drawing every frame and win that row; this takes the trade so that the
-// graphs work with nothing but `claude` and one line of settings.
+// graphs work with nothing but `claude` and the plugin.
 
 package drawer
 
