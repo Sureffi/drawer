@@ -1,5 +1,7 @@
 # drawer
 
+[![check](https://github.com/sureffi/drawer/actions/workflows/check.yml/badge.svg)](https://github.com/sureffi/drawer/actions/workflows/check.yml)
+
 A ```dot fence in Claude Code becomes a drawing, in place, as the reply
 streams. One binary, nothing else running.
 
