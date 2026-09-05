@@ -5,9 +5,12 @@
 // controlling terminal: fds 0/1/2 are pipes and /dev/tty fails. But the
 // parent process is `claude`, which does have one, so the window size is
 // readable through it — /proc on Linux, the device ps names on macOS — and
-// falls to COLUMNS, then 100, rather than quietly drawing at 80. winsize
-// is TIOCGWINSZ's answer: rows, columns, and the window's pixel size,
-// which kitty fills in and most terminals leave at zero.
+// falls to COLUMNS, then 100, rather than quietly drawing at 80.
+// TIOCGWINSZ's answer is rows, columns and the window's pixel size, which
+// kitty fills in and most terminals leave at zero. x/sys/unix makes the
+// call: the struct layout and the syscall number are then its business on
+// every platform this ships to, and not a thing written here for a machine
+// nobody in this fleet runs.
 //
 // Read-only, and it knows nothing about what it is being measured for.
 
@@ -16,18 +19,9 @@ package term
 import (
 	"os"
 	"strconv"
-	"syscall"
-	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
-
-type winsize struct{ rows, cols, x, y uint16 }
-
-func ioctl(fd uintptr, req uintptr, arg unsafe.Pointer) error {
-	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, fd, req, uintptr(arg)); e != 0 {
-		return e
-	}
-	return nil
-}
 
 // Geom is how big a cell is in pixels, measured from the terminal itself:
 // TIOCGWINSZ carries the window's pixel size beside its cell size, so the
@@ -44,11 +38,10 @@ func (g Geom) OK() bool { return g.CellW > 0 && g.CellH > 0 }
 // size of a cell where the terminal reports one.
 func Size() (cols int, g Geom) {
 	if f, err := os.Open(parentTTY()); err == nil {
-		var ws winsize
-		if ioctl(f.Fd(), syscall.TIOCGWINSZ, unsafe.Pointer(&ws)) == nil && ws.cols > 0 {
-			cols = int(ws.cols)
-			if ws.x > 0 && ws.y > 0 && ws.rows > 0 {
-				g = Geom{CellW: int(ws.x) / cols, CellH: int(ws.y) / int(ws.rows)}
+		if ws, err := unix.IoctlGetWinsize(int(f.Fd()), unix.TIOCGWINSZ); err == nil && ws.Col > 0 {
+			cols = int(ws.Col)
+			if ws.Xpixel > 0 && ws.Ypixel > 0 && ws.Row > 0 {
+				g = Geom{CellW: int(ws.Xpixel) / cols, CellH: int(ws.Ypixel) / int(ws.Row)}
 			}
 		}
 		f.Close()

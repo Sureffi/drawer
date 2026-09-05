@@ -5,6 +5,7 @@ go 1.26.5
 require (
 	github.com/goccy/go-graphviz v0.2.10
 	github.com/mattn/go-runewidth v0.0.28
+	golang.org/x/sys v0.47.0
 )
 
 require (
