@@ -139,9 +139,14 @@ func layoutDOT(src string, force cgraph.RankDir) (*dlayout, error) {
 // actually needs, in cell units. This is the whole trick: graphviz keeps
 // doing the hard part (placing boxes so edges behave) but stops guessing
 // at typography we do not have.
+//
+// This rung draws one line, so a label's line breaks — `\n`, and the
+// justified `\l` and `\r` — become spaces before graphviz sees it.
+var oneLine = strings.NewReplacer(`\n`, " ", `\l`, " ", `\r`, " ")
+
 func sizeNodesInCells(g *cgraph.Graph) {
 	for n, _ := g.FirstNode(); n != nil; n, _ = g.NextNode(n) {
-		label := labelOf(n)
+		label := oneLine.Replace(labelOf(n))
 		n.SetLabel(label)
 		n.SetShape(cgraph.BoxShape)
 		n.SetFixedSize(true)
