@@ -18,7 +18,6 @@ import (
 
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
-	"github.com/mattn/go-runewidth"
 )
 
 // door is the one way through to graphviz: it opens a context, parses the
@@ -196,11 +195,6 @@ func setSeparation(g *cgraph.Graph, rd cgraph.RankDir) {
 }
 
 func atof(s string) float64 { v, _ := strconv.ParseFloat(s, 64); return v }
-
-// textCells is the only ruler in this file. Box widths, label lengths and
-// the offsets that centre one inside the other all have to agree, and they
-// agree by being the same measurement rather than three that usually match.
-func textCells(s string) int { return runewidth.StringWidth(s) }
 
 // parsePlain reads graphviz's plain format. Fields are space separated
 // with quoted labels; the label is the only field that can contain a

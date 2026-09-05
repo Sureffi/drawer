@@ -50,17 +50,6 @@ var glyphs = [16]rune{
 	dirUp | dirRight | dirDown | dirLeft: '┼',
 }
 
-// maxCombBytes bounds the combining marks a cell keeps: decoration is lost
-// past it, never a cell without a size.
-const maxCombBytes = 16
-
-// shadow is the second cell of a wide glyph. A canvas cell is one column,
-// but a glyph is not: without a marker for the column the glyph already
-// spent, `rows` emitted the rune AND a space and every row carrying a wide
-// label came out one column wider than its own box for each one — a
-// drawing that measured right and rendered crooked.
-const shadow rune = -1
-
 type canvas struct {
 	w, h int
 	c    []rune   // glyphs written outright: node borders, labels, arrowheads

@@ -67,11 +67,6 @@ func drawBlock(src string, width int) []string {
 	return fence(rows)
 }
 
-// drawMaxRows bounds a drawing's height. Rows scroll, so there is no
-// ceiling from the window — but a 40-node chain flipped top-down is 250
-// rows of wall, and past this a reader is better served by the source.
-const drawMaxRows = 120
-
 // fence wraps rows in a bare fence: verbatim, monospace, no caption.
 func fence(rows []string) []string {
 	out := make([]string, 0, len(rows)+2)
@@ -79,20 +74,6 @@ func fence(rows []string) []string {
 	out = append(out, rows...)
 	out = append(out, fenceTick)
 	return out
-}
-
-// trimBlank drops the blank rows a centred drawing carries above and
-// below itself: the layout centres in the rows it was given, and in a
-// fence those rows are only air.
-func trimBlank(rows []string) []string {
-	lo, hi := 0, len(rows)
-	for lo < hi && strings.TrimSpace(rows[lo]) == "" {
-		lo++
-	}
-	for hi > lo && strings.TrimSpace(rows[hi-1]) == "" {
-		hi--
-	}
-	return rows[lo:hi]
 }
 
 // wantRung picks the rung: cells, braille, octants, pixels, or auto,

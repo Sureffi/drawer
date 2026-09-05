@@ -192,23 +192,6 @@ func hasSubcellInk(s string) bool {
 	return false
 }
 
-// stripSGR drops colour escapes so a row can be measured in cells.
-func stripSGR(s string) string {
-	var b strings.Builder
-	for i := 0; i < len(s); i++ {
-		if s[i] == 0x1b && i+1 < len(s) && s[i+1] == '[' {
-			j := i + 2
-			for j < len(s) && (s[j] < 0x40 || s[j] > 0x7e) {
-				j++
-			}
-			i = j
-			continue
-		}
-		b.WriteByte(s[i])
-	}
-	return b.String()
-}
-
 func clip(s string) string {
 	if len(s) > 120 {
 		return s[:120] + "…"
