@@ -28,6 +28,7 @@ import (
 
 	"github.com/sureffi/drawer/internal/fence"
 	"github.com/sureffi/drawer/internal/grid"
+	"github.com/sureffi/drawer/internal/pixel"
 	"github.com/sureffi/drawer/internal/subcell"
 )
 
@@ -172,7 +173,7 @@ func checkDrawn(block, src string, w int) error {
 		if n := grid.Cells(plain); n > w {
 			return fmt.Errorf("row is %d cells in %d columns: %q", n, w, plain)
 		}
-		if strings.ContainsAny(plain, "─│╭╮╰╯▶◀▲▼") || strings.ContainsRune(plain, placeholderRune) ||
+		if strings.ContainsAny(plain, "─│╭╮╰╯▶◀▲▼") || strings.ContainsRune(plain, pixel.PlaceholderRune) ||
 			strings.Contains(plain, "no diagram") || subcell.HasInk(plain) {
 			drawn = true
 		}

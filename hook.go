@@ -23,6 +23,7 @@ import (
 	"os"
 
 	"github.com/sureffi/drawer/internal/fence"
+	"github.com/sureffi/drawer/internal/pixel"
 	"github.com/sureffi/drawer/internal/term"
 )
 
@@ -104,7 +105,7 @@ func (r run) runHook() int {
 	// The first delta of a message is the first thing the hook hears after
 	// a theme switch; ledger.go says why, and what is repainted.
 	if in.Index == 0 && r.pickRung() == rungPixels {
-		r.repaintPictures(term.TTYOut(), probeRaster())
+		r.repaintPictures(term.TTYOut(), pixel.Probe())
 	}
 	st, done := takeTurn(in.MessageID, in.Index, turnPatience)
 	defer done()

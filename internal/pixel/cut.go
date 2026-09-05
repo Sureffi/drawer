@@ -12,7 +12,7 @@
 // rasteriser, a tty that is not there — the answer is nil and the rung
 // below draws. Nothing here is a dependency.
 
-package main
+package pixel
 
 import (
 	"encoding/base64"
@@ -32,11 +32,11 @@ import (
 	"github.com/sureffi/drawer/internal/theme"
 )
 
-// picture is one drawn picture: enough to draw it again at the same cut.
+// Picture is one drawn picture: enough to draw it again at the same cut.
 // The orientation is part of the cut — empty as written, top-down where
 // the hook flipped it to fit the width — because the rows on screen are
 // the rows that layout gave, and a repaint has to lay it out the same way.
-type picture struct {
+type Picture struct {
 	Src     string         `json:"src"`
 	Cols    int            `json:"cols"`
 	Rows    int            `json:"rows"`
@@ -44,7 +44,7 @@ type picture struct {
 	Rankdir cgraph.RankDir `json:"rankdir,omitempty"`
 }
 
-// pixelCut is the picture for a block of cells: the cut — its columns up
+// Cut is the picture for a block of cells: the cut — its columns up
 // to the width, the rows that follow, and the orientation it was laid out
 // in — and the pixels rasterised for exactly that block. The picture is
 // cut to whole columns so kitty scales nothing on the axis that has to
@@ -59,9 +59,9 @@ type picture struct {
 // rows; top-down it keeps 0.97 in 56. An error is a picture that will
 // not fit either way — too narrow to be anything, or taller than
 // grid.MaxRows.
-func pixelCut(th *theme.Theme, r *raster, src string, width int, geom term.Geom) ([]byte, picture, error) {
+func Cut(th *theme.Theme, r *Raster, src string, width int, geom term.Geom) ([]byte, Picture, error) {
 	if r == nil || !geom.OK() {
-		return nil, picture{}, errors.New("no rasteriser or no cell size")
+		return nil, Picture{}, errors.New("no rasteriser or no cell size")
 	}
 	if width > len(rowColumnDiacritics) {
 		width = len(rowColumnDiacritics)
@@ -71,13 +71,13 @@ func pixelCut(th *theme.Theme, r *raster, src string, width int, geom term.Geom)
 	rd := cgraph.RankDir("")
 	var last error
 	for _, try := range layout.Orientations(src) {
-		s, err := renderThemedSVG(th, src, pxFontPt(geom.CellW), try)
+		s, err := RenderThemedSVG(th, src, FontPt(geom.CellW), try)
 		if err != nil {
-			return nil, picture{}, err
+			return nil, Picture{}, err
 		}
 		ptW, _, err := svgSize(s)
 		if err != nil {
-			return nil, picture{}, err
+			return nil, Picture{}, err
 		}
 		c := min(int(math.Ceil(ptW*pxPerPt/float64(geom.CellW))), width)
 		z, _, err := pixelZoom(s, c, geom)
@@ -93,13 +93,13 @@ func pixelCut(th *theme.Theme, r *raster, src string, width int, geom term.Geom)
 		}
 	}
 	if svg == nil {
-		return nil, picture{}, last
+		return nil, Picture{}, last
 	}
-	png, rows, err := pixelFit(r, svg, cols, geom)
+	png, rows, err := Fit(r, svg, cols, geom)
 	if err != nil {
-		return nil, picture{}, err
+		return nil, Picture{}, err
 	}
-	return png, picture{Src: src, Cols: cols, Rows: rows, Geom: geom, Rankdir: rd}, nil
+	return png, Picture{Src: src, Cols: cols, Rows: rows, Geom: geom, Rankdir: rd}, nil
 }
 
 // pixelZoom is the cut's arithmetic: the zoom that puts a laid-out
@@ -126,41 +126,41 @@ func pixelZoom(svg []byte, cols int, geom term.Geom) (float64, int, error) {
 	return zoom, rows, nil
 }
 
-// pixelFit rasterises a laid-out picture into a block `cols` wide, at the
-// zoom pixelZoom chose: the pixels, and the rows they stand on.
-func pixelFit(r *raster, svg []byte, cols int, geom term.Geom) ([]byte, int, error) {
+// Fit rasterises a laid-out picture into a block `cols` wide, at the zoom
+// pixelZoom chose: the pixels, and the rows they stand on.
+func Fit(r *Raster, svg []byte, cols int, geom term.Geom) ([]byte, int, error) {
 	zoom, rows, err := pixelZoom(svg, cols, geom)
 	if err != nil {
 		return nil, 0, err
 	}
-	png, err := r.run(svg, zoom)
+	png, err := r.Run(svg, zoom)
 	if err != nil {
 		return nil, 0, err
 	}
 	return png, rows, nil
 }
 
-// hookImageID names a picture by hashing its cut: derived, never minted. The low byte rides in the placeholder's 256-colour
+// ImageID names a picture by hashing its cut: derived, never minted. The low byte rides in the placeholder's 256-colour
 // foreground and the high byte in a third diacritic, because the display
 // wire quantises a truecolor foreground and would have mangled a 24-bit id
 // — measured: 38;2;253;151;31 came back as 38;5;215. Zero is "no image" in
 // the low byte, so it is skipped.
-func hookImageID(src string, cols, rows int) uint32 {
+func ImageID(src string, cols, rows int) uint32 {
 	h := fnv1a32(strconv.Itoa(cols) + "x" + strconv.Itoa(rows) + "\x00" + src)
 	lo := 1 + h%255
 	hi := (h >> 8) & 0xff
 	return hi<<24 | lo
 }
 
-// themeSig names a theme, for the ledger to compare.
-func themeSig(th *theme.Theme) string {
+// ThemeSig names a theme, for the ledger to compare.
+func ThemeSig(th *theme.Theme) string {
 	return strconv.FormatUint(uint64(fnv1a32(th.Source)), 16)
 }
 
-// transmitFile hands the terminal the picture through a temp file it will
+// Send hands the terminal the picture through a temp file it will
 // delete itself. The name has to carry tty-graphics-protocol and the file
 // has to sit in a temp dir kitty knows, or it refuses on purpose.
-func transmitFile(tty string, png []byte, id uint32, cols, rows int) bool {
+func Send(tty string, png []byte, id uint32, cols, rows int) bool {
 	sweepPictures()
 	f, err := os.CreateTemp("", "tty-graphics-protocol-graph-*.png")
 	if err != nil {
@@ -203,20 +203,20 @@ func sweepPictures() {
 	}
 }
 
-// placeholderRows is the block of cells that shows the picture: every
+// PlaceholderRows is the block of cells that shows the picture: every
 // cell names its image by colour and its row and column by diacritic, so
 // the block survives being re-wrapped, copied, or scrolled as text. The
 // column mark is written on every cell rather than inferred from the one
 // before it, because CC re-wraps what a hook returns and a cell that lost
 // its neighbour would otherwise lose its place too.
-func placeholderRows(id uint32, cols, rows int) []string {
+func PlaceholderRows(id uint32, cols, rows int) []string {
 	lo, hi := id&0xff, (id>>24)&0xff
 	out := make([]string, 0, rows)
 	for r := 0; r < rows; r++ {
 		var b strings.Builder
 		b.WriteString("\x1b[38;5;" + strconv.Itoa(int(lo)) + "m")
 		for c := 0; c < cols; c++ {
-			b.WriteRune(placeholderRune)
+			b.WriteRune(PlaceholderRune)
 			b.WriteRune(rowColumnDiacritics[r])
 			b.WriteRune(rowColumnDiacritics[c])
 			if hi > 0 {

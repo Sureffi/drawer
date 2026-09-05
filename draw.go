@@ -30,6 +30,7 @@ import (
 	"github.com/sureffi/drawer/internal/grid"
 	"github.com/sureffi/drawer/internal/layout"
 	"github.com/sureffi/drawer/internal/notice"
+	"github.com/sureffi/drawer/internal/pixel"
 	"github.com/sureffi/drawer/internal/subcell"
 	"github.com/sureffi/drawer/internal/term"
 )
@@ -110,5 +111,5 @@ func pickRung(want rung, name string, geom term.Geom, raster func() bool) rung {
 }
 
 func (r run) pickRung() rung {
-	return pickRung(r.rung, r.term, r.geom, func() bool { return probeRaster() != nil })
+	return pickRung(r.rung, r.term, r.geom, func() bool { return pixel.Probe() != nil })
 }

@@ -10,22 +10,25 @@
 
 package main
 
-import "github.com/sureffi/drawer/internal/term"
+import (
+	"github.com/sureffi/drawer/internal/pixel"
+	"github.com/sureffi/drawer/internal/term"
+)
 
 // drawPixels is the pixels rung: the rows that show a picture, or nil.
 func (r run) drawPixels(src string, width int) []string {
-	ras := probeRaster()
+	ras := pixel.Probe()
 	if ras == nil || !r.geom.OK() {
 		return nil
 	}
-	png, p, err := pixelCut(r.theme.get(), ras, src, width, r.geom)
+	png, p, err := pixel.Cut(r.theme.get(), ras, src, width, r.geom)
 	if err != nil {
 		return nil
 	}
-	id := hookImageID(p.Src, p.Cols, p.Rows)
-	if !transmitFile(term.TTYOut(), png, id, p.Cols, p.Rows) {
+	id := pixel.ImageID(p.Src, p.Cols, p.Rows)
+	if !pixel.Send(term.TTYOut(), png, id, p.Cols, p.Rows) {
 		return nil
 	}
 	r.recordPicture(p)
-	return placeholderRows(id, p.Cols, p.Rows)
+	return pixel.PlaceholderRows(id, p.Cols, p.Rows)
 }

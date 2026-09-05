@@ -24,11 +24,13 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/sureffi/drawer/internal/pixel"
 )
 
 type ledger struct {
-	Theme    string    `json:"theme"`
-	Pictures []picture `json:"pictures"`
+	Theme    string          `json:"theme"`
+	Pictures []pixel.Picture `json:"pictures"`
 }
 
 // ledgerMax bounds a session's ledger: the last pictures drawn, which are
@@ -41,7 +43,7 @@ func ledgerPath(session string) string {
 
 // recordPicture writes a picture into its session's ledger, once, and
 // marks the ledger with the theme it was drawn in.
-func (r run) recordPicture(p picture) {
+func (r run) recordPicture(p pixel.Picture) {
 	if r.sess == "" {
 		return
 	}
@@ -62,7 +64,7 @@ func (r run) recordPicture(p picture) {
 	if len(l.Pictures) > ledgerMax {
 		l.Pictures = l.Pictures[len(l.Pictures)-ledgerMax:]
 	}
-	l.Theme = themeSig(r.theme.get())
+	l.Theme = pixel.ThemeSig(r.theme.get())
 	if b, err := json.Marshal(l); err == nil {
 		os.WriteFile(path, b, 0o600)
 	}
@@ -71,7 +73,7 @@ func (r run) recordPicture(p picture) {
 // repaintPictures sends every picture in a session's ledger to the terminal
 // again, in the theme in force, when that is not the theme they stand in.
 // How many were sent; none when nothing changed, or nothing was drawn.
-func (r run) repaintPictures(tty string, ras *raster) int {
+func (r run) repaintPictures(tty string, ras *pixel.Raster) int {
 	if r.sess == "" || ras == nil {
 		return 0
 	}
@@ -84,21 +86,21 @@ func (r run) repaintPictures(tty string, ras *raster) int {
 	if json.Unmarshal(b, &l) != nil || len(l.Pictures) == 0 {
 		return 0
 	}
-	sig := themeSig(r.theme.get())
+	sig := pixel.ThemeSig(r.theme.get())
 	if l.Theme == sig {
 		return 0
 	}
 	n := 0
 	for _, p := range l.Pictures {
-		svg, err := renderThemedSVG(r.theme.get(), p.Src, pxFontPt(p.Geom.CellW), p.Rankdir)
+		svg, err := pixel.RenderThemedSVG(r.theme.get(), p.Src, pixel.FontPt(p.Geom.CellW), p.Rankdir)
 		if err != nil {
 			continue
 		}
-		png, _, err := pixelFit(ras, svg, p.Cols, p.Geom)
+		png, _, err := pixel.Fit(ras, svg, p.Cols, p.Geom)
 		if err != nil {
 			continue
 		}
-		if transmitFile(tty, png, hookImageID(p.Src, p.Cols, p.Rows), p.Cols, p.Rows) {
+		if pixel.Send(tty, png, pixel.ImageID(p.Src, p.Cols, p.Rows), p.Cols, p.Rows) {
 			n++
 		}
 	}

@@ -1,7 +1,7 @@
 // theme_test.go — laws for a theme file: what it reaches, and what it
 // yields to.
 
-package main
+package pixel
 
 import (
 	"strings"
@@ -27,7 +27,7 @@ func mustTheme(t *testing.T, src string) *theme.Theme {
 func TestThemeFileReachesThePicture(t *testing.T) {
 	th := mustTheme(t, `node [fillcolor="#7aa2f71f", fontname="JetBrains Mono"]
 	                    edge [color=red]`)
-	svg, err := renderThemedSVG(th, "digraph { a -> b }", 0, "")
+	svg, err := RenderThemedSVG(th, "digraph { a -> b }", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestThemeFileReachesThePicture(t *testing.T) {
 // built-in one.
 func TestThemeFileYieldsToTheModel(t *testing.T) {
 	th := mustTheme(t, `node [fillcolor="#000000", color="#111111"]`)
-	svg, err := renderThemedSVG(th, "digraph { a [color=red]; a -> b }", 0, "")
+	svg, err := RenderThemedSVG(th, "digraph { a [color=red]; a -> b }", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/sureffi/drawer/internal/cells"
 	"github.com/sureffi/drawer/internal/layout"
+	"github.com/sureffi/drawer/internal/pixel"
 	"github.com/sureffi/drawer/internal/subcell"
 	"github.com/sureffi/drawer/internal/term"
 )
@@ -76,12 +77,12 @@ func (r run) runPNG(dotPath, pngPath string, width int, geom term.Geom) int {
 		fmt.Fprintln(os.Stderr, "drawer:", err)
 		return 1
 	}
-	ras := findRaster()
+	ras := pixel.Find()
 	if ras == nil {
 		fmt.Fprintln(os.Stderr, "drawer: no rasteriser on the PATH (rsvg-convert or magick)")
 		return 1
 	}
-	png, p, err := pixelCut(r.theme.get(), ras, string(src), width, geom)
+	png, p, err := pixel.Cut(r.theme.get(), ras, string(src), width, geom)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "drawer:", err)
 		return 1

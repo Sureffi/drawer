@@ -1,15 +1,12 @@
 // pixel_test.go — laws for the pixels rung: the placeholders, the cut, the
-// theme on the picture, the labels on their lines, and the ledger.
+// theme on the picture, and the labels on their lines.
 
-package main
+package pixel
 
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -27,11 +24,11 @@ import (
 // because CC re-wraps what a hook returns and a cell that lost its
 // neighbour must not lose its place.
 func TestPlaceholderRowsNameTheirImageOnEveryCell(t *testing.T) {
-	id := hookImageID("digraph { a -> b }", 12, 3)
+	id := ImageID("digraph { a -> b }", 12, 3)
 	if id&0xff == 0 {
 		t.Fatal("image id has a zero low byte")
 	}
-	rows := placeholderRows(id, 12, 3)
+	rows := PlaceholderRows(id, 12, 3)
 	if len(rows) != 3 {
 		t.Fatalf("%d rows for a 3-row block", len(rows))
 	}
@@ -40,11 +37,11 @@ func TestPlaceholderRowsNameTheirImageOnEveryCell(t *testing.T) {
 			t.Fatalf("row %d does not open with a 256-colour foreground: %q", r, row)
 		}
 		plain := grid.StripSGR(row)
-		cells := strings.Count(plain, string(placeholderRune))
+		cells := strings.Count(plain, string(PlaceholderRune))
 		if cells != 12 {
 			t.Fatalf("row %d has %d placeholder cells, want 12", r, cells)
 		}
-		want := string(placeholderRune) + string(rowColumnDiacritics[r]) + string(rowColumnDiacritics[0])
+		want := string(PlaceholderRune) + string(rowColumnDiacritics[r]) + string(rowColumnDiacritics[0])
 		if !strings.HasPrefix(plain, want) {
 			t.Fatalf("row %d does not start with row-then-column marks", r)
 		}
@@ -85,7 +82,7 @@ func svgTextY(group string) float64 {
 // and set in another runs out of its box. At a known cell width the size is
 // the one that puts a glyph in a cell.
 func TestPixelTypeIsMeasuredInCourierAndSetInMonospace(t *testing.T) {
-	svg, err := renderThemedSVG(mustTheme(t, theme.ClaudeDOT()), "digraph { a -> b }", pxFontPt(10), "")
+	svg, err := RenderThemedSVG(mustTheme(t, theme.ClaudeDOT()), "digraph { a -> b }", FontPt(10), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +110,7 @@ func TestPixelThemeKeepsTheModelsPaint(t *testing.T) {
 		a -> b -> c -> d
 	}`
 	th := mustTheme(t, theme.ClaudeDOT())
-	svg, err := renderThemedSVG(th, src, 0, "")
+	svg, err := RenderThemedSVG(th, src, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +144,7 @@ func TestPixelThemeReachesEveryCluster(t *testing.T) {
 		x -> y
 	}`
 	th := mustTheme(t, theme.ClaudeDOT())
-	svg, err := renderThemedSVG(th, src, 0, "")
+	svg, err := RenderThemedSVG(th, src, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,14 +166,14 @@ func TestPixelThemeReachesEveryCluster(t *testing.T) {
 // the model asked for one.
 func TestPixelBackgroundIsTheTerminalsUnlessSet(t *testing.T) {
 	th := mustTheme(t, theme.ClaudeDOT())
-	svg, err := renderThemedSVG(th, "digraph { a -> b }", 0, "")
+	svg, err := RenderThemedSVG(th, "digraph { a -> b }", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(svg), `fill="white"`) || strings.Contains(string(svg), `stroke="transparent"`) {
 		t.Error("a background was painted under a graph that set none")
 	}
-	svg, err = renderThemedSVG(th, "digraph { bgcolor=white; a -> b }", 0, "")
+	svg, err = RenderThemedSVG(th, "digraph { bgcolor=white; a -> b }", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +254,7 @@ func TestPixelLabelsSpaceAsDotDoes(t *testing.T) {
 // each end: the back arrow on the first half, the forward on the second.
 func TestPixelEdgeLabelSitsOnItsLine(t *testing.T) {
 	th := mustTheme(t, theme.ClaudeDOT())
-	svg, err := renderThemedSVG(th, `digraph { a -> b [label="x", color=red, dir=both] }`, 0, "")
+	svg, err := RenderThemedSVG(th, `digraph { a -> b [label="x", color=red, dir=both] }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +282,7 @@ func TestPixelEdgeLabelSitsOnItsLine(t *testing.T) {
 
 // An undirected labelled edge grows no heads.
 func TestPixelUndirectedLabelGrowsNoHeads(t *testing.T) {
-	svg, err := renderThemedSVG(mustTheme(t, theme.ClaudeDOT()), `graph { a -- b [label="x"] }`, 0, "")
+	svg, err := RenderThemedSVG(mustTheme(t, theme.ClaudeDOT()), `graph { a -- b [label="x"] }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,7 +300,7 @@ func TestPixelUndirectedLabelGrowsNoHeads(t *testing.T) {
 // A labelled edge inside a cluster keeps its label in the cluster, or dot
 // would route the edge out of the cluster and back to visit it.
 func TestPixelEdgeLabelStaysInItsCluster(t *testing.T) {
-	svg, err := renderThemedSVG(mustTheme(t, theme.ClaudeDOT()), `digraph { subgraph cluster_c { a -> b [label="x"] } c -> a }`, 0, "")
+	svg, err := RenderThemedSVG(mustTheme(t, theme.ClaudeDOT()), `digraph { subgraph cluster_c { a -> b [label="x"] } c -> a }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +321,7 @@ func TestPixelEdgeLabelStaysInItsCluster(t *testing.T) {
 // The label of an edge that closes a cycle sits between the edge's ends,
 // and the arrow still points where the model pointed it.
 func TestPixelLabelOnABackEdgeSitsBetweenItsEnds(t *testing.T) {
-	svg, err := renderThemedSVG(mustTheme(t, theme.ClaudeDOT()), `digraph { a -> b -> c; c -> a [label="no"] }`, 0, "")
+	svg, err := RenderThemedSVG(mustTheme(t, theme.ClaudeDOT()), `digraph { a -> b -> c; c -> a [label="no"] }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,7 +352,7 @@ func TestPixelLabelOnABackEdgeSitsBetweenItsEnds(t *testing.T) {
 func TestPixelLabelsHalveRanksepAsDotDoes(t *testing.T) {
 	claude := mustTheme(t, theme.ClaudeDOT())
 	height := func(th *theme.Theme, src string) float64 {
-		svg, err := renderThemedSVG(th, src, 0, "")
+		svg, err := RenderThemedSVG(th, src, 0, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -388,7 +385,7 @@ func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	th := mustTheme(t, theme.ClaudeDOT())
 	var zooms []float64
-	r := &raster{name: "stub", run: func(_ []byte, zoom float64) ([]byte, error) {
+	r := &Raster{Name: "stub", Run: func(_ []byte, zoom float64) ([]byte, error) {
 		zooms = append(zooms, zoom)
 		return []byte("png"), nil
 	}}
@@ -408,7 +405,7 @@ func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
 	last := func() float64 { return zooms[len(zooms)-1] }
 
 	wide := chain(6)
-	_, p, err := pixelCut(th, r, wide, 100, geom)
+	_, p, err := Cut(th, r, wide, 100, geom)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -418,7 +415,7 @@ func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
 	if last() < 1 {
 		t.Errorf("flipped top-down and still squeezed: zoom %v", last())
 	}
-	_, p, err = pixelCut(th, r, wide, len(rowColumnDiacritics), geom)
+	_, p, err = Cut(th, r, wide, len(rowColumnDiacritics), geom)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -426,7 +423,7 @@ func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
 		t.Errorf("a chain with room to spare was laid out %q at zoom %v; want as written at the cell's own type", p.Rankdir, last())
 	}
 
-	_, p, err = pixelCut(th, r, wide, 12, geom)
+	_, p, err = Cut(th, r, wide, 12, geom)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -435,94 +432,11 @@ func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
 	}
 
 	tall := chain(60)
-	_, p, err = pixelCut(th, r, tall, 100, geom)
+	_, p, err = Cut(th, r, tall, 100, geom)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if p.Rankdir != "" || p.Cols != 100 || last() >= 1 {
 		t.Errorf("a chain too tall top-down was laid out %q, %d wide at zoom %v; want as written, squeezed into 100 columns", p.Rankdir, p.Cols, last())
-	}
-}
-
-// ---------- the ledger ----------
-
-// The pictures a session drew are sent to the terminal again, under their
-// own ids, when the theme in force is not the one they stand in — each
-// once, however often it was drawn — and not otherwise.
-func TestPixelLedgerRepaintsUnderTheOldIDs(t *testing.T) {
-	r := findRaster()
-	if r == nil {
-		t.Skip("no rasteriser on the PATH")
-	}
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("DRAWER_STATE", t.TempDir())
-	t.Setenv("TMPDIR", t.TempDir()) // the pictures kitty is not here to collect
-	// the terminal is a file here: transmitFile opens it, it does not make it
-	tty := filepath.Join(t.TempDir(), "tty")
-	if err := os.WriteFile(tty, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	geom := term.Geom{CellW: 10, CellH: 24}
-	a := picture{Src: "digraph { a -> b }", Cols: 20, Rows: 3, Geom: geom}
-	b := picture{Src: "digraph { c -> d }", Cols: 20, Rows: 3, Geom: geom}
-	s1 := run{sess: "s1", theme: &inForce{}}
-	s1.recordPicture(a)
-	s1.recordPicture(b)
-	s1.recordPicture(a)
-	if n := s1.repaintPictures(tty, r); n != 0 {
-		t.Errorf("repainted %d pictures under the theme they were drawn in", n)
-	}
-	s1.theme = &inForce{th: mustTheme(t, `node [color=red]`)}
-	if n := s1.repaintPictures(tty, r); n != 2 {
-		t.Fatalf("repainted %d pictures, want 2", n)
-	}
-	out, err := os.ReadFile(tty)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, p := range []picture{a, b} {
-		id := ",i=" + strconv.Itoa(int(hookImageID(p.Src, p.Cols, p.Rows))) + ","
-		if n := strings.Count(string(out), id); n != 1 {
-			t.Errorf("%q was sent %d times under its id, want once", p.Src, n)
-		}
-	}
-	if n := s1.repaintPictures(tty, r); n != 0 {
-		t.Errorf("repainted %d pictures with nothing changed", n)
-	}
-	if n := (run{sess: "s2", theme: s1.theme}).repaintPictures(tty, r); n != 0 {
-		t.Errorf("repainted %d pictures for a session that drew none", n)
-	}
-}
-
-// A picture drawn top-down is repainted top-down. The ledger carries the
-// orientation with the cut, so what kitty gets under the old id is the
-// picture that was there, in the new colours, and not the same source laid
-// out the other way and squeezed onto the old columns.
-func TestPixelLedgerRepaintsAsLaidOut(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("DRAWER_STATE", t.TempDir())
-	t.Setenv("TMPDIR", t.TempDir())
-	tty := filepath.Join(t.TempDir(), "tty")
-	if err := os.WriteFile(tty, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	var got []byte
-	r := &raster{name: "stub", run: func(svg []byte, _ float64) ([]byte, error) {
-		got = svg
-		return []byte("png"), nil
-	}}
-	geom := term.Geom{CellW: 10, CellH: 24}
-	s1 := run{sess: "s1", theme: &inForce{}}
-	s1.recordPicture(picture{Src: "digraph { rankdir=LR; a -> b }", Cols: 12, Rows: 7, Geom: geom, Rankdir: cgraph.TBRank})
-	s1.theme = &inForce{th: mustTheme(t, `node [color=red]`)}
-	if n := s1.repaintPictures(tty, r); n != 1 {
-		t.Fatalf("repainted %d pictures, want 1", n)
-	}
-	ya, yb := svgTextY(svgGroup(got, "a")), svgTextY(svgGroup(got, "b"))
-	if ya == 0 || yb == 0 {
-		t.Fatalf("missing a node: a=%v b=%v", ya, yb)
-	}
-	if ya == yb {
-		t.Errorf("repainted left-to-right, a and b both at y=%v; the picture was drawn top-down", ya)
 	}
 }

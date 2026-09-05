@@ -9,13 +9,14 @@ import (
 	"os"
 	"testing"
 
+	"github.com/sureffi/drawer/internal/pixel"
 	"github.com/sureffi/drawer/internal/term"
 )
 
 // The offline picture is the hook's picture: cut to whole columns of the
 // cell it was asked for. Skipped where there is nothing to rasterise with.
 func TestRunPNGWritesTheHooksPicture(t *testing.T) {
-	if findRaster() == nil {
+	if pixel.Find() == nil {
 		t.Skip("no rasteriser on the PATH")
 	}
 	dir := t.TempDir()

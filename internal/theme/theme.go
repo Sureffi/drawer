@@ -9,9 +9,10 @@
 // A theme applies where the model left an attribute unset, and nowhere
 // else. `graph [...]` is the root and every cluster alike; an attribute that
 // means nothing on one of them is ignored there, as graphviz already ignores
-// it. Three attributes are read as rules rather than values, and pixel.go
-// says how: fontname names the face the picture is set in, fontsize yields
-// to the cell when the theme has none, and a node's fill is a rule.
+// it. Three attributes are read as rules rather than values, and
+// internal/pixel says how: fontname names the face the picture is set in,
+// fontsize yields to the cell when the theme has none, and a node's fill is
+// a rule.
 //
 // The theme in force is Claude Code's own, unless DRAWER_THEME names a
 // file. Claude Code's theme is a palette of named colours — claude, text,

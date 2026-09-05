@@ -16,7 +16,7 @@
 // any edge stroke past hairline and loses them outright at dpi=192. So the
 // wasm writes SVG and cairo — rsvg-convert, else magick — makes the pixels.
 
-package main
+package pixel
 
 import (
 	"bytes"
@@ -38,29 +38,29 @@ import (
 
 // ---------- capability ----------
 
-// raster is the rasteriser this machine actually has: a name, and the one
+// Raster is the rasteriser this machine actually has: a name, and the one
 // call it can make. A func rather than a command line so a law can stand in
 // a stub and read the zoom it was asked for, with no rasteriser anywhere in
 // the loop.
-type raster struct {
-	name string
-	run  func(svg []byte, zoom float64) ([]byte, error)
+type Raster struct {
+	Name string
+	Run  func(svg []byte, zoom float64) ([]byte, error)
 }
 
-// probeRaster answers whether pixels are possible here: the terminal is
-// kitty and a rasteriser exists.
-func probeRaster() *raster {
+// Probe answers whether pixels are possible here: the terminal is kitty
+// and a rasteriser exists.
+func Probe() *Raster {
 	if !strings.Contains(os.Getenv("TERM"), "kitty") && os.Getenv("KITTY_WINDOW_ID") == "" {
 		return nil
 	}
-	return findRaster()
+	return Find()
 }
 
-// findRaster is the rasteriser on the PATH, whatever the terminal: for a
-// picture that is going to a file rather than a screen.
-func findRaster() *raster {
+// Find is the rasteriser on the PATH, whatever the terminal: for a picture
+// that is going to a file rather than a screen.
+func Find() *Raster {
 	if p, err := exec.LookPath("rsvg-convert"); err == nil {
-		return &raster{name: "rsvg-convert", run: func(svg []byte, zoom float64) ([]byte, error) {
+		return &Raster{Name: "rsvg-convert", Run: func(svg []byte, zoom float64) ([]byte, error) {
 			return rasterExec(p, svg, "--zoom", strconv.FormatFloat(zoom, 'f', 4, 64))
 		}}
 	}
@@ -68,7 +68,7 @@ func findRaster() *raster {
 		// magick has no --zoom: it rasterises SVG at a density, and 96dpi is
 		// the density rsvg renders at unzoomed, so the same number means the
 		// same picture on either.
-		return &raster{name: "magick", run: func(svg []byte, zoom float64) ([]byte, error) {
+		return &Raster{Name: "magick", Run: func(svg []byte, zoom float64) ([]byte, error) {
 			return rasterExec(p, svg, "-background", "none",
 				"-density", strconv.FormatFloat(96*zoom, 'f', 2, 64), "svg:-", "png:-")
 		}}
@@ -135,18 +135,18 @@ const (
 	pxAdvance    = 0.6 // em per glyph: Courier's, and every terminal's
 )
 
-// pxFontPt is the type size that puts one glyph in one cell. The picture is
+// FontPt is the type size that puts one glyph in one cell. The picture is
 // cut to whole columns at a zoom of one, so a label set at this size is the
 // terminal's own text size and a node reads as text that grew a border.
 // Zero when the cell is unknown, and graphviz keeps its 14pt.
-func pxFontPt(cellW int) float64 {
+func FontPt(cellW int) float64 {
 	if cellW <= 0 {
 		return 0
 	}
 	return float64(cellW) / pxAdvance / pxPerPt
 }
 
-// renderThemedSVG lays the source out and writes graphviz's SVG for it.
+// RenderThemedSVG lays the source out and writes graphviz's SVG for it.
 //
 // Node sizes are graphviz's own here, unlike the cell renderer's, which
 // forces every box to its label's width in cells. There the cells do the
@@ -155,7 +155,7 @@ func pxFontPt(cellW int) float64 {
 //
 // force overrides the orientation the source asked for; empty leaves the
 // author's choice alone.
-func renderThemedSVG(th *theme.Theme, src string, fontPt float64, force cgraph.RankDir) ([]byte, error) {
+func RenderThemedSVG(th *theme.Theme, src string, fontPt float64, force cgraph.RankDir) ([]byte, error) {
 	var svg []byte
 	err := layout.Door(src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
 		if force != "" {
@@ -287,7 +287,7 @@ func svgSize(svg []byte) (float64, float64, error) {
 // kitty's image ids are a namespace shared with every program on the same
 // terminal, and a counter beside a screen that cannot check it is the bug
 // that drew the first diagram of every reply as the last one. See
-// hookImageID.
+// ImageID.
 func fnv1a32(s string) uint32 {
 	h := uint32(2166136261)
 	for i := 0; i < len(s); i++ {
@@ -299,11 +299,11 @@ func fnv1a32(s string) uint32 {
 
 // ---------- placeholders ----------
 
-// The placeholder character. A cell holding it, coloured with an image id,
-// tells kitty to draw that image's pixels there — and it is ordinary text
-// to everything else, which is the entire reason a picture can ride through
-// CC's display wire.
-const placeholderRune = '\U0010EEEE'
+// PlaceholderRune is the placeholder character. A cell holding it, coloured
+// with an image id, tells kitty to draw that image's pixels there — and it
+// is ordinary text to everything else, which is the entire reason a picture
+// can ride through CC's display wire.
+const PlaceholderRune = '\U0010EEEE'
 
 // rowColumnDiacritics carries the row and column of a placeholder cell as
 // combining marks. Not guessed: this is kitty's own rowcolumn-diacritics.txt
