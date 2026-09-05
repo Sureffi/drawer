@@ -40,7 +40,7 @@ func main() {
 	size := flag.String("size", "100x40", "screen size for -dot and -deltas, WxH")
 	pngOut := flag.String("png", "", "with -dot: write the pixels rung's picture here, as the hook would draw it")
 	cell := flag.String("cell", "10x24", "with -png: a terminal cell in pixels, WxH")
-	themePath := flag.String("theme", "", "a theme file: DOT graph/node/edge defaults for the pixels rung (built-in: tokyonight)")
+	themePath := flag.String("theme", "", "a theme file: DOT graph/node/edge defaults for the pixels rung (built-in: tokyonight, night or day by Claude Code's theme)")
 	flag.Parse()
 
 	// A theme the hook cannot read is the built-in one: the picture draws.

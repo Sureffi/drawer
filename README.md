@@ -69,13 +69,24 @@ down to halving `ranksep` for the doubled ranks.
 ## the theme
 
 A theme is DOT: the defaults a graph would declare for itself, declared
-once for every graph the hook draws. The built-in one is
+once for every graph the hook draws. Two are built in, tokyonight night
 
     graph [bgcolor=transparent, pad=0.15, color="#565f89", fontcolor="#a9b1d6", style="rounded,dashed", penwidth=1]
     node  [shape=box, style=rounded, fillcolor="#24283b", color="#7aa2f7", fontcolor="#c0caf5", penwidth=1.4]
     edge  [color="#7aa2f7", fontcolor="#9ece6a", penwidth=1.2]
 
-and another goes on the hook line:
+and tokyonight day
+
+    graph [bgcolor=transparent, pad=0.15, color="#848cb5", fontcolor="#6172b0", style="rounded,dashed", penwidth=1]
+    node  [shape=box, style=rounded, fillcolor="#d0d5e3", color="#2e7de9", fontcolor="#3760bf", penwidth=1.4]
+    edge  [color="#2e7de9", fontcolor="#587539", penwidth=1.2]
+
+and the hook picks by the ground Claude Code was told it stands on: the
+`theme` of `~/.claude/settings.json`, or of the older `~/.claude.json`
+where that has none — `dark`, `light`, a daltonized or ansi variant of
+either, or `custom:NAME` with `~/.claude/themes/NAME.json` saying which
+of the two it is based on. Anything the hook cannot read is night. Another
+theme goes on the hook line:
 
     ./bin/drawer -install -theme ~/.config/drawer/theme.dot
 
@@ -145,10 +156,11 @@ fits its width, and a notice must carry the source it is about.
   colours are not painted. The pixels rung draws both, but in an HTML label
   the space between two spans collapses — `<b>bold</b> and` sets as
   "boldand". That is graphviz's SVG writer.
-- The built-in theme is a dark one. On a light terminal the strokes read
-  and the text does not; a light theme is a file away, but the hook cannot
-  ask the terminal which it needs — the reply would land in Claude Code's
-  input, not the hook's.
+- The ground comes from Claude Code's theme setting, not the terminal: the
+  hook cannot ask the terminal — the reply would land in Claude Code's
+  input, not the hook's. A terminal that disagrees with the setting gets
+  the wrong built-in, and a custom theme a plugin ships, outside
+  `~/.claude/themes`, reads as dark.
 - Over about twelve nodes the picture flips top-down and gets tall; past 120
   rows the source shows under a notice.
 - Edge labels that graphviz places on the stroke interrupt it; a label with

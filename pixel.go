@@ -129,7 +129,7 @@ func (g PxGeom) OK() bool { return g.CellW > 0 && g.CellH > 0 }
 // chose, and it is the readable fallback — a theme that edits it can damage
 // the one thing that always has to keep working.
 //
-// What the theme says is in theme.go; the built-in one stands the picture
+// What the theme says is in theme.go; the built-in ones stand the picture
 // on the terminal's own ground. Measured on a translucent kitty over a
 // wallpaper: an opaque slab was the one thing in the picture that said
 // "pasted in", and it was the first thing a reader saw.

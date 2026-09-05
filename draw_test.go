@@ -4,6 +4,7 @@ package drawer
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -339,21 +340,81 @@ func withTheme(t *testing.T, src string) {
 	t.Cleanup(func() { setTheme(old) })
 }
 
-// A theme is DOT declarations, and the built-in theme is one: what it
+// A theme is DOT declarations, and both built-in themes are: what each
 // declares for each kind comes back as the values it wrote.
 func TestThemeIsDOTDeclarations(t *testing.T) {
-	th, err := ParseTheme(DefaultTheme)
+	th, err := ParseTheme(NightTheme)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if th.Graph["bgcolor"] != "transparent" || th.Node["fillcolor"] != "#24283b" || th.Edge["fontcolor"] != "#9ece6a" {
-		t.Errorf("the built-in theme read back wrong: %+v", th)
+		t.Errorf("the night theme read back wrong: %+v", th)
 	}
 	if th.Face() != "monospace" {
 		t.Errorf("face is %q with no fontname declared", th.Face())
 	}
+	if day, err := ParseTheme(DayTheme); err != nil {
+		t.Fatal(err)
+	} else if day.Graph["bgcolor"] != "transparent" || day.Node["fillcolor"] != "#d0d5e3" || day.Edge["fontcolor"] != "#587539" {
+		t.Errorf("the day theme read back wrong: %+v", day)
+	}
 	if _, err := ParseTheme("node ["); err == nil {
 		t.Error("an unclosed declaration parsed")
+	}
+}
+
+// Which built-in theme draws is the ground Claude Code was told it stands
+// on: its `theme` setting, in settings.json first and the older
+// ~/.claude.json where that has none, with a custom theme answered by the
+// `base` of its file. Anything unreadable is night.
+func TestBuiltinThemeFollowsClaudeCodesGround(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Cleanup(func() { setTheme(nil) })
+	if err := os.MkdirAll(filepath.Join(home, ".claude", "themes"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	put := func(rel, body string) {
+		t.Helper()
+		path := filepath.Join(home, rel)
+		if body == "" {
+			os.Remove(path)
+			return
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	builtin := func() string {
+		t.Helper()
+		setTheme(nil)
+		switch currentTheme().Node["fillcolor"] {
+		case "#24283b":
+			return "night"
+		case "#d0d5e3":
+			return "day"
+		}
+		return "neither"
+	}
+	for _, c := range []struct{ name, settings, older, custom, want string }{
+		{"nothing readable", "", "", "", "night"},
+		{"dark", `{"theme":"dark"}`, "", "", "night"},
+		{"light", `{"theme":"light"}`, "", "", "day"},
+		{"light-daltonized", `{"theme":"light-daltonized"}`, "", "", "day"},
+		{"the older file alone", "", `{"theme":"light-ansi"}`, "", "day"},
+		{"settings.json over the older file", `{"theme":"dark"}`, `{"theme":"light"}`, "", "night"},
+		{"custom on a light base", `{"theme":"custom:x"}`, "", `{"name":"x","base":"light"}`, "day"},
+		{"custom on a dark base", `{"theme":"custom:x"}`, "", `{"name":"x","base":"dark"}`, "night"},
+		{"custom with no file", `{"theme":"custom:x"}`, "", "", "night"},
+		{"not JSON", `{"theme":`, "", "", "night"},
+		{"not a string", `{"theme":7}`, "", "", "night"},
+	} {
+		put(".claude/settings.json", c.settings)
+		put(".claude.json", c.older)
+		put(".claude/themes/x.json", c.custom)
+		if got := builtin(); got != c.want {
+			t.Errorf("%s: drew %s, want %s", c.name, got, c.want)
+		}
 	}
 }
 
