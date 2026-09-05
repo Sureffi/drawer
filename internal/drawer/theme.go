@@ -19,7 +19,13 @@ import (
 	"github.com/sureffi/drawer/internal/theme"
 )
 
-type inForce struct{ th *theme.Theme }
+type inForce struct {
+	th *theme.Theme
+	// file is where -theme read this theme from, and empty where the theme
+	// is Claude Code's own. Nothing draws from it; -doctor says it, because
+	// a picture in the wrong colours is asking which theme this was.
+	file string
+}
 
 func (f *inForce) get(ctx context.Context) *theme.Theme {
 	if f.th == nil {

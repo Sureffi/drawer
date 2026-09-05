@@ -38,20 +38,28 @@ import (
 
 // ---------- capability ----------
 
-// Raster is the rasteriser this machine actually has: a name, and the one
-// call it can make. A func rather than a command line so a law can stand in
+// Raster is the rasteriser this machine actually has: a name, the program
+// that name found, and the one call it can make. A func rather than a command line so a law can stand in
 // a stub and read the zoom it was asked for, with no rasteriser anywhere in
 // the loop. The call takes the caller's context because it is another
 // process, and the one thing in this tree most able to hang.
 type Raster struct {
 	Name string
+	Path string
 	Run  func(ctx context.Context, svg []byte, zoom float64) ([]byte, error)
+}
+
+// Kitty says whether this is kitty, which is the terminal the placeholder
+// cells need. TERM is the usual answer and KITTY_WINDOW_ID is the one that
+// survives a TERM somebody else set — a multiplexer, or a shell wrapper.
+func Kitty() bool {
+	return strings.Contains(os.Getenv("TERM"), "kitty") || os.Getenv("KITTY_WINDOW_ID") != ""
 }
 
 // Probe answers whether pixels are possible here: the terminal is kitty
 // and a rasteriser exists.
 func Probe() *Raster {
-	if !strings.Contains(os.Getenv("TERM"), "kitty") && os.Getenv("KITTY_WINDOW_ID") == "" {
+	if !Kitty() {
 		return nil
 	}
 	return Find()
@@ -61,7 +69,7 @@ func Probe() *Raster {
 // that is going to a file rather than a screen.
 func Find() *Raster {
 	if p, err := exec.LookPath("rsvg-convert"); err == nil {
-		return &Raster{Name: "rsvg-convert", Run: func(ctx context.Context, svg []byte, zoom float64) ([]byte, error) {
+		return &Raster{Name: "rsvg-convert", Path: p, Run: func(ctx context.Context, svg []byte, zoom float64) ([]byte, error) {
 			return rasterExec(ctx, p, svg, "--zoom", strconv.FormatFloat(zoom, 'f', 4, 64))
 		}}
 	}
@@ -69,7 +77,7 @@ func Find() *Raster {
 		// magick has no --zoom: it rasterises SVG at a density, and 96dpi is
 		// the density rsvg renders at unzoomed, so the same number means the
 		// same picture on either.
-		return &Raster{Name: "magick", Run: func(ctx context.Context, svg []byte, zoom float64) ([]byte, error) {
+		return &Raster{Name: "magick", Path: p, Run: func(ctx context.Context, svg []byte, zoom float64) ([]byte, error) {
 			return rasterExec(ctx, p, svg, "-background", "none",
 				"-density", strconv.FormatFloat(96*zoom, 'f', 2, 64), "svg:-", "png:-")
 		}}

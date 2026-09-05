@@ -102,7 +102,8 @@ func (r run) runHook(ctx context.Context) int {
 		return 0
 	}
 	r.sess = in.SessionID
-	width := hookWidth(r.probe())
+	cols, _ := r.probe()
+	width := hookWidth(cols)
 	// The first delta of a message is the first thing the hook hears after
 	// a theme switch; ledger.go says why, and what is repainted.
 	if in.Index == 0 && r.pickRung() == rungPixels {

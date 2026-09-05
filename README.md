@@ -52,6 +52,12 @@ Code 2.1.261):
 `DRAWER_TEE` records every payload the hook is handed, as a fixture
 `-deltas` can replay.
 
+`drawer -doctor` says what this terminal gets and why: the version, the
+terminal, the window it found and where that number came from, the cell in
+pixels, whether this is kitty, the rasteriser on the PATH, the rung in
+force and the one asked for, the theme it paints in, and the state
+directory — read out of the same run a hook is built from.
+
 **The theme.** The pixels rung draws in Claude Code's own theme, read the
 way Claude Code reads it: the `theme` of `~/.claude/settings.json`, or of
 the older `~/.claude.json` where that has none, and for `custom:NAME` the

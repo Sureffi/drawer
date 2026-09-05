@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/sureffi/drawer/internal/pixel"
@@ -56,4 +57,46 @@ func pngSize(png []byte) (int, int, error) {
 		return 0, 0, errors.New("png has no size")
 	}
 	return w, h, nil
+}
+
+// -doctor is what a hook process would decide from, said out loud: nine
+// facts, one per line, in the order the ladder decides them. Under a pipe
+// there is no window to ask — the columns are the number nobody chose and
+// the cell size is unknown — and a terminal that says nothing gets braille,
+// which every font carries.
+//
+// The window is handed in rather than probed: `go test` runs under the go
+// command, and the go command's own stdin is a terminal on the machine this
+// was written on and a pipe on CI, so a law that probed would read a
+// different window in each place.
+func TestDoctorSaysWhatAHookWouldSee(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("KITTY_WINDOW_ID", "")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DRAWER_STATE", t.TempDir())
+	var b strings.Builder
+	newRun(rungAuto, "", nil, "").doctor(&b, 100, term.FromDefault)
+	said := strings.Split(strings.TrimSuffix(b.String(), "\n"), "\n")
+	want := []string{
+		"drawer: ",
+		"terminal: dumb",
+		"columns: 100 (from default)",
+		"cell: unknown: the terminal did not say",
+		"kitty: no",
+		"rasteriser: ",
+		"rung: braille (asked: auto)",
+		"theme: Claude Code's dark",
+		"state: ",
+	}
+	if len(said) != len(want) {
+		t.Fatalf("-doctor said %d lines, want %d:\n%s", len(said), len(want), b.String())
+	}
+	for i, w := range want {
+		if !strings.HasPrefix(said[i], w) {
+			t.Errorf("line %d is %q, want it to open %q", i+1, said[i], w)
+		}
+	}
+	if !strings.HasSuffix(said[8], " (writable)") {
+		t.Errorf("a state directory this law just made is not writable: %q", said[8])
+	}
 }

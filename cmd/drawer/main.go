@@ -14,6 +14,7 @@
 //	drawer -dot FILE -size WxH # draw a file offline, at a size
 //	drawer -dot FILE -png OUT  # the pixels rung's picture, to a file
 //	drawer -deltas FILE        # replay a recorded turn; nonzero if damaged
+//	drawer -doctor             # what this terminal gets, and why
 //	drawer -version            # the release this binary was built from
 package main
 

@@ -50,6 +50,7 @@ func Main(args []string) int {
 	themePath := fs.String("theme", os.Getenv("DRAWER_THEME"), "a theme file: DOT graph/node/edge defaults for the pixels rung (DRAWER_THEME; default: Claude Code's own theme)")
 	showTheme := fs.Bool("show-theme", false, "print the theme in force as DOT and exit: Claude Code's, or the file given with -theme")
 	showVersion := fs.Bool("version", false, "print the version this binary was built from and exit")
+	doctor := fs.Bool("doctor", false, "print what this binary sees — terminal, window, rasteriser, rung, theme, state — and exit")
 	fs.Parse(args)
 
 	// One deadline, derived here and threaded down: everything below draws
@@ -61,6 +62,7 @@ func Main(args []string) int {
 	// and the session opens. Everywhere else — -dot, -png, -deltas — a bad
 	// theme is an answer.
 	var th *theme.Theme
+	file := ""
 	if *themePath != "" {
 		loaded, err := theme.Load(ctx, *themePath)
 		if err != nil && !*hook && !*contextLine {
@@ -68,14 +70,19 @@ func Main(args []string) int {
 			return 1
 		}
 		th = loaded // nil where it would not read: Claude Code's, as before
+		if th != nil {
+			file = *themePath
+		}
 	}
 
-	r := newRun(parseRung(*render), *hooktee, th)
+	r := newRun(parseRung(*render), *hooktee, th, file)
 	w, h := parseSize(*size, 100, 40)
 
 	switch {
 	case *showVersion:
 		fmt.Println("drawer", version)
+	case *doctor:
+		return r.runDoctor()
 	case *showTheme:
 		fmt.Print(r.theme.get(ctx).Source)
 	case *contextLine:

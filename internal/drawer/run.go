@@ -33,15 +33,20 @@ type run struct {
 // newRun is the run main hands down. TERM is read here and not at probe
 // time, because it is available on every door and the window is not: a
 // -deltas replay never asks the window how big it is, and it still gets to
-// know what terminal it is replaying for.
-func newRun(r rung, tee string, th *theme.Theme) run {
-	return run{rung: r, term: term.Name(), tee: tee, theme: &inForce{th: th}}
+// know what terminal it is replaying for. file is where -theme read its
+// theme from, and empty everywhere else.
+func newRun(r rung, tee string, th *theme.Theme, file string) run {
+	return run{rung: r, term: term.Name(), tee: tee, theme: &inForce{th: th, file: file}}
 }
 
-// probe asks the window how big it is. The columns come back; the cell's
-// pixel size lands in the run. Where there is no terminal the geometry is
-// zero and every rung below pixels still draws.
-func (r *run) probe() int { cols, g := term.Size(); r.geom = g; return cols }
+// probe asks the window how big it is. The columns come back, and where
+// they came from; the cell's pixel size lands in the run. Where there is no
+// terminal the geometry is zero and every rung below pixels still draws.
+func (r *run) probe() (int, term.WidthFrom) {
+	cols, g, from := term.Size()
+	r.geom = g
+	return cols, from
+}
 
 // rung is which drawing this run makes. The zero value is auto, which
 // reads the terminal; the four others name themselves.

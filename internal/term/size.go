@@ -34,12 +34,35 @@ type Geom struct{ CellW, CellH int }
 // no answer, and every rung above the glyphs reads that as no pixels.
 func (g Geom) OK() bool { return g.CellW > 0 && g.CellH > 0 }
 
-// Size is what the window says about itself: its columns, and the pixel
-// size of a cell where the terminal reports one.
-func Size() (cols int, g Geom) {
+// WidthFrom says which of the three answers the column count is. A drawing
+// too wide for the window is nearly always a window nobody found, and the
+// difference between the terminal's own number and the one nobody chose is
+// the first thing worth knowing about it.
+type WidthFrom uint8
+
+const (
+	FromDefault WidthFrom = iota // nothing answered, so 100
+	FromTTY                      // the window itself, through TIOCGWINSZ
+	FromCOLUMNS                  // the variable, where there was no window
+)
+
+func (f WidthFrom) String() string {
+	switch f {
+	case FromTTY:
+		return "tty"
+	case FromCOLUMNS:
+		return "COLUMNS"
+	}
+	return "default"
+}
+
+// Size is what the window says about itself: its columns, the pixel size of
+// a cell where the terminal reports one, and which of the three answers the
+// columns are.
+func Size() (cols int, g Geom, from WidthFrom) {
 	if f, err := os.Open(parentTTY()); err == nil {
 		if ws, err := unix.IoctlGetWinsize(int(f.Fd()), unix.TIOCGWINSZ); err == nil && ws.Col > 0 {
-			cols = int(ws.Col)
+			cols, from = int(ws.Col), FromTTY
 			if ws.Xpixel > 0 && ws.Ypixel > 0 && ws.Row > 0 {
 				g = Geom{CellW: int(ws.Xpixel) / cols, CellH: int(ws.Ypixel) / int(ws.Row)}
 			}
@@ -48,13 +71,13 @@ func Size() (cols int, g Geom) {
 	}
 	if cols == 0 {
 		if v, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && v > 0 {
-			cols = v
+			cols, from = v, FromCOLUMNS
 		}
 	}
 	if cols == 0 {
-		cols = 100
+		cols, from = 100, FromDefault
 	}
-	return cols, g
+	return cols, g, from
 }
 
 // Name names the terminal. TERM survives CC's scrub of a hook's environment

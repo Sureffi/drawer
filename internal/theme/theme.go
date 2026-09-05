@@ -65,16 +65,15 @@ func ClaudeDOT() string {
 		"edge  [color=\"" + p["claude"] + "\", fontcolor=\"" + p["success"] + "\", penwidth=1.2]\n"
 }
 
-// claudePalette resolves the theme Claude Code was told to use, the way
-// Claude Code resolves it. The `theme` of ~/.claude/settings.json, or of
-// the older ~/.claude.json where the newer file has none, is a stock name
-// or custom:NAME, and ~/.claude/themes/NAME.json says which stock palette
-// a custom theme stands on and which colours it overrides. An override is
-// taken as #rrggbb, #rgb or rgb(r,g,b); one in any other form — a terminal
-// palette slot, say — is the base's colour. Anything the hook cannot read
-// is dark, auto included: auto is the ground Claude Code found by asking
-// the terminal, which a hook cannot ask.
-func claudePalette() map[string]string {
+// claudeSetting resolves the theme Claude Code was told to use, the way
+// Claude Code resolves it: the stock palette it stands on, and the colours
+// a custom theme lays over that. The `theme` of ~/.claude/settings.json, or
+// of the older ~/.claude.json where the newer file has none, is a stock
+// name or custom:NAME, and ~/.claude/themes/NAME.json says which stock
+// palette a custom theme stands on and which colours it overrides. Anything
+// the hook cannot read is dark, auto included: auto is the ground Claude
+// Code found by asking the terminal, which a hook cannot ask.
+func claudeSetting() (string, map[string]any) {
 	name := ""
 	var overrides map[string]any
 	if home, err := os.UserHomeDir(); err == nil {
@@ -94,10 +93,24 @@ func claudePalette() map[string]string {
 			name, overrides = custom.Base, custom.Overrides
 		}
 	}
-	base, ok := claudePalettes[strings.TrimSuffix(name, "-ansi")]
-	if !ok {
-		base = claudePalettes["dark"]
+	name = strings.TrimSuffix(name, "-ansi")
+	if _, ok := claudePalettes[name]; !ok {
+		name = "dark"
 	}
+	return name, overrides
+}
+
+// ClaudeName is the stock palette Claude Code's theme resolves to, which is
+// the one the picture is painted from. `drawer -doctor` says it, because a
+// picture in colours the reader did not expect is asking this question.
+func ClaudeName() string { name, _ := claudeSetting(); return name }
+
+// claudePalette is that palette with the overrides laid over it. An
+// override is taken as #rrggbb, #rgb or rgb(r,g,b); one in any other form —
+// a terminal palette slot, say — is the base's colour.
+func claudePalette() map[string]string {
+	name, overrides := claudeSetting()
+	base := claudePalettes[name]
 	pal := make(map[string]string, len(base))
 	for k, v := range base {
 		pal[k] = v

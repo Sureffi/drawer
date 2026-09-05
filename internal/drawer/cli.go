@@ -7,6 +7,7 @@ package drawer
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/sureffi/drawer/internal/cells"
@@ -14,6 +15,7 @@ import (
 	"github.com/sureffi/drawer/internal/pixel"
 	"github.com/sureffi/drawer/internal/subcell"
 	"github.com/sureffi/drawer/internal/term"
+	"github.com/sureffi/drawer/internal/theme"
 )
 
 // runDotDump draws a DOT source at a given cell size and prints it — the
@@ -89,4 +91,61 @@ func (r run) runPNG(ctx context.Context, dotPath, pngPath string, width int, geo
 	}
 	fmt.Printf("%s: %d×%d cells%s\n", pngPath, p.Cols, p.Rows, how)
 	return 0
+}
+
+// runDoctor is the -doctor door: what this binary sees, one fact per line.
+// Every answer is read out of the same run a hook is built from, so what it
+// prints is what a hook process would have decided — which is the point.
+// Nearly every question this tool gets asked is "why that rung", and the
+// eight facts around that line are the ones the answer is made of.
+func (r run) runDoctor() int {
+	cols, from := r.probe()
+	r.doctor(os.Stdout, cols, from)
+	return 0
+}
+
+// doctor writes the nine facts. The window is handed in rather than asked
+// for here: asking is the door's job, and a law can then stand this binary
+// in a terminal that is not there.
+func (r run) doctor(w io.Writer, cols int, from term.WidthFrom) {
+	name := r.term
+	if name == "" {
+		name = "unknown"
+	}
+	kitty := "no"
+	if pixel.Kitty() {
+		kitty = "yes"
+	}
+	fmt.Fprintln(w, "drawer:", version)
+	fmt.Fprintln(w, "terminal:", name)
+	fmt.Fprintf(w, "columns: %d (from %s)\n", cols, from)
+	if r.geom.OK() {
+		fmt.Fprintf(w, "cell: %dx%d px\n", r.geom.CellW, r.geom.CellH)
+	} else {
+		fmt.Fprintln(w, "cell: unknown: the terminal did not say")
+	}
+	fmt.Fprintln(w, "kitty:", kitty)
+	if ras := pixel.Find(); ras != nil {
+		fmt.Fprintf(w, "rasteriser: %s at %s\n", ras.Name, ras.Path)
+	} else {
+		fmt.Fprintln(w, "rasteriser: none: rsvg-convert or magick on the PATH would enable pixels")
+	}
+	fmt.Fprintf(w, "rung: %s (asked: %s)\n", r.pickRung(), r.rung)
+	if r.theme.file != "" {
+		fmt.Fprintln(w, "theme: file", r.theme.file)
+	} else {
+		fmt.Fprintln(w, "theme: Claude Code's", theme.ClaudeName())
+	}
+	dir := stateDir()
+	writable := "writable"
+	if f, err := os.CreateTemp(dir, "doctor-*"); err != nil {
+		// Answered by writing one: the directory existing and the mode bits
+		// reading right are both things that have been true of a directory
+		// the hook could not use.
+		writable = "NOT writable"
+	} else {
+		f.Close()
+		os.Remove(f.Name())
+	}
+	fmt.Fprintf(w, "state: %s (%s)\n", dir, writable)
 }
