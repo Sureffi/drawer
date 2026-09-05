@@ -28,6 +28,7 @@ import (
 
 	"github.com/sureffi/drawer/internal/fence"
 	"github.com/sureffi/drawer/internal/grid"
+	"github.com/sureffi/drawer/internal/subcell"
 )
 
 // runDeltas replays a recorded delta stream through the transducer and
@@ -172,7 +173,7 @@ func checkDrawn(block, src string, w int) error {
 			return fmt.Errorf("row is %d cells in %d columns: %q", n, w, plain)
 		}
 		if strings.ContainsAny(plain, "─│╭╮╰╯▶◀▲▼") || strings.ContainsRune(plain, placeholderRune) ||
-			strings.Contains(plain, "no diagram") || hasSubcellInk(plain) {
+			strings.Contains(plain, "no diagram") || subcell.HasInk(plain) {
 			drawn = true
 		}
 	}

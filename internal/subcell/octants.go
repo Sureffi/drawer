@@ -5,7 +5,7 @@
 // Symbols for Legacy Computing), not typed in. Bit i is octant i+1: row
 // r, column c is bit r*2+c, top-left first. Index 0 is a space.
 
-package main
+package subcell
 
 var octantGlyphs = [256]rune{
 	0x00020, 0x1CEA8, 0x1CEAB, 0x1FB82, 0x1CD00, 0x02598, 0x1CD01, 0x1CD02,

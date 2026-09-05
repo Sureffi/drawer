@@ -1,6 +1,6 @@
 // subcell_test.go — laws for the braille and octant rung.
 
-package main
+package subcell
 
 import (
 	"strings"
@@ -13,7 +13,7 @@ import (
 // stroke — the outline of an ellipse passes around them, and an edge
 // label interrupts its own edge the way the cell renderer's do.
 func TestSubcellLabelsAreGlyphsOverClearedStrokes(t *testing.T) {
-	rows := drawSubcell("digraph { rankdir=LR; alpha -> beta [label=\"go\"] }\n", 90, false)
+	rows := Draw("digraph { rankdir=LR; alpha -> beta [label=\"go\"] }\n", 90, false)
 	if rows == nil {
 		t.Fatal("nothing drawn")
 	}
@@ -23,14 +23,14 @@ func TestSubcellLabelsAreGlyphsOverClearedStrokes(t *testing.T) {
 			t.Errorf("label %q not set as glyphs:\n%s", want, joined)
 		}
 	}
-	if !hasSubcellInk(joined) {
+	if !HasInk(joined) {
 		t.Errorf("no strokes at all:\n%s", joined)
 	}
 	// the cell before and after a node label is air, not the wall: the
 	// outline was snapped to the run and sits one cell out
 	for _, line := range strings.Split(joined, "\n") {
 		if i := strings.Index(line, "alpha"); i > 0 {
-			if hasSubcellInk(line[i-1 : i]) {
+			if HasInk(line[i-1 : i]) {
 				t.Errorf("stroke touching the label: %q", line)
 			}
 		}

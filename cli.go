@@ -10,6 +10,7 @@ import (
 
 	"github.com/sureffi/drawer/internal/cells"
 	"github.com/sureffi/drawer/internal/layout"
+	"github.com/sureffi/drawer/internal/subcell"
 	"github.com/sureffi/drawer/internal/term"
 )
 
@@ -35,7 +36,7 @@ func (r run) runDotDump(path string, w, h int) int {
 	}
 	var rows []string
 	if r.rung == rungBraille || r.rung == rungOctants {
-		rows = drawSubcell(string(b), w, r.rung == rungOctants)
+		rows = subcell.Draw(string(b), w, r.rung == rungOctants)
 		if rows == nil {
 			fmt.Fprintf(os.Stderr, "-dot: will not fit in %d columns as strokes (source would be left alone)\n", w)
 			return 1

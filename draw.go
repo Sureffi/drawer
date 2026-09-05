@@ -30,6 +30,7 @@ import (
 	"github.com/sureffi/drawer/internal/grid"
 	"github.com/sureffi/drawer/internal/layout"
 	"github.com/sureffi/drawer/internal/notice"
+	"github.com/sureffi/drawer/internal/subcell"
 	"github.com/sureffi/drawer/internal/term"
 )
 
@@ -49,7 +50,7 @@ func (r run) drawBlock(src string, width int) []string {
 		pick = rungOctants // cairo said no; the glyphs still can
 	}
 	if pick == rungOctants || pick == rungBraille {
-		if rows := drawSubcell(src, width, pick == rungOctants); rows != nil {
+		if rows := subcell.Draw(src, width, pick == rungOctants); rows != nil {
 			return bare(rows)
 		}
 	}

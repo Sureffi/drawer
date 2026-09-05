@@ -22,7 +22,7 @@
 // its box. Graphviz measures the type as Courier at 12 points, which is
 // 7.2 points a character — one cell — and 12 points a line — one row.
 
-package main
+package subcell
 
 import (
 	"bytes"
@@ -555,9 +555,9 @@ func renderInk(jg *jgraph, cols, rows int, octants bool) []string {
 	return k.rowsOut(octants)
 }
 
-// drawSubcell is the braille and octant rung: rows, or nil when nothing
-// fits and the caller steps down.
-func drawSubcell(src string, width int, octants bool) []string {
+// Draw is the braille and octant rung: rows, or nil when nothing fits and
+// the caller steps down.
+func Draw(src string, width int, octants bool) []string {
 	jg, cols, rows, ok := fitInk(src, width, grid.MaxRows)
 	if !ok {
 		return nil
@@ -565,8 +565,8 @@ func drawSubcell(src string, width int, octants bool) []string {
 	return renderInk(jg, cols, rows, octants)
 }
 
-// hasSubcellInk reports a braille or octant stroke in a row.
-func hasSubcellInk(s string) bool {
+// HasInk reports a braille or octant stroke in a row.
+func HasInk(s string) bool {
 	for _, r := range s {
 		if (r > 0x2800 && r <= 0x28FF) || (r >= 0x1CD00 && r <= 0x1CDE5) || (r >= 0x1CEA0 && r <= 0x1CEAF) {
 			return true
