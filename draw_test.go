@@ -203,3 +203,196 @@ func drawAt(w int) func(string) []string {
 		return Draw.Emit(src, w, 0)
 	}
 }
+
+// ---------- the pixel theme ----------
+
+// svgGroup is the SVG of one titled element: a node, an edge or a cluster.
+func svgGroup(svg []byte, title string) string {
+	s := string(svg)
+	i := strings.Index(s, "<title>"+title+"</title>")
+	if i < 0 {
+		return ""
+	}
+	j := strings.Index(s[i:], "</g>")
+	if j < 0 {
+		return s[i:]
+	}
+	return s[i : i+j]
+}
+
+// Type is measured in Courier, which the wasm's tables know, and set in
+// the terminal's face, which fontconfig knows; a label measured in one face
+// and set in another runs out of its box. At a known cell width the size is
+// the one that puts a glyph in a cell.
+func TestPixelTypeIsMeasuredInCourierAndSetInMonospace(t *testing.T) {
+	svg, err := renderThemedSVG("digraph { a -> b }", pxFontPt(10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(svg), "Courier") {
+		t.Error("the layout font reached the SVG")
+	}
+	if !strings.Contains(string(svg), `font-family="monospace"`) {
+		t.Error("the SVG does not name the terminal's face")
+	}
+	if !strings.Contains(string(svg), `font-size="12.50"`) {
+		t.Errorf("a 10px cell wants 12.5pt type; got %s", svg)
+	}
+}
+
+// What the model painted stays painted, and graphviz's own defaults apply
+// around its paint: a pink node keeps black text, as `dot` would give it. A
+// shape it asked for is drawn, records included. Where it left an attribute
+// unset, the theme fills in.
+func TestPixelThemeKeepsTheModelsPaint(t *testing.T) {
+	src := `digraph {
+		a [fillcolor=pink, style=filled, color=red]
+		b [shape=ellipse]
+		c [shape=record, label="{head|body|tail}"]
+		d
+		a -> b -> c -> d
+	}`
+	svg, err := renderThemedSVG(src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := svgGroup(svg, "a")
+	if !strings.Contains(a, `fill="pink"`) || !strings.Contains(a, `stroke="red"`) {
+		t.Errorf("the model's paint was overwritten:\n%s", a)
+	}
+	th := currentTheme()
+	if strings.Contains(a, th.Node["fontcolor"]) {
+		t.Errorf("theme text on the model's fill:\n%s", a)
+	}
+	if !strings.Contains(svgGroup(svg, "b"), "<ellipse") {
+		t.Error("the model asked for an ellipse and got a box")
+	}
+	c := svgGroup(svg, "c")
+	if strings.Contains(c, "{head|body|tail}") || !strings.Contains(c, ">body<") {
+		t.Errorf("the record printed its markup:\n%s", c)
+	}
+	d := svgGroup(svg, "d")
+	if !strings.Contains(d, th.Node["fillcolor"]) || !strings.Contains(d, th.Node["fontcolor"]) || !strings.Contains(d, th.Node["color"]) {
+		t.Errorf("an unpainted node did not get the theme:\n%s", d)
+	}
+}
+
+// Every cluster is themed, not only the first. A subgraph answers for
+// attributes it never set with the root's value, so the clusters have to be
+// read before the root is themed; the second cluster is where that showed.
+func TestPixelThemeReachesEveryCluster(t *testing.T) {
+	src := `digraph {
+		subgraph cluster_a { label="a side"; x }
+		subgraph cluster_b { label="b side"; y }
+		x -> y
+	}`
+	svg, err := renderThemedSVG(src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	th := currentTheme()
+	for _, name := range []string{"cluster_a", "cluster_b"} {
+		g := svgGroup(svg, name)
+		if !strings.Contains(g, `stroke="`+th.Graph["color"]+`"`) {
+			t.Errorf("%s outline is not themed:\n%s", name, g)
+		}
+		if !strings.Contains(g, `fill="`+th.Graph["fontcolor"]+`"`) {
+			t.Errorf("%s label is not themed:\n%s", name, g)
+		}
+		if !strings.Contains(g, `font-family="monospace"`) {
+			t.Errorf("%s label is not in the terminal's face:\n%s", name, g)
+		}
+	}
+}
+
+// The picture stands on the terminal's own ground: no background unless
+// the model asked for one.
+func TestPixelBackgroundIsTheTerminalsUnlessSet(t *testing.T) {
+	svg, err := renderThemedSVG("digraph { a -> b }", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(svg), `fill="white"`) || strings.Contains(string(svg), `stroke="transparent"`) {
+		t.Error("a background was painted under a graph that set none")
+	}
+	svg, err = renderThemedSVG("digraph { bgcolor=white; a -> b }", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(svg), `fill="white"`) {
+		t.Error("the model's background was dropped")
+	}
+}
+
+// ---------- the theme file ----------
+
+// withTheme makes a theme the theme for one test.
+func withTheme(t *testing.T, src string) {
+	old := currentTheme()
+	th, err := ParseTheme(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setTheme(th)
+	t.Cleanup(func() { setTheme(old) })
+}
+
+// A theme is DOT declarations, and the built-in theme is one: what it
+// declares for each kind comes back as the values it wrote.
+func TestThemeIsDOTDeclarations(t *testing.T) {
+	th, err := ParseTheme(DefaultTheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if th.Graph["bgcolor"] != "transparent" || th.Node["fillcolor"] != "#24283b" || th.Edge["fontcolor"] != "#9ece6a" {
+		t.Errorf("the built-in theme read back wrong: %+v", th)
+	}
+	if th.Face() != "monospace" {
+		t.Errorf("face is %q with no fontname declared", th.Face())
+	}
+	if _, err := ParseTheme("node ["); err == nil {
+		t.Error("an unclosed declaration parsed")
+	}
+}
+
+// A theme file reaches the picture: its fill is the nodes' fill, its edge
+// colour the edges', its fontname the face the SVG is set in — and what it
+// does not declare is graphviz's default, not the built-in theme's.
+func TestThemeFileReachesThePicture(t *testing.T) {
+	withTheme(t, `node [fillcolor="#7aa2f71f", fontname="JetBrains Mono"]
+	              edge [color=red]`)
+	svg, err := renderThemedSVG("digraph { a -> b }", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// graphviz writes an RGBA fill as a colour and an opacity.
+	a := svgGroup(svg, "a")
+	if !strings.Contains(a, `fill="#7aa2f7" fill-opacity="0.12`) {
+		t.Errorf("the theme's fill did not reach the node:\n%s", a)
+	}
+	if strings.Contains(a, "#c0caf5") {
+		t.Errorf("the built-in text colour leaked through a theme that has none:\n%s", a)
+	}
+	if e := svgGroup(svg, "a&#45;&gt;b"); !strings.Contains(e, `stroke="red"`) {
+		t.Errorf("the theme's edge colour did not reach the edge:\n%s", e)
+	}
+	if !strings.Contains(string(svg), `font-family="JetBrains Mono"`) || strings.Contains(string(svg), "Courier") {
+		t.Error("the picture is not set in the theme's face")
+	}
+}
+
+// The model's paint still wins over a theme file, as it does over the
+// built-in one.
+func TestThemeFileYieldsToTheModel(t *testing.T) {
+	withTheme(t, `node [fillcolor="#000000", color="#111111"]`)
+	svg, err := renderThemedSVG("digraph { a [color=red]; a -> b }", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := svgGroup(svg, "a"); !strings.Contains(a, `stroke="red"`) {
+		t.Errorf("the theme overwrote the model:\n%s", a)
+	}
+	if b := svgGroup(svg, "b"); !strings.Contains(b, `stroke="#111111"`) {
+		t.Errorf("the theme did not reach an unpainted node:\n%s", b)
+	}
+}

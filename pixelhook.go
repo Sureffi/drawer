@@ -38,7 +38,7 @@ func drawPixels(src string, width int) []string {
 	if r == nil || !hookGeom.OK() {
 		return nil
 	}
-	svg, err := renderThemedSVG(src)
+	svg, err := renderThemedSVG(src, pxFontPt(hookGeom.CellW))
 	if err != nil {
 		return nil
 	}

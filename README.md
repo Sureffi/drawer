@@ -53,6 +53,40 @@ naming it, down the parent's own tty via `/proc`; kitty reads the file,
 deletes it, and shows the image in placeholder cells that ride through CC
 as ordinary text. Linux, a local kitty, and not through tmux.
 
+The picture is themed on the parsed graph, never in the source text. Type
+is measured in Courier — the one monospace the wasm's built-in metrics know
+exactly — and set in the terminal's face, at the size that puts one glyph
+in one cell, so a label is the terminal's own text and a node reads as text
+that grew a border. What the model painted stays painted: a shape, a
+colour, a fill it asked for is kept, and around its paint graphviz's own
+defaults apply, so `fillcolor=pink` gets black text as `dot` would give it.
+Where it left an attribute unset, the theme applies.
+
+## the theme
+
+A theme is DOT: the defaults a graph would declare for itself, declared
+once for every graph the hook draws. The built-in one is
+
+    graph [bgcolor=transparent, pad=0.15, color="#565f89", fontcolor="#a9b1d6", style="rounded,dashed", penwidth=1]
+    node  [shape=box, style=rounded, fillcolor="#24283b", color="#7aa2f7", fontcolor="#c0caf5", penwidth=1.4]
+    edge  [color="#7aa2f7", fontcolor="#9ece6a", penwidth=1.2]
+
+and another goes on the hook line:
+
+    ./bin/drawer -install -theme ~/.config/drawer/theme.dot
+
+`graph [...]` is the root and every cluster alike. A theme file is the whole
+theme, not a patch on the built-in one: what it leaves undeclared is
+graphviz's default. Three attributes are rules rather than values.
+`fontname` names the face the picture is set in; the layout is still
+measured in Courier, so any monospace fits and a proportional face will not.
+`fontsize` yields to the cell when the theme has none. A node's `fillcolor`
+is a rule: a node the model filled keeps its own text colour, any other
+gets the theme's fill with `filled` added to its style. A theme the hook
+cannot read is the built-in one, so the picture draws; `-theme FILE -dot`
+says what is wrong with the file. `fixtures/theme.dot` is a second theme,
+the same strokes over nodes the terminal shows through.
+
 Octants and braille: everything comes from graphviz's json output — every
 polygon, ellipse, bezier and text anchor it would have painted — so
 clusters, node shapes, multi-line labels, dashed edges and both heads of a
@@ -101,7 +135,12 @@ fits its width, and a notice must carry the source it is about.
   column zero and they move together.
 - The hook's width comes from `/proc/$PPID/fd/0`, Linux only. macOS would
   need the tty via `ps` and an open of the device; unverified.
-- Record and HTML labels print their markup. Node colours are not painted.
+- In the glyph rungs, record and HTML labels print their markup and node
+  colours are not painted. The pixels rung draws both.
+- The built-in theme is a dark one. On a light terminal the strokes read
+  and the text does not; a light theme is a file away, but the hook cannot
+  ask the terminal which it needs — the reply would land in Claude Code's
+  input, not the hook's.
 - Over about twelve nodes the picture flips top-down and gets tall; past 120
   rows the source shows under a notice.
 - Edge labels that graphviz places on the stroke interrupt it; a label with

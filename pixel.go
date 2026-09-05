@@ -27,6 +27,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -113,24 +114,46 @@ func (g PxGeom) OK() bool { return g.CellW > 0 && g.CellH > 0 }
 
 // ---------- SVG, themed ----------
 
-// The theme, measured off a reference render rather than invented here:
-// tokyonight through graphviz 12.1.2's own SVG writer, monospace so the
-// picture speaks in the terminal's voice, and a penwidth just past hairline
-// so a stroke survives being scaled down into a handful of cells.
+// The theme goes on through cgraph, on the parsed graph, and only where the
+// model left an attribute unset: a node it painted keeps its paint, and
+// around that paint graphviz's own defaults apply — `fillcolor=pink` gets
+// black text, as `dot` would give it. A shape it asked for is the shape it
+// gets, records and diamonds included. Nothing is spliced into the source
+// text: that text is the model's, it arrives split at boundaries nobody
+// chose, and it is the readable fallback — a theme that edits it can damage
+// the one thing that always has to keep working.
 //
-// It goes on through cgraph, on the parsed graph. Nothing is spliced into
-// the source text: that text is the model's, it arrives split at boundaries
-// nobody chose, and it is the readable fallback — a theme that edits it can
-// damage the one thing that always has to keep working.
+// What the theme says is in theme.go; the built-in one stands the picture
+// on the terminal's own ground. Measured on a translucent kitty over a
+// wallpaper: an opaque slab was the one thing in the picture that said
+// "pasted in", and it was the first thing a reader saw.
+
+// Type is measured in Courier and set in the theme's face. The wasm has no
+// fontconfig: graphviz measures a label from tables built into it, and the
+// tables know Courier's advance exactly — 0.6em, which is every terminal
+// monospace's advance too. Any other name, "monospace" included, falls back
+// to Times metrics and the labels run out of their boxes; measured, "API
+// Server 1" overran its box by two glyphs. So the layout is done in Courier
+// and on the way out the SVG is told the face, which fontconfig resolves —
+// "monospace" to the one the terminal itself is showing. Neither the model
+// nor the theme gets to choose the layout font: a label measured in one
+// face and set in another is the overrun again, so fontname is the one
+// attribute always written.
 const (
-	pxBackground = "#1a1b26"
-	pxNodeFill   = "#24283b"
-	pxNodeStroke = "#7aa2f7"
-	pxNodeText   = "#c0caf5"
-	pxEdgeStroke = "#7aa2f7"
-	pxEdgeText   = "#9ece6a"
-	pxFont       = "monospace"
+	pxLayoutFont = "Courier"
+	pxAdvance    = 0.6 // em per glyph: Courier's, and every terminal's
 )
+
+// pxFontPt is the type size that puts one glyph in one cell. The picture is
+// cut to whole columns at a zoom of one, so a label set at this size is the
+// terminal's own text size and a node reads as text that grew a border.
+// Zero when the cell is unknown, and graphviz keeps its 14pt.
+func pxFontPt(cellW int) float64 {
+	if cellW <= 0 {
+		return 0
+	}
+	return float64(cellW) / pxAdvance / pxPerPt
+}
 
 // renderThemedSVG lays the source out and writes graphviz's SVG for it.
 // Through the same door as every other graphviz call: two concurrent
@@ -141,7 +164,8 @@ const (
 // forces every box to its label's width in cells. There the cells do the
 // typography and graphviz only places boxes; here graphviz is drawing the
 // picture, so it gets to measure its own type.
-func renderThemedSVG(src string) ([]byte, error) {
+func renderThemedSVG(src string, fontPt float64) ([]byte, error) {
+	th := currentTheme()
 	graphvizMu.Lock()
 	defer graphvizMu.Unlock()
 	ctx := context.Background()
@@ -160,29 +184,93 @@ func renderThemedSVG(src string) ([]byte, error) {
 		return nil, errors.New("no graph in source")
 	}
 	defer graph.Close()
-	graph.SetBackgroundColor(pxBackground)
-	graph.SetFontName(pxFont)
-	graph.SetPad(0.15)
-	for n, _ := graph.FirstNode(); n != nil; n, _ = graph.NextNode(n) {
-		n.SetShape(cgraph.BoxShape)
-		n.SetStyle(cgraph.RoundedNodeStyle + "," + cgraph.FilledNodeStyle)
-		n.SetFillColor(pxNodeFill)
-		n.SetColor(pxNodeStroke)
-		n.SetFontColor(pxNodeText)
-		n.SetFontName(pxFont)
-		n.SetPenWidth(1.4)
-		for e, _ := graph.FirstOut(n); e != nil; e, _ = graph.NextOut(e) {
-			e.SetColor(pxEdgeStroke)
-			e.SetFontColor(pxEdgeText)
-			e.SetFontName(pxFont)
-			e.SetPenWidth(1.2)
+
+	type getter = func(string) string
+	type setter = func(string, string, string) error
+	// unset writes an attribute only where the source left it empty. An
+	// attribute the source declared at `node [...]` reads as set on every
+	// node, which is what the model meant by declaring it there.
+	unset := func(get getter, set setter, key, val string) {
+		if val != "" && get(key) == "" {
+			set(key, val, "")
 		}
 	}
+	// apply is a theme's declarations, less the ones that are rules.
+	apply := func(get getter, set setter, decl map[string]string, rules ...string) {
+		for k, v := range decl {
+			if !slices.Contains(rules, k) {
+				unset(get, set, k, v)
+			}
+		}
+	}
+	size := ""
+	if fontPt > 0 {
+		size = strconv.FormatFloat(fontPt, 'f', 2, 64)
+	}
+	// typeset is the two type rules: always Courier, and the theme's size
+	// where it has one, else the cell's.
+	typeset := func(get getter, set setter, decl map[string]string) {
+		set("fontname", pxLayoutFont, "")
+		if fs := decl["fontsize"]; fs != "" {
+			unset(get, set, "fontsize", fs)
+		} else {
+			unset(get, set, "fontsize", size)
+		}
+	}
+	for n, _ := graph.FirstNode(); n != nil; n, _ = graph.NextNode(n) {
+		apply(n.GetStr, n.SafeSet, th.Node, "fillcolor", "style", "fontcolor", "fontname", "fontsize")
+		// The fill rule. A node the model filled, or styled filled, is the
+		// model's: its fill, its style and its text colour stay as graphviz
+		// would give them. Any other node takes the theme's fill, with
+		// "filled" added to whichever style it has, and the theme's text.
+		style := n.GetStr("style")
+		modelFilled := n.GetStr("fillcolor") != "" || strings.Contains(style, "filled")
+		switch fill := th.Node["fillcolor"]; {
+		case fill == "":
+			unset(n.GetStr, n.SafeSet, "style", th.Node["style"])
+			unset(n.GetStr, n.SafeSet, "fontcolor", th.Node["fontcolor"])
+		case !modelFilled:
+			if style == "" {
+				style = th.Node["style"]
+			}
+			if !strings.Contains(style, "filled") {
+				style = strings.TrimPrefix(style+",filled", ",")
+			}
+			n.SafeSet("style", style, "")
+			n.SafeSet("fillcolor", fill, "")
+			unset(n.GetStr, n.SafeSet, "fontcolor", th.Node["fontcolor"])
+		}
+		typeset(n.GetStr, n.SafeSet, th.Node)
+		for e, _ := graph.FirstOut(n); e != nil; e, _ = graph.NextOut(e) {
+			apply(e.GetStr, e.SafeSet, th.Edge, "fontname", "fontsize")
+			typeset(e.GetStr, e.SafeSet, th.Edge)
+		}
+	}
+	// Clusters before the root. A subgraph answers GetStr with the root's
+	// value for anything it never set itself, but graphviz paints it from
+	// its own record, which is empty — measured as a black serif "kitty"
+	// over an otherwise themed cluster. Read the clusters while the root is
+	// still the model's, then theme the root.
+	var clusters func(*cgraph.Graph)
+	clusters = func(sg *cgraph.Graph) {
+		for c, _ := sg.FirstSubGraph(); c != nil; c, _ = c.NextSubGraph() {
+			apply(c.GetStr, c.SafeSet, th.Graph, "fontname", "fontsize")
+			typeset(c.GetStr, c.SafeSet, th.Graph)
+			clusters(c)
+		}
+	}
+	clusters(graph)
+	apply(graph.GetStr, graph.SafeSet, th.Graph, "fontname", "fontsize")
+	typeset(graph.GetStr, graph.SafeSet, th.Graph)
+
 	var buf bytes.Buffer
 	if err := g.Render(ctx, graph, graphviz.SVG, &buf); err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	// graphviz writes Courier as a family with its generic behind it.
+	svg := bytes.ReplaceAll(buf.Bytes(),
+		[]byte(`font-family="`+pxLayoutFont+`,monospace"`), []byte(`font-family="`+th.Face()+`"`))
+	return svg, nil
 }
 
 // ---------- pixels ----------
@@ -239,7 +327,7 @@ func Rasterise(r *Raster, src string, availPxW, regionPxH int) ([]byte, int, int
 	if r == nil || availPxW <= 0 || regionPxH <= 0 {
 		return nil, 0, 0, errors.New("no room for pixels")
 	}
-	svg, err := renderThemedSVG(src)
+	svg, err := renderThemedSVG(src, 0)
 	if err != nil {
 		return nil, 0, 0, err
 	}

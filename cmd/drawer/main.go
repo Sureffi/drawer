@@ -8,6 +8,7 @@
 // kitty it hands back a real image instead.
 //
 //	drawer -install            # write the hook into ~/.claude/settings.json
+//	drawer -install -theme F   # the same, drawing with the theme in F
 //	drawer -uninstall          # take it out again
 //	drawer -hook               # what CC runs: payload on stdin, JSON out
 //	drawer -dot FILE -size WxH # draw a file offline, at a size
@@ -36,14 +37,24 @@ func main() {
 	dotDump := flag.String("dot", "", "draw a DOT file and print it")
 	deltaDump := flag.String("deltas", "", "replay a recorded MessageDisplay delta stream through the hook; nonzero if it damaged the message")
 	size := flag.String("size", "100x40", "screen size for -dot and -deltas, WxH")
+	themePath := flag.String("theme", "", "a theme file: DOT graph/node/edge defaults for the pixels rung (built-in: tokyonight)")
 	flag.Parse()
+
+	// A theme the hook cannot read is the built-in one: the picture draws.
+	// Everywhere else — -install, -dot, -deltas — a bad theme is an answer.
+	if *themePath != "" {
+		if err := drawer.LoadTheme(*themePath); err != nil && !*hook {
+			fmt.Fprintln(os.Stderr, "drawer: theme:", err)
+			os.Exit(1)
+		}
+	}
 
 	drawer.Rung = *render
 	w, h := drawer.ParseSize(*size, 100, 40)
 
 	switch {
 	case *install || *uninstall:
-		if err := installHook(*uninstall); err != nil {
+		if err := installHook(*uninstall, *themePath); err != nil {
 			fmt.Fprintln(os.Stderr, "drawer:", err)
 			os.Exit(1)
 		}
@@ -62,11 +73,11 @@ func main() {
 
 // installHook writes one entry into the hooks of ~/.claude/settings.json —
 // or takes ours out — and leaves every other key exactly as it found it. A
-// previous copy of ours is replaced, so re-running after a rebuild or a
-// move is the same as installing once. The file is backed up beside itself
-// first, because this is somebody's configuration and the write reorders
-// keys: json in Go comes back sorted.
-func installHook(remove bool) error {
+// previous copy of ours is replaced, so re-running after a rebuild, a move
+// or a change of theme is the same as installing once. The file is backed
+// up beside itself first, because this is somebody's configuration and the
+// write reorders keys: json in Go comes back sorted.
+func installHook(remove bool, theme string) error {
 	self, err := os.Executable()
 	if err != nil {
 		return err
@@ -100,7 +111,8 @@ func installHook(remove bool) error {
 		inner, _ := m["hooks"].([]any)
 		for _, h := range inner {
 			hm, _ := h.(map[string]any)
-			if cmd, _ := hm["command"].(string); strings.HasSuffix(cmd, "/drawer -hook") || strings.HasSuffix(cmd, "/drawer -hook ") {
+			cmd, _ := hm["command"].(string)
+			if _, rest, found := strings.Cut(cmd, "/drawer -hook"); found && (rest == "" || rest[0] == ' ') {
 				return true
 			}
 		}
@@ -116,6 +128,13 @@ func installHook(remove bool) error {
 		kept = append(kept, e)
 	}
 	command := self + " -hook"
+	if theme != "" {
+		abs, err := filepath.Abs(theme)
+		if err != nil {
+			return err
+		}
+		command += " -theme " + shellWord(abs)
+	}
 	if !remove {
 		kept = append(kept, map[string]any{
 			"hooks": []any{map[string]any{"type": "command", "command": command}},
@@ -159,4 +178,13 @@ func installHook(remove bool) error {
 		fmt.Println("claude picks it up live (measured on 2.1.257): a ```dot fence in a reply is drawn in place")
 	}
 	return nil
+}
+
+// shellWord quotes a path for the shell the hook line runs under, only
+// when it has to.
+func shellWord(s string) string {
+	if strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/._~-") == "" {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
