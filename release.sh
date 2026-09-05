@@ -105,10 +105,26 @@ if [ -n "$dry" ]; then
 	echo "dry: dist/ built; scripts/drawer, plugin.json and marketplace.json rewritten; no git, no gh"
 	exit 0
 fi
-git add .claude-plugin/plugin.json .claude-plugin/marketplace.json scripts/drawer
-git commit -q -m "drawer: release v$v"
-git tag "v$v"
-git push -q origin main "v$v"
-gh release create "v$v" dist/drawer-* dist/checksums.txt dist/drawer-plugin.zip \
-	--title "drawer v$v" --notes "\`/plugin marketplace add $repo\` then \`/plugin install drawer@drawer\`. The zip is the plugin with every binary inside; the bare binaries are what a git checkout downloads, checked against checksums.txt."
-echo "released v$v"
+# The commit and the tag, unless a run before this one already made them:
+# a re-run after a failed upload picks up where it stopped.
+if git rev-parse -q --verify "refs/tags/v$v" >/dev/null; then
+	echo "tag v$v exists; uploading to it"
+else
+	git add .claude-plugin/plugin.json .claude-plugin/marketplace.json scripts/drawer
+	git commit -q -m "drawer: release v$v"
+	git tag "v$v"
+	git push -q origin main "v$v"
+fi
+# The release, then its assets. Separately, and the upload retried: on a
+# repository minutes old GitHub's upload host answered 404 to the first
+# release ever made on it, and gh took the half-made release down with it.
+gh release view "v$v" >/dev/null 2>&1 || gh release create "v$v" --title "drawer v$v" \
+	--notes "\`/plugin marketplace add $repo\` then \`/plugin install drawer@drawer\`. The zip is the plugin with every binary inside; the bare binaries are what a git checkout downloads, checked against checksums.txt."
+n=0
+until gh release upload "v$v" dist/drawer-* dist/checksums.txt dist/drawer-plugin.zip --clobber; do
+	n=$((n + 1))
+	[ $n -lt 5 ] || { echo "release: the upload failed five times" >&2; exit 1; }
+	echo "release: upload failed; again in 10s ($n)" >&2
+	sleep 10
+done
+echo "released v$v: $(gh release view "v$v" --json url --jq .url)"
