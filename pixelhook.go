@@ -32,6 +32,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/goccy/go-graphviz/cgraph"
 )
 
 // drawPixels is the pixels rung: the rows that show a picture, or nil.
@@ -40,70 +42,116 @@ func drawPixels(src string, width int) []string {
 	if r == nil || !hookGeom.OK() {
 		return nil
 	}
-	png, cols, rows, err := pixelCut(r, src, width, hookGeom)
+	png, p, err := pixelCut(r, src, width, hookGeom)
 	if err != nil {
 		return nil
 	}
-	id := hookImageID(src, cols, rows)
-	if !transmitFile(parentTTYOut(), png, id, cols, rows) {
+	id := hookImageID(p.Src, p.Cols, p.Rows)
+	if !transmitFile(parentTTYOut(), png, id, p.Cols, p.Rows) {
 		return nil
 	}
-	recordPicture(hookSession, picture{Src: src, Cols: cols, Rows: rows, Geom: hookGeom})
-	return placeholderRows(id, cols, rows)
+	recordPicture(hookSession, p)
+	return placeholderRows(id, p.Cols, p.Rows)
 }
 
-// pixelCut is the picture for a block of cells: the columns it needs up to
-// the width, the rows that follow, and the pixels rasterised for exactly
-// that block. The picture is cut to whole columns so kitty scales nothing
-// on the axis that has to line up with text. An error is a picture that
-// will not fit — too narrow to be anything, or taller than drawMaxRows.
-func pixelCut(r *Raster, src string, width int, geom PxGeom) ([]byte, int, int, error) {
+// pixelCut is the picture for a block of cells: the cut — its columns up
+// to the width, the rows that follow, and the orientation it was laid out
+// in — and the pixels rasterised for exactly that block. The picture is
+// cut to whole columns so kitty scales nothing on the axis that has to
+// line up with text.
+//
+// Two layouts, as the glyph rungs try: as written, and top-down, because
+// rows scroll where columns run out. As written wins outright when it
+// fits at the cell's own type, and is the only layout made. Otherwise
+// each is squeezed into the width and the one that keeps more of its
+// type is the picture, as written on a tie. Measured, a 38-node graph
+// written left-to-right at 169 columns keeps 0.54 of its type in 18
+// rows; top-down it keeps 0.97 in 56. An error is a picture that will
+// not fit either way — too narrow to be anything, or taller than
+// drawMaxRows.
+func pixelCut(r *Raster, src string, width int, geom PxGeom) ([]byte, picture, error) {
 	if r == nil || !geom.OK() {
-		return nil, 0, 0, errors.New("no rasteriser or no cell size")
+		return nil, picture{}, errors.New("no rasteriser or no cell size")
 	}
-	svg, err := renderThemedSVG(src, pxFontPt(geom.CellW))
+	if width > len(RowColumnDiacritics) {
+		width = len(RowColumnDiacritics)
+	}
+	rungs := []cgraph.RankDir{""}
+	if rankdirOf(src) != cgraph.TBRank {
+		rungs = append(rungs, cgraph.TBRank)
+	}
+	var svg []byte
+	cols, zoom := 0, 0.0
+	rd := cgraph.RankDir("")
+	var last error
+	for _, try := range rungs {
+		s, err := renderThemedSVG(src, pxFontPt(geom.CellW), try)
+		if err != nil {
+			return nil, picture{}, err
+		}
+		ptW, _, err := svgSize(s)
+		if err != nil {
+			return nil, picture{}, err
+		}
+		c := min(int(math.Ceil(ptW*pxPerPt/float64(geom.CellW))), width)
+		z, _, err := pixelZoom(s, c, geom)
+		if err != nil {
+			last = err
+			continue
+		}
+		if svg == nil || z > zoom {
+			svg, cols, zoom, rd = s, c, z, try
+		}
+		if try == "" && z >= 1 {
+			break
+		}
+	}
+	if svg == nil {
+		return nil, picture{}, last
+	}
+	png, rows, err := pixelFit(r, svg, cols, geom)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, picture{}, err
 	}
-	ptW, _, err := svgSize(svg)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	cols := int(math.Ceil(ptW * pxPerPt / float64(geom.CellW)))
-	if cols > width {
-		cols = width
-	}
-	if cols > len(RowColumnDiacritics) {
-		cols = len(RowColumnDiacritics)
-	}
-	if cols < 4 {
-		return nil, 0, 0, errors.New("too narrow to draw")
-	}
-	return pixelFit(r, svg, cols, geom)
+	return png, picture{Src: src, Cols: cols, Rows: rows, Geom: geom, Rankdir: rd}, nil
 }
 
-// pixelFit rasterises a laid-out picture into a block `cols` wide: the
-// zoom that puts its width on exactly those columns, and the rows that
-// follow. An error is a picture taller than drawMaxRows.
-func pixelFit(r *Raster, svg []byte, cols int, geom PxGeom) ([]byte, int, int, error) {
+// pixelZoom is the cut's arithmetic: the zoom that puts a laid-out
+// picture's width on exactly `cols` columns, and the rows that follow. An
+// error is a block that will not do — too narrow to be anything, or
+// taller than drawMaxRows.
+func pixelZoom(svg []byte, cols int, geom PxGeom) (float64, int, error) {
+	if cols < 4 {
+		return 0, 0, errors.New("too narrow to draw")
+	}
 	ptW, ptH, err := svgSize(svg)
 	if err != nil {
-		return nil, 0, 0, err
+		return 0, 0, err
 	}
 	pxW, pxH := ptW*pxPerPt, ptH*pxPerPt
 	zoom := float64(cols*geom.CellW) / pxW
 	rows := int(math.Ceil(pxH * zoom / float64(geom.CellH)))
 	if rows < 1 || rows > drawMaxRows || rows > len(RowColumnDiacritics) {
-		return nil, 0, 0, fmt.Errorf("%d rows; the ceiling is %d", rows, drawMaxRows)
+		return 0, 0, fmt.Errorf("%d rows; the ceiling is %d", rows, drawMaxRows)
 	}
 	if zoom > rasterMaxZoom {
 		zoom = rasterMaxZoom
 	}
+	return zoom, rows, nil
+}
+
+// pixelFit rasterises a laid-out picture into a block `cols` wide, at the
+// zoom pixelZoom chose: the pixels, and the rows they stand on.
+func pixelFit(r *Raster, svg []byte, cols int, geom PxGeom) ([]byte, int, error) {
+	zoom, rows, err := pixelZoom(svg, cols, geom)
+	if err != nil {
+		return nil, 0, err
+	}
 	png, err := r.run(svg, zoom)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, 0, err
 	}
-	return png, cols, rows, nil
+	return png, rows, nil
 }
 
 // parentTTYOut is the terminal on the parent's stdout, where the picture

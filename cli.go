@@ -76,7 +76,7 @@ func RunPNG(dotPath, pngPath string, width int, geom PxGeom) int {
 		fmt.Fprintln(os.Stderr, "drawer: no rasteriser on the PATH (rsvg-convert or magick)")
 		return 1
 	}
-	png, cols, rows, err := pixelCut(r, string(src), width, geom)
+	png, p, err := pixelCut(r, string(src), width, geom)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "drawer:", err)
 		return 1
@@ -85,6 +85,10 @@ func RunPNG(dotPath, pngPath string, width int, geom PxGeom) int {
 		fmt.Fprintln(os.Stderr, "drawer:", err)
 		return 1
 	}
-	fmt.Printf("%s: %d×%d cells\n", pngPath, cols, rows)
+	how := ""
+	if p.Rankdir != "" {
+		how = ", laid out top-down to fit"
+	}
+	fmt.Printf("%s: %d×%d cells%s\n", pngPath, p.Cols, p.Rows, how)
 	return 0
 }

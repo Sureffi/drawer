@@ -170,7 +170,10 @@ func pxFontPt(cellW int) float64 {
 // forces every box to its label's width in cells. There the cells do the
 // typography and graphviz only places boxes; here graphviz is drawing the
 // picture, so it gets to measure its own type.
-func renderThemedSVG(src string, fontPt float64) ([]byte, error) {
+//
+// force overrides the orientation the source asked for; empty leaves the
+// author's choice alone.
+func renderThemedSVG(src string, fontPt float64, force cgraph.RankDir) ([]byte, error) {
 	th := currentTheme()
 	graphvizMu.Lock()
 	defer graphvizMu.Unlock()
@@ -190,6 +193,9 @@ func renderThemedSVG(src string, fontPt float64) ([]byte, error) {
 		return nil, errors.New("no graph in source")
 	}
 	defer graph.Close()
+	if force != "" {
+		graph.SetRankDir(force)
+	}
 	inlineEdgeLabels(graph, th, fontPt, isDigraph(src))
 
 	type getter = func(string) string
@@ -334,7 +340,7 @@ func Rasterise(r *Raster, src string, availPxW, regionPxH int) ([]byte, int, int
 	if r == nil || availPxW <= 0 || regionPxH <= 0 {
 		return nil, 0, 0, errors.New("no room for pixels")
 	}
-	svg, err := renderThemedSVG(src, 0)
+	svg, err := renderThemedSVG(src, 0, "")
 	if err != nil {
 		return nil, 0, 0, err
 	}

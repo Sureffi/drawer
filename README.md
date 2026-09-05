@@ -55,7 +55,12 @@ display wire strips a graphics escape out of hook text without a word. The
 hook writes a PNG to a temp file and hands the terminal one short escape
 naming it, down the parent's own tty via `/proc`; kitty reads the file,
 deletes it, and shows the image in placeholder cells that ride through CC
-as ordinary text. Linux, a local kitty, and not through tmux.
+as ordinary text. Linux, a local kitty, and not through tmux. A graph wider
+than the window is laid out top-down as well, as the glyph rungs do, and
+the orientation that keeps more of its type is the picture: as written
+when that fits at the cell's own type, top-down where that fits and as
+written would have to shrink, and where both shrink, the one that shrinks
+less.
 
 The picture is themed on the parsed graph, never in the source text. Type
 is measured in Courier — the one monospace the wasm's built-in metrics know
@@ -179,7 +184,9 @@ fits its width, and a notice must carry the source it is about.
   theme file that changes the type changes the layout, and a picture that
   no longer fits its old cut is left as it was.
 - Over about twelve nodes the picture flips top-down and gets tall; past 120
-  rows the source shows under a notice.
+  rows the source shows under a notice, except in pixels, where a picture too
+  wide either way is shrunk into the window instead, type and all, and past
+  about half size it is a picture of a picture.
 - Edge labels that graphviz places on the stroke interrupt it; a label with
   nowhere to go in the cells rung is dropped rather than misplaced.
 

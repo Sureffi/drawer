@@ -4,6 +4,7 @@ package drawer
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -235,7 +236,7 @@ func svgGroup(svg []byte, title string) string {
 // and set in another runs out of its box. At a known cell width the size is
 // the one that puts a glyph in a cell.
 func TestPixelTypeIsMeasuredInCourierAndSetInMonospace(t *testing.T) {
-	svg, err := renderThemedSVG("digraph { a -> b }", pxFontPt(10))
+	svg, err := renderThemedSVG("digraph { a -> b }", pxFontPt(10), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +263,7 @@ func TestPixelThemeKeepsTheModelsPaint(t *testing.T) {
 		d
 		a -> b -> c -> d
 	}`
-	svg, err := renderThemedSVG(src, 0)
+	svg, err := renderThemedSVG(src, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,7 +297,7 @@ func TestPixelThemeReachesEveryCluster(t *testing.T) {
 		subgraph cluster_b { label="b side"; y }
 		x -> y
 	}`
-	svg, err := renderThemedSVG(src, 0)
+	svg, err := renderThemedSVG(src, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,14 +319,14 @@ func TestPixelThemeReachesEveryCluster(t *testing.T) {
 // The picture stands on the terminal's own ground: no background unless
 // the model asked for one.
 func TestPixelBackgroundIsTheTerminalsUnlessSet(t *testing.T) {
-	svg, err := renderThemedSVG("digraph { a -> b }", 0)
+	svg, err := renderThemedSVG("digraph { a -> b }", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(svg), `fill="white"`) || strings.Contains(string(svg), `stroke="transparent"`) {
 		t.Error("a background was painted under a graph that set none")
 	}
-	svg, err = renderThemedSVG("digraph { bgcolor=white; a -> b }", 0)
+	svg, err = renderThemedSVG("digraph { bgcolor=white; a -> b }", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -436,7 +437,7 @@ func TestThemeFollowsClaudeCodesTheme(t *testing.T) {
 func TestThemeFileReachesThePicture(t *testing.T) {
 	withTheme(t, `node [fillcolor="#7aa2f71f", fontname="JetBrains Mono"]
 	              edge [color=red]`)
-	svg, err := renderThemedSVG("digraph { a -> b }", 0)
+	svg, err := renderThemedSVG("digraph { a -> b }", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -460,7 +461,7 @@ func TestThemeFileReachesThePicture(t *testing.T) {
 // built-in one.
 func TestThemeFileYieldsToTheModel(t *testing.T) {
 	withTheme(t, `node [fillcolor="#000000", color="#111111"]`)
-	svg, err := renderThemedSVG("digraph { a [color=red]; a -> b }", 0)
+	svg, err := renderThemedSVG("digraph { a [color=red]; a -> b }", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -645,7 +646,7 @@ func TestPixelLabelsSpaceAsDotDoes(t *testing.T) {
 // each half in the edge's own paint, and a `dir=both` edge keeps a head at
 // each end: the back arrow on the first half, the forward on the second.
 func TestPixelEdgeLabelSitsOnItsLine(t *testing.T) {
-	svg, err := renderThemedSVG(`digraph { a -> b [label="x", color=red, dir=both] }`, 0)
+	svg, err := renderThemedSVG(`digraph { a -> b [label="x", color=red, dir=both] }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -674,7 +675,7 @@ func TestPixelEdgeLabelSitsOnItsLine(t *testing.T) {
 
 // An undirected labelled edge grows no heads.
 func TestPixelUndirectedLabelGrowsNoHeads(t *testing.T) {
-	svg, err := renderThemedSVG(`graph { a -- b [label="x"] }`, 0)
+	svg, err := renderThemedSVG(`graph { a -- b [label="x"] }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -692,7 +693,7 @@ func TestPixelUndirectedLabelGrowsNoHeads(t *testing.T) {
 // A labelled edge inside a cluster keeps its label in the cluster, or dot
 // would route the edge out of the cluster and back to visit it.
 func TestPixelEdgeLabelStaysInItsCluster(t *testing.T) {
-	svg, err := renderThemedSVG(`digraph { subgraph cluster_c { a -> b [label="x"] } c -> a }`, 0)
+	svg, err := renderThemedSVG(`digraph { subgraph cluster_c { a -> b [label="x"] } c -> a }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -723,7 +724,7 @@ func svgTextY(group string) float64 {
 // The label of an edge that closes a cycle sits between the edge's ends,
 // and the arrow still points where the model pointed it.
 func TestPixelLabelOnABackEdgeSitsBetweenItsEnds(t *testing.T) {
-	svg, err := renderThemedSVG(`digraph { a -> b -> c; c -> a [label="no"] }`, 0)
+	svg, err := renderThemedSVG(`digraph { a -> b -> c; c -> a [label="no"] }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -753,7 +754,7 @@ func TestPixelLabelOnABackEdgeSitsBetweenItsEnds(t *testing.T) {
 // same chain as one writing nothing, and a theme's inch is a half.
 func TestPixelLabelsHalveRanksepAsDotDoes(t *testing.T) {
 	height := func(src string) float64 {
-		svg, err := renderThemedSVG(src, 0)
+		svg, err := renderThemedSVG(src, 0, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -801,6 +802,108 @@ func TestRunPNGWritesTheHooksPicture(t *testing.T) {
 	}
 	if w%10 != 0 || w > 1000 || h <= 0 {
 		t.Errorf("picture is %dx%d px; want a whole number of 10px columns within 100", w, h)
+	}
+}
+
+// A picture wider than the window is laid out top-down as well, as the
+// glyph rungs do — rows scroll, columns run out — and the orientation that
+// keeps more of its type is the picture: top-down when that fits at the
+// cell's own type and as written does not, top-down when both are squeezed
+// and it is squeezed less, and as written when top-down is too tall for
+// the ceiling — which is the picture that was there before this law. The
+// cut says which way it went.
+func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Cleanup(func() { setTheme(nil) })
+	setTheme(nil)
+	var zooms []float64
+	r := &Raster{name: "stub", run: func(_ []byte, zoom float64) ([]byte, error) {
+		zooms = append(zooms, zoom)
+		return []byte("png"), nil
+	}}
+	geom := PxGeom{CellW: 10, CellH: 24}
+	chain := func(n int) string {
+		var b strings.Builder
+		b.WriteString("digraph { rankdir=LR; ")
+		for i := 0; i < n; i++ {
+			if i > 0 {
+				b.WriteString(" -> ")
+			}
+			fmt.Fprintf(&b, "step_number_%02d", i)
+		}
+		b.WriteString(" }")
+		return b.String()
+	}
+	last := func() float64 { return zooms[len(zooms)-1] }
+
+	wide := chain(6)
+	_, p, err := pixelCut(r, wide, 100, geom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Rankdir != cgraph.TBRank || p.Cols > 100 {
+		t.Errorf("a chain too wide for 100 columns was cut %d wide, laid out %q; want top-down within the width", p.Cols, p.Rankdir)
+	}
+	if last() < 1 {
+		t.Errorf("flipped top-down and still squeezed: zoom %v", last())
+	}
+	_, p, err = pixelCut(r, wide, len(RowColumnDiacritics), geom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Rankdir != "" || last() < 1 {
+		t.Errorf("a chain with room to spare was laid out %q at zoom %v; want as written at the cell's own type", p.Rankdir, last())
+	}
+
+	_, p, err = pixelCut(r, wide, 12, geom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Rankdir != cgraph.TBRank || p.Cols != 12 || last() >= 1 {
+		t.Errorf("a chain too wide either way was laid out %q, %d wide at zoom %v; want top-down, squeezed less", p.Rankdir, p.Cols, last())
+	}
+
+	tall := chain(60)
+	_, p, err = pixelCut(r, tall, 100, geom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Rankdir != "" || p.Cols != 100 || last() >= 1 {
+		t.Errorf("a chain too tall top-down was laid out %q, %d wide at zoom %v; want as written, squeezed into 100 columns", p.Rankdir, p.Cols, last())
+	}
+}
+
+// A picture drawn top-down is repainted top-down. The ledger carries the
+// orientation with the cut, so what kitty gets under the old id is the
+// picture that was there, in the new colours, and not the same source laid
+// out the other way and squeezed onto the old columns.
+func TestPixelLedgerRepaintsAsLaidOut(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DRAWER_STATE", t.TempDir())
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Cleanup(func() { setTheme(nil) })
+	setTheme(nil)
+	tty := filepath.Join(t.TempDir(), "tty")
+	if err := os.WriteFile(tty, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var got []byte
+	r := &Raster{name: "stub", run: func(svg []byte, _ float64) ([]byte, error) {
+		got = svg
+		return []byte("png"), nil
+	}}
+	geom := PxGeom{CellW: 10, CellH: 24}
+	recordPicture("s1", picture{Src: "digraph { rankdir=LR; a -> b }", Cols: 12, Rows: 7, Geom: geom, Rankdir: cgraph.TBRank})
+	withTheme(t, `node [color=red]`)
+	if n := repaintPictures("s1", tty, r); n != 1 {
+		t.Fatalf("repainted %d pictures, want 1", n)
+	}
+	ya, yb := svgTextY(svgGroup(got, "a")), svgTextY(svgGroup(got, "b"))
+	if ya == 0 || yb == 0 {
+		t.Fatalf("missing a node: a=%v b=%v", ya, yb)
+	}
+	if ya == yb {
+		t.Errorf("repainted left-to-right, a and b both at y=%v; the picture was drawn top-down", ya)
 	}
 }
 

@@ -25,14 +25,20 @@ import (
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"github.com/goccy/go-graphviz/cgraph"
 )
 
 // picture is one drawn picture: enough to draw it again at the same cut.
+// The orientation is part of the cut — empty as written, top-down where
+// the hook flipped it to fit the width — because the rows on screen are
+// the rows that layout gave, and a repaint has to lay it out the same way.
 type picture struct {
-	Src  string `json:"src"`
-	Cols int    `json:"cols"`
-	Rows int    `json:"rows"`
-	Geom PxGeom `json:"geom"`
+	Src     string         `json:"src"`
+	Cols    int            `json:"cols"`
+	Rows    int            `json:"rows"`
+	Geom    PxGeom         `json:"geom"`
+	Rankdir cgraph.RankDir `json:"rankdir,omitempty"`
 }
 
 type ledger struct {
@@ -107,11 +113,11 @@ func repaintPictures(session, tty string, r *Raster) int {
 	}
 	n := 0
 	for _, p := range l.Pictures {
-		svg, err := renderThemedSVG(p.Src, pxFontPt(p.Geom.CellW))
+		svg, err := renderThemedSVG(p.Src, pxFontPt(p.Geom.CellW), p.Rankdir)
 		if err != nil {
 			continue
 		}
-		png, _, _, err := pixelFit(r, svg, p.Cols, p.Geom)
+		png, _, err := pixelFit(r, svg, p.Cols, p.Geom)
 		if err != nil {
 			continue
 		}
