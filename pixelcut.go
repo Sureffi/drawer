@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/goccy/go-graphviz/cgraph"
+	"github.com/sureffi/drawer/internal/grid"
 )
 
 // picture is one drawn picture: enough to draw it again at the same cut.
@@ -54,7 +55,7 @@ type picture struct {
 // written left-to-right at 169 columns keeps 0.54 of its type in 18
 // rows; top-down it keeps 0.97 in 56. An error is a picture that will
 // not fit either way — too narrow to be anything, or taller than
-// drawMaxRows.
+// grid.MaxRows.
 func pixelCut(th *theme, r *raster, src string, width int, geom pxGeom) ([]byte, picture, error) {
 	if r == nil || !geom.ok() {
 		return nil, picture{}, errors.New("no rasteriser or no cell size")
@@ -101,7 +102,7 @@ func pixelCut(th *theme, r *raster, src string, width int, geom pxGeom) ([]byte,
 // pixelZoom is the cut's arithmetic: the zoom that puts a laid-out
 // picture's width on exactly `cols` columns, and the rows that follow. An
 // error is a block that will not do — too narrow to be anything, or
-// taller than drawMaxRows.
+// taller than grid.MaxRows.
 func pixelZoom(svg []byte, cols int, geom pxGeom) (float64, int, error) {
 	if cols < 4 {
 		return 0, 0, errors.New("too narrow to draw")
@@ -113,8 +114,8 @@ func pixelZoom(svg []byte, cols int, geom pxGeom) (float64, int, error) {
 	pxW, pxH := ptW*pxPerPt, ptH*pxPerPt
 	zoom := float64(cols*geom.CellW) / pxW
 	rows := int(math.Ceil(pxH * zoom / float64(geom.CellH)))
-	if rows < 1 || rows > drawMaxRows || rows > len(rowColumnDiacritics) {
-		return 0, 0, fmt.Errorf("%d rows; the ceiling is %d", rows, drawMaxRows)
+	if rows < 1 || rows > grid.MaxRows || rows > len(rowColumnDiacritics) {
+		return 0, 0, fmt.Errorf("%d rows; the ceiling is %d", rows, grid.MaxRows)
 	}
 	if zoom > rasterMaxZoom {
 		zoom = rasterMaxZoom

@@ -15,6 +15,7 @@ import (
 
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
+	"github.com/sureffi/drawer/internal/grid"
 )
 
 // The hook wire quantises a truecolor foreground, so a picture's id rides
@@ -35,7 +36,7 @@ func TestPlaceholderRowsNameTheirImageOnEveryCell(t *testing.T) {
 		if !strings.HasPrefix(row, "\x1b[38;5;") {
 			t.Fatalf("row %d does not open with a 256-colour foreground: %q", r, row)
 		}
-		plain := stripSGR(row)
+		plain := grid.StripSGR(row)
 		cells := strings.Count(plain, string(placeholderRune))
 		if cells != 12 {
 			t.Fatalf("row %d has %d placeholder cells, want 12", r, cells)
@@ -44,8 +45,8 @@ func TestPlaceholderRowsNameTheirImageOnEveryCell(t *testing.T) {
 		if !strings.HasPrefix(plain, want) {
 			t.Fatalf("row %d does not start with row-then-column marks", r)
 		}
-		if textCells(plain) != 12 {
-			t.Fatalf("row %d measures %d cells; the marks took columns", r, textCells(plain))
+		if grid.Cells(plain) != 12 {
+			t.Fatalf("row %d measures %d cells; the marks took columns", r, grid.Cells(plain))
 		}
 	}
 }

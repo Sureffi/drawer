@@ -27,6 +27,8 @@ package main
 import (
 	"regexp"
 	"strings"
+
+	"github.com/sureffi/drawer/internal/grid"
 )
 
 // opener is a fence's opening line as read: the whitespace before the run,
@@ -307,7 +309,7 @@ func stream(delta string, final bool, st *state, emit func(src string, indent in
 // indent leaves, each standing in that indent, so a drawing under a list
 // item stays under it.
 func emitIn(f opener, src string, emit func(string, int) []string) []string {
-	rows := emit(src, textCells(f.Indent))
+	rows := emit(src, grid.Cells(f.Indent))
 	for i := range rows {
 		rows[i] = f.Indent + rows[i]
 	}

@@ -5,6 +5,8 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/sureffi/drawer/internal/grid"
 )
 
 // A label is glyphs, never dots. The cells a label occupies carry no
@@ -15,7 +17,7 @@ func TestSubcellLabelsAreGlyphsOverClearedStrokes(t *testing.T) {
 	if rows == nil {
 		t.Fatal("nothing drawn")
 	}
-	joined := stripSGR(strings.Join(rows, "\n"))
+	joined := grid.StripSGR(strings.Join(rows, "\n"))
 	for _, want := range []string{" alpha ", " beta ", "go"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("label %q not set as glyphs:\n%s", want, joined)
@@ -65,7 +67,7 @@ func TestSubcellReadsClustersAndStyles(t *testing.T) {
 		t.Fatalf("clusters=%d dashed=%d both=%d; graphviz's own drawing was not read", clusters, dashed, twoHeads)
 	}
 	rows := renderInk(jg, 100, 40, false)
-	joined := stripSGR(strings.Join(rows, "\n"))
+	joined := grid.StripSGR(strings.Join(rows, "\n"))
 	if !strings.Contains(joined, "front") {
 		t.Errorf("cluster label not drawn:\n%s", joined)
 	}

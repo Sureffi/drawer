@@ -25,6 +25,8 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/sureffi/drawer/internal/grid"
 )
 
 // runDeltas replays a recorded delta stream through the transducer and
@@ -164,8 +166,8 @@ func checkDrawn(block, src string, w int) error {
 	body := lines[1 : len(lines)-1]
 	drawn := false
 	for _, row := range body {
-		plain := stripSGR(row)
-		if n := textCells(plain); n > w {
+		plain := grid.StripSGR(row)
+		if n := grid.Cells(plain); n > w {
 			return fmt.Errorf("row is %d cells in %d columns: %q", n, w, plain)
 		}
 		if strings.ContainsAny(plain, "─│╭╮╰╯▶◀▲▼") || strings.ContainsRune(plain, placeholderRune) ||

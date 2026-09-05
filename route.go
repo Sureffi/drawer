@@ -25,6 +25,8 @@ package main
 import (
 	"container/heap"
 	"sort"
+
+	"github.com/sureffi/drawer/internal/grid"
 )
 
 // ---------- composition ----------
@@ -81,7 +83,7 @@ func straighten(l *dlayout, cx, cy []int, byName map[string]int, horiz bool) {
 		indeg[b]++
 		parent[b] = a
 	}
-	bw := func(i int) int { return textCells(l.Nodes[i].Label) + 2 }
+	bw := func(i int) int { return grid.Cells(l.Nodes[i].Label) + 2 }
 	order := make([]int, len(cx))
 	for i := range order {
 		order[i] = i
@@ -137,7 +139,7 @@ func straighten(l *dlayout, cx, cy []int, byName map[string]int, horiz bool) {
 // nodeBoxAt is nodeBox in cell space: the box a label needs, centred at
 // (cx, cy), clamped into the canvas.
 func nodeBoxAt(w, h, cx, cy int, label string) nbox {
-	bw := textCells(label) + 2
+	bw := grid.Cells(label) + 2
 	if bw > w {
 		bw = w
 	}
@@ -508,7 +510,7 @@ func arrowBit(head rune) uint8 {
 // belongs to that stroke. graphviz already spaced the ranks for the
 // label's width, so the straight run is usually there to spend.
 func placeInline(cv *canvas, ps []ipt, label string) bool {
-	need := textCells(label)
+	need := grid.Cells(label)
 	if need == 0 {
 		return false
 	}

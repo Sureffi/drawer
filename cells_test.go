@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/mattn/go-runewidth"
+	"github.com/sureffi/drawer/internal/grid"
 )
 
 // A fence the model opened and closed has no graph in it, and graphviz does
@@ -417,9 +418,9 @@ func TestAFenceThatWillNotDrawSaysWhy(t *testing.T) {
 			t.Fatalf("%s: notice is %d rows in a %d-row region", c.name, len(rows), c.region)
 		}
 		for _, r := range rows {
-			if textCells(r) > c.w {
+			if grid.Cells(r) > c.w {
 				t.Fatalf("%s: notice is %d cells wide in %d columns: %q",
-					c.name, textCells(r), c.w, r)
+					c.name, grid.Cells(r), c.w, r)
 			}
 		}
 		joined := strings.Join(rows, " ")
@@ -454,7 +455,7 @@ func TestDrawModeEmitsABareFenceThatFits(t *testing.T) {
 		t.Fatalf("not a bare fence:\n%s", strings.Join(rows, "\n"))
 	}
 	for _, r := range rows[1 : len(rows)-1] {
-		if n := textCells(stripSGR(r)); n > 90 {
+		if n := grid.Cells(grid.StripSGR(r)); n > 90 {
 			t.Errorf("row is %d cells in 90 columns: %q", n, r)
 		}
 		if strings.Contains(r, "digraph") {

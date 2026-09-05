@@ -18,6 +18,7 @@ import (
 
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
+	"github.com/sureffi/drawer/internal/grid"
 )
 
 // door is the one way through to graphviz: it opens a context, parses the
@@ -149,7 +150,7 @@ func sizeNodesInCells(g *cgraph.Graph) {
 		n.SetLabel(label)
 		n.SetShape(cgraph.BoxShape)
 		n.SetFixedSize(true)
-		n.SetWidth(float64(textCells(label)+2) / cellsPerInchX)
+		n.SetWidth(float64(grid.Cells(label)+2) / cellsPerInchX)
 		n.SetHeight(nodeRows / rowsPerInchY)
 	}
 }

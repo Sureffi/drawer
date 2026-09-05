@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/goccy/go-graphviz/cgraph"
+	"github.com/sureffi/drawer/internal/grid"
 )
 
 // noticeChrome is the border and padding a notice spends on itself.
@@ -40,20 +41,20 @@ func drawNotice(reason string, w, h int) []string {
 	}
 	width := 0
 	for _, l := range body {
-		if n := textCells(l); n > width {
+		if n := grid.Cells(l); n > width {
 			width = n
 		}
 	}
 	const title = " no diagram "
-	if n := textCells(title); width < n {
+	if n := grid.Cells(title); width < n {
 		width = n
 	}
 
 	rows := make([]string, 0, len(body)+2)
-	top := "╭" + title + strings.Repeat("─", width-textCells(title)+2) + "╮"
+	top := "╭" + title + strings.Repeat("─", width-grid.Cells(title)+2) + "╮"
 	rows = append(rows, top)
 	for _, l := range body {
-		rows = append(rows, "│ "+l+strings.Repeat(" ", width-textCells(l))+" │")
+		rows = append(rows, "│ "+l+strings.Repeat(" ", width-grid.Cells(l))+" │")
 	}
 	rows = append(rows, "╰"+strings.Repeat("─", width+2)+"╯")
 	return rows
@@ -71,7 +72,7 @@ func wrapWords(s string, width int) []string {
 		switch {
 		case line == "":
 			line = word
-		case textCells(line)+1+textCells(word) <= width:
+		case grid.Cells(line)+1+grid.Cells(word) <= width:
 			line += " " + word
 		default:
 			out = append(out, line)

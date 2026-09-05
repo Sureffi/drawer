@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/mattn/go-runewidth"
+	"github.com/sureffi/drawer/internal/grid"
 )
 
 // A cell does not know what glyph it is until the drawing is finished.
@@ -88,7 +89,7 @@ func (cv *canvas) addComb(x, y int, r rune) {
 		return
 	}
 	i := y*cv.w + x
-	if len(cv.comb[i]) < maxCombBytes {
+	if len(cv.comb[i]) < grid.MaxCombBytes {
 		cv.comb[i] += string(r)
 	}
 }
@@ -198,7 +199,7 @@ func (cv *canvas) rows() []string {
 		b.Reset()
 		for x := 0; x < cv.w; x++ {
 			r := cv.c[y*cv.w+x]
-			if r == shadow {
+			if r == grid.Shadow {
 				continue // the wide glyph before it already spent this column
 			}
 			if r != ' ' && r != 0 {
@@ -268,7 +269,7 @@ func drawNode(cv *canvas, label string, b nbox) {
 	cv.set(x0+bw-1, y0+2, '╯')
 	cv.set(x0, y0+1, '│')
 	cv.set(x0+bw-1, y0+1, '│')
-	putStr(cv, x0+1+(bw-2-textCells(label))/2, y0+1, label)
+	putStr(cv, x0+1+(bw-2-grid.Cells(label))/2, y0+1, label)
 	cv.hold(x0, y0, bw, 3)
 }
 
@@ -283,7 +284,7 @@ func putStr(cv *canvas, x, y int, s string) {
 		}
 		cv.set(x, y, r)
 		if w == 2 {
-			cv.set(x+1, y, shadow)
+			cv.set(x+1, y, grid.Shadow)
 		}
 		x += w
 	}
@@ -301,7 +302,7 @@ func drawEdgeLabel(cv *canvas, e dedge, sx, sy func(float64) int) {
 	if e.Label == "" {
 		return
 	}
-	n := textCells(e.Label)
+	n := grid.Cells(e.Label)
 	x0, y0 := sx(e.LX)-n/2, sy(e.LY)
 	for _, dy := range []int{0, -1, 1, -2, 2} {
 		for _, dx := range []int{0, 1, -1, 2, -2, 3, -3, 4, -4} {

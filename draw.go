@@ -25,6 +25,8 @@ package main
 
 import (
 	"strings"
+
+	"github.com/sureffi/drawer/internal/grid"
 )
 
 // drawBlock turns one fence source into the rows that replace it, or nil
@@ -48,16 +50,16 @@ func (r run) drawBlock(src string, width int) []string {
 		}
 	}
 	l, h, ok := fit(src, width, 0)
-	if ok && h <= drawMaxRows {
+	if ok && h <= grid.MaxRows {
 		if rows := renderDiagram(l, width, h); rows != nil {
-			return bare(trimBlank(rows))
+			return bare(grid.TrimBlank(rows))
 		}
 	}
 	// Nothing drew. Say why, and leave the source readable under the
 	// notice, in the same fence: one fence in, one fence out is the law the
 	// oracle holds the wire to, and a reader gets both the reason and the
 	// DOT it was about.
-	reason := cutReason(src, width, drawMaxRows)
+	reason := cutReason(src, width, grid.MaxRows)
 	box := drawNotice(reason, width, 8)
 	if box == nil {
 		return nil

@@ -36,6 +36,7 @@ import (
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/mattn/go-runewidth"
+	"github.com/sureffi/drawer/internal/grid"
 )
 
 // ---------- graphviz's drawing, as json ----------
@@ -106,7 +107,7 @@ func layoutInk(src string, force cgraph.RankDir) (*jgraph, error) {
 			n.SetFontSize(inkSize)
 			// Minimums, not fixed sizes: an ellipse or a diamond needs more
 			// room than a box for the same label, and graphviz knows how much.
-			n.SetWidth(float64(textCells(label)+2) / cellsPerInchX)
+			n.SetWidth(float64(grid.Cells(label)+2) / cellsPerInchX)
 			n.SetHeight(nodeRows / rowsPerInchY)
 			for e, _ := graph.FirstOut(n); e != nil; e, _ = graph.NextOut(e) {
 				e.SetFontName(inkFont)
@@ -320,7 +321,7 @@ func (k *ink) place(op jop, size float64) (col, row, n int, ok bool) {
 	if len(op.Pt) < 2 || op.Text == "" {
 		return 0, 0, 0, false
 	}
-	n = textCells(op.Text)
+	n = grid.Cells(op.Text)
 	if n == 0 {
 		return 0, 0, 0, false
 	}
@@ -351,7 +352,7 @@ func (k *ink) text(op jop, size float64) {
 		if w == 0 {
 			if x-1 >= 0 && x-1 < k.cols {
 				i := row*k.cols + x - 1
-				if len(k.comb[i]) < maxCombBytes {
+				if len(k.comb[i]) < grid.MaxCombBytes {
 					k.comb[i] += string(r)
 				}
 			}
@@ -361,7 +362,7 @@ func (k *ink) text(op jop, size float64) {
 			i := row*k.cols + x
 			k.glyph[i], k.comb[i], k.label[i] = r, "", true
 			if w == 2 && x+1 < k.cols {
-				k.glyph[i+1], k.label[i+1] = shadow, true
+				k.glyph[i+1], k.label[i+1] = grid.Shadow, true
 			}
 		}
 		x += w
@@ -460,7 +461,7 @@ func (k *ink) rowsOut(octants bool) []string {
 		for x := 0; x < k.cols; x++ {
 			i := y*k.cols + x
 			if g := k.glyph[i]; g != 0 {
-				if g == shadow {
+				if g == grid.Shadow {
 					continue
 				}
 				if dim {
@@ -503,7 +504,7 @@ func (k *ink) rowsOut(octants bool) []string {
 		}
 		out = append(out, strings.TrimRight(b.String(), " "))
 	}
-	return trimBlank(out)
+	return grid.TrimBlank(out)
 }
 
 // ---------- composition ----------
@@ -556,7 +557,7 @@ func renderInk(jg *jgraph, cols, rows int, octants bool) []string {
 // drawSubcell is the braille and octant rung: rows, or nil when nothing
 // fits and the caller steps down.
 func drawSubcell(src string, width int, octants bool) []string {
-	jg, cols, rows, ok := fitInk(src, width, drawMaxRows)
+	jg, cols, rows, ok := fitInk(src, width, grid.MaxRows)
 	if !ok {
 		return nil
 	}
