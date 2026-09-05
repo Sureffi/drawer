@@ -3,6 +3,7 @@
 package drawer
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -394,5 +395,113 @@ func TestThemeFileYieldsToTheModel(t *testing.T) {
 	}
 	if b := svgGroup(svg, "b"); !strings.Contains(b, `stroke="#111111"`) {
 		t.Errorf("the theme did not reach an unpainted node:\n%s", b)
+	}
+}
+
+// ---------- edge labels on their lines ----------
+
+// A labelled edge is drawn as two edges through a node carrying the label,
+// each half in the edge's own paint, and a `dir=both` edge keeps a head at
+// each end: the back arrow on the first half, the forward on the second.
+func TestPixelEdgeLabelSitsOnItsLine(t *testing.T) {
+	svg, err := renderThemedSVG(`digraph { a -> b [label="x", color=red, dir=both] }`, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g := svgGroup(svg, "a&#45;&gt;b"); g != "" {
+		t.Errorf("the labelled edge is still drawn whole:\n%s", g)
+	}
+	first := svgGroup(svg, "a&#45;&gt;"+labelNodePrefix+"0")
+	second := svgGroup(svg, labelNodePrefix+"0&#45;&gt;b")
+	for name, half := range map[string]string{"first": first, "second": second} {
+		if !strings.Contains(half, `stroke="red"`) {
+			t.Errorf("the %s half lost the edge's colour:\n%s", name, half)
+		}
+		if n := strings.Count(half, "<polygon"); n != 1 {
+			t.Errorf("the %s half has %d heads, want one:\n%s", name, n, half)
+		}
+	}
+	label := svgGroup(svg, labelNodePrefix+"0")
+	th := currentTheme()
+	if !strings.Contains(label, ">x<") || !strings.Contains(label, `fill="`+th.Edge["fontcolor"]+`"`) {
+		t.Errorf("the label is not on the line in the edge label colour:\n%s", label)
+	}
+	if strings.Contains(label, th.Node["fillcolor"]) {
+		t.Errorf("the label node was filled like a node:\n%s", label)
+	}
+}
+
+// An undirected labelled edge grows no heads.
+func TestPixelUndirectedLabelGrowsNoHeads(t *testing.T) {
+	svg, err := renderThemedSVG(`graph { a -- b [label="x"] }`, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, title := range []string{"a&#45;&#45;" + labelNodePrefix + "0", labelNodePrefix + "0&#45;&#45;b"} {
+		half := svgGroup(svg, title)
+		if half == "" {
+			t.Errorf("no half titled %s", title)
+		}
+		if strings.Contains(half, "<polygon") {
+			t.Errorf("an undirected half grew a head:\n%s", half)
+		}
+	}
+}
+
+// A labelled edge inside a cluster keeps its label in the cluster, or dot
+// would route the edge out of the cluster and back to visit it.
+func TestPixelEdgeLabelStaysInItsCluster(t *testing.T) {
+	svg, err := renderThemedSVG(`digraph { subgraph cluster_c { a -> b [label="x"] } c -> a }`, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The cluster's outline is drawn before its members; the label's group
+	// following it inside the same SVG is how graphviz writes membership.
+	s := string(svg)
+	cluster := strings.Index(s, "<title>cluster_c</title>")
+	label := strings.Index(s, "<title>"+labelNodePrefix+"0</title>")
+	outside := strings.Index(s, "<title>c</title>")
+	if cluster < 0 || label < 0 || outside < 0 {
+		t.Fatalf("missing cluster, label or outside node in\n%s", s)
+	}
+	if !(cluster < label && label < outside) {
+		t.Errorf("the label node is not written inside its cluster (cluster %d, label %d, outside %d)", cluster, label, outside)
+	}
+}
+
+// svgTextY is the baseline of the first text in a group: where graphviz
+// put the thing, up the page as it goes negative.
+func svgTextY(group string) float64 {
+	m := regexp.MustCompile(`<text [^>]*\by="(-?[0-9.]+)"`).FindStringSubmatch(group)
+	if m == nil {
+		return 0
+	}
+	return atof(m[1])
+}
+
+// The label of an edge that closes a cycle sits between the edge's ends,
+// and the arrow still points where the model pointed it.
+func TestPixelLabelOnABackEdgeSitsBetweenItsEnds(t *testing.T) {
+	svg, err := renderThemedSVG(`digraph { a -> b -> c; c -> a [label="no"] }`, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ya, yc := svgTextY(svgGroup(svg, "a")), svgTextY(svgGroup(svg, "c"))
+	yl := svgTextY(svgGroup(svg, labelNodePrefix+"0"))
+	if ya == 0 || yc == 0 || yl == 0 {
+		t.Fatalf("missing a node: a=%v c=%v label=%v", ya, yc, yl)
+	}
+	if !(min(ya, yc) < yl && yl < max(ya, yc)) {
+		t.Errorf("the label is at %v, not between its ends at %v and %v", yl, ya, yc)
+	}
+	// The chain runs a -> label -> c, and the head is on the half that
+	// touches a: drawn as a back arrow on that half.
+	first := svgGroup(svg, "a&#45;&gt;"+labelNodePrefix+"0")
+	second := svgGroup(svg, labelNodePrefix+"0&#45;&gt;c")
+	if first == "" || second == "" {
+		t.Fatalf("the back edge was not chained the other way round:\n%s", svg)
+	}
+	if strings.Count(first, "<polygon") != 1 || strings.Count(second, "<polygon") != 0 {
+		t.Errorf("the arrow moved: half at a has %d heads, half at c has %d", strings.Count(first, "<polygon"), strings.Count(second, "<polygon"))
 	}
 }

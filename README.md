@@ -60,7 +60,10 @@ in one cell, so a label is the terminal's own text and a node reads as text
 that grew a border. What the model painted stays painted: a shape, a
 colour, a fill it asked for is kept, and around its paint graphviz's own
 defaults apply, so `fillcolor=pink` gets black text as `dot` would give it.
-Where it left an attribute unset, the theme applies.
+Where it left an attribute unset, the theme applies. An edge label sits on
+its line and the line stops a glyph short of it on either side, as in the
+glyph rungs: the graph is rewritten before layout so the label is a node on
+the edge, which is what dot does inside itself for a labelled edge anyway.
 
 ## the theme
 

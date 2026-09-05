@@ -184,6 +184,7 @@ func renderThemedSVG(src string, fontPt float64) ([]byte, error) {
 		return nil, errors.New("no graph in source")
 	}
 	defer graph.Close()
+	inlineEdgeLabels(graph, th, fontPt, isDigraph(src))
 
 	type getter = func(string) string
 	type setter = func(string, string, string) error
