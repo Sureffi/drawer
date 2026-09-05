@@ -28,6 +28,7 @@ import (
 
 	"github.com/sureffi/drawer/internal/grid"
 	"github.com/sureffi/drawer/internal/layout"
+	"github.com/sureffi/drawer/internal/notice"
 	"github.com/sureffi/drawer/internal/term"
 )
 
@@ -61,8 +62,8 @@ func (r run) drawBlock(src string, width int) []string {
 	// notice, in the same fence: one fence in, one fence out is the law the
 	// oracle holds the wire to, and a reader gets both the reason and the
 	// DOT it was about.
-	reason := cutReason(src, width, grid.MaxRows)
-	box := drawNotice(reason, width, 8)
+	reason := notice.Reason(src, width, grid.MaxRows)
+	box := notice.Draw(reason, width, 8)
 	if box == nil {
 		return nil
 	}

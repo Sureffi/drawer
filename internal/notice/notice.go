@@ -8,7 +8,7 @@
 //
 // So the failure gets drawn too, over the source, in the same fence.
 
-package main
+package notice
 
 import (
 	"fmt"
@@ -22,10 +22,10 @@ import (
 // noticeChrome is the border and padding a notice spends on itself.
 const noticeChrome = 4
 
-// drawNotice renders a bordered box carrying reason, sized for a w by h
-// region. Returns nil when there is not enough room to say anything —
-// a notice too small to read is worse than the source it replaced.
-func drawNotice(reason string, w, h int) []string {
+// Draw renders a bordered box carrying reason, sized for a w by h region.
+// Returns nil when there is not enough room to say anything — a notice too
+// small to read is worse than the source it replaced.
+func Draw(reason string, w, h int) []string {
 	if h < 3 || w < 24 {
 		return nil
 	}
@@ -86,14 +86,14 @@ func wrapWords(s string, width int) []string {
 	return out
 }
 
-// cutReason works out why a source did not become a drawing in the space
-// it was given, and says it in terms the reader can act on. Width is the
+// Reason works out why a source did not become a drawing in the space it
+// was given, and says it in terms the reader can act on. Width is the
 // only lever they have — rows are bounded by the window and the ladder
 // already spent them — so where widening would work, the notice names the
 // column count that does it rather than the row count that failed.
 //
 // Asked only on the failing path: it lays the graph out again to find out.
-func cutReason(src string, width, region int) string {
+func Reason(src string, width, region int) string {
 	l, err := layout.DOT(src, "")
 	if err != nil {
 		return "graphviz could not read this: " + firstLine(err.Error())
