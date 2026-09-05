@@ -255,6 +255,11 @@ fits its width, and a notice must carry the source it is about.
   about half size it is a picture of a picture.
 - Edge labels that graphviz places on the stroke interrupt it; a label with
   nowhere to go in the cells rung is dropped rather than misplaced.
+- Installed mid-session and reloaded with `/reload-plugins`, the hooks are
+  registered but SessionStart does not fire, so the binary is not put in
+  place and the first fence shows its source until a new session.
+  Measured on the first install of the release. The hook could copy the
+  shipped binary itself when it finds none, one `cp`; it does not yet.
 
 ## embedding
 
