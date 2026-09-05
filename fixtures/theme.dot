@@ -1,5 +1,5 @@
-// A second theme: the same tokyonight strokes over nodes the board shows
-// through. Install it to compare against the built-in one:
+// An example theme: tokyonight's strokes over nodes the board shows
+// through. Install it to compare against Claude Code's own:
 //
 //     drawer -install -theme fixtures/theme.dot
 graph [bgcolor=transparent, pad=0.15, color="#565f89", fontcolor="#a9b1d6", style="rounded,dashed", penwidth=1]

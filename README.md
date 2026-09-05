@@ -41,7 +41,7 @@ Best first, each failing open to the one below, chosen by `-render` or by
 
 | rung      | draws                                             | needs                              |
 |-----------|---------------------------------------------------|------------------------------------|
-| `pixels`  | graphviz's own picture, themed, in the transcript | kitty, `rsvg-convert` or `magick`  |
+| `pixels`  | graphviz's own picture, in Claude Code's theme, in the transcript | kitty, `rsvg-convert` or `magick`  |
 | `octants` | strokes at 2×4 per cell, solid; labels as glyphs  | a terminal that draws Unicode 16 octants itself: kitty, ghostty |
 | `braille` | the same, dotted                                  | any font — every one has braille   |
 | `cells`   | box-drawing characters, routed edges              | nothing but this binary            |
@@ -67,42 +67,51 @@ the edge, which is what dot does inside itself for a labelled edge anyway,
 down to halving `ranksep` for the doubled ranks and doubling every other
 edge's `minlen`, so a plain edge still spans a full rank gap.
 
+A theme switch reaches the pictures already drawn. The hook keeps a ledger
+per session of every picture's source and cut, and at the first delta of
+the next reply, where the theme in force is not the one they were painted
+in, it lays each out again and sends it under its old id: kitty repaints
+the cells wherever they are, scrollback included, and nothing is printed.
+The next reply rather than the keypress because Claude Code fires no hook
+event in the session whose own settings write it was — every other session
+on the machine gets one, and those keep their old colours anyway.
+
 ## the theme
 
 A theme is DOT: the defaults a graph would declare for itself, declared
-once for every graph the hook draws. Two are built in, tokyonight night
+once for every graph the hook draws. The theme in force is Claude Code's
+own. Its theme is a palette of named colours, and six of them are the
+picture: a node is drawn as the user's own message is, `userMessageBackground`
+for the fill and `text` for the label, with `claude` for every stroke; an
+edge label is in `success`, a cluster's outline in `inactive` and its
+caption in `subtle`. The four stock palettes are carried in the binary, read
+from Claude Code 2.1.257; the two ansi themes name terminal palette slots
+a picture cannot use and draw with their base's colours. Which theme is
+read the way Claude Code reads it: the `theme` of `~/.claude/settings.json`,
+or of the older `~/.claude.json` where that has none, and for `custom:NAME`
+the `base` and `overrides` of `~/.claude/themes/NAME.json`. Anything the
+hook cannot read is dark, `auto` included — auto is the ground Claude Code
+found by asking the terminal, which a hook cannot ask.
 
-    graph [bgcolor=transparent, pad=0.15, color="#565f89", fontcolor="#a9b1d6", style="rounded,dashed", penwidth=1]
-    node  [shape=box, style=rounded, fillcolor="#24283b", color="#7aa2f7", fontcolor="#c0caf5", penwidth=1.4]
-    edge  [color="#7aa2f7", fontcolor="#9ece6a", penwidth=1.2]
+    ./bin/drawer -show-theme
 
-and tokyonight day
-
-    graph [bgcolor=transparent, pad=0.15, color="#848cb5", fontcolor="#6172b0", style="rounded,dashed", penwidth=1]
-    node  [shape=box, style=rounded, fillcolor="#d0d5e3", color="#2e7de9", fontcolor="#3760bf", penwidth=1.4]
-    edge  [color="#2e7de9", fontcolor="#587539", penwidth=1.2]
-
-and the hook picks by the ground Claude Code was told it stands on: the
-`theme` of `~/.claude/settings.json`, or of the older `~/.claude.json`
-where that has none — `dark`, `light`, a daltonized or ansi variant of
-either, or `custom:NAME` with `~/.claude/themes/NAME.json` saying which
-of the two it is based on. Anything the hook cannot read is night. Another
-theme goes on the hook line:
+prints the theme in force as DOT, which is where a theme file starts, and
+`fixtures/tokyonight.dot`, `fixtures/tokyonight-day.dot` and
+`fixtures/theme.dot` are three. A theme file goes on the hook line:
 
     ./bin/drawer -install -theme ~/.config/drawer/theme.dot
 
 `graph [...]` is the root and every cluster alike. A theme file is the whole
-theme, not a patch on the built-in one: what it leaves undeclared is
+theme, not a patch on Claude Code's: what it leaves undeclared is
 graphviz's default. Three attributes are rules rather than values.
 `fontname` names the face the picture is set in; the layout is still
 measured in Courier, so any monospace fits and a proportional face will not.
 `fontsize` yields to the cell when the theme has none. A node's `fillcolor`
 is a rule: a node the model filled keeps its own text colour, any other
 gets the theme's fill with `filled` added to its style. A theme the hook
-cannot read is the built-in one, so the picture draws; `-theme FILE -dot`
+cannot read is Claude Code's, so the picture draws; `-theme FILE -dot`
 says what is wrong with the file, and `-theme FILE -dot g.dot -png out.png`
-shows what it draws, without a session. `fixtures/theme.dot` is a second
-theme, the same strokes over nodes the terminal shows through.
+shows what it draws, without a session.
 
 Octants and braille: everything comes from graphviz's json output — every
 polygon, ellipse, bezier and text anchor it would have painted — so
@@ -157,11 +166,14 @@ fits its width, and a notice must carry the source it is about.
   colours are not painted. The pixels rung draws both, but in an HTML label
   the space between two spans collapses — `<b>bold</b> and` sets as
   "boldand". That is graphviz's SVG writer.
-- The ground comes from Claude Code's theme setting, not the terminal: the
-  hook cannot ask the terminal — the reply would land in Claude Code's
-  input, not the hook's. A terminal that disagrees with the setting gets
-  the wrong built-in, and a custom theme a plugin ships, outside
-  `~/.claude/themes`, reads as dark.
+- The theme comes from Claude Code's setting, not the terminal: the hook
+  cannot ask the terminal — the reply would land in Claude Code's input,
+  not the hook's. So `auto` draws dark whatever the terminal is, and a
+  custom theme a plugin ships, outside `~/.claude/themes`, reads as dark.
+  The stock palettes are a copy, and drift when Claude Code changes one.
+- Pictures already drawn repaint at the next reply, not at the switch. A
+  theme file that changes the type changes the layout, and a picture that
+  no longer fits its old cut is left as it was.
 - Over about twelve nodes the picture flips top-down and gets tall; past 120
   rows the source shows under a notice.
 - Edge labels that graphviz places on the stroke interrupt it; a label with

@@ -48,6 +48,7 @@ func drawPixels(src string, width int) []string {
 	if !transmitFile(parentTTYOut(), png, id, cols, rows) {
 		return nil
 	}
+	recordPicture(hookSession, picture{Src: src, Cols: cols, Rows: rows, Geom: hookGeom})
 	return placeholderRows(id, cols, rows)
 }
 
@@ -64,12 +65,11 @@ func pixelCut(r *Raster, src string, width int, geom PxGeom) ([]byte, int, int, 
 	if err != nil {
 		return nil, 0, 0, err
 	}
-	ptW, ptH, err := svgSize(svg)
+	ptW, _, err := svgSize(svg)
 	if err != nil {
 		return nil, 0, 0, err
 	}
-	pxW, pxH := ptW*pxPerPt, ptH*pxPerPt
-	cols := int(math.Ceil(pxW / float64(geom.CellW)))
+	cols := int(math.Ceil(ptW * pxPerPt / float64(geom.CellW)))
 	if cols > width {
 		cols = width
 	}
@@ -79,6 +79,18 @@ func pixelCut(r *Raster, src string, width int, geom PxGeom) ([]byte, int, int, 
 	if cols < 4 {
 		return nil, 0, 0, errors.New("too narrow to draw")
 	}
+	return pixelFit(r, svg, cols, geom)
+}
+
+// pixelFit rasterises a laid-out picture into a block `cols` wide: the
+// zoom that puts its width on exactly those columns, and the rows that
+// follow. An error is a picture taller than drawMaxRows.
+func pixelFit(r *Raster, svg []byte, cols int, geom PxGeom) ([]byte, int, int, error) {
+	ptW, ptH, err := svgSize(svg)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	pxW, pxH := ptW*pxPerPt, ptH*pxPerPt
 	zoom := float64(cols*geom.CellW) / pxW
 	rows := int(math.Ceil(pxH * zoom / float64(geom.CellH)))
 	if rows < 1 || rows > drawMaxRows || rows > len(RowColumnDiacritics) {
@@ -127,7 +139,9 @@ func transmitFile(tty string, png []byte, id uint32, cols, rows int) bool {
 		return false
 	}
 	f.Close()
-	out, err := os.OpenFile(tty, os.O_WRONLY, 0)
+	// Append, which a tty does anyway and a file standing in for one in a
+	// test does not.
+	out, err := os.OpenFile(tty, os.O_WRONLY|os.O_APPEND, 0)
 	if err != nil {
 		os.Remove(path)
 		return false

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -344,34 +345,37 @@ func withTheme(t *testing.T, src string) {
 	t.Cleanup(func() { setTheme(old) })
 }
 
-// A theme is DOT declarations, and both built-in themes are: what each
-// declares for each kind comes back as the values it wrote.
+// A theme is DOT declarations, and Claude Code's theme is one: with no
+// Claude Code settings to read it is the stock dark palette on the picture,
+// and what it declares for each kind comes back as the values it wrote.
 func TestThemeIsDOTDeclarations(t *testing.T) {
-	th, err := ParseTheme(NightTheme)
+	t.Setenv("HOME", t.TempDir())
+	src := ClaudeThemeDOT()
+	th, err := ParseTheme(src)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if th.Graph["bgcolor"] != "transparent" || th.Node["fillcolor"] != "#24283b" || th.Edge["fontcolor"] != "#9ece6a" {
-		t.Errorf("the night theme read back wrong: %+v", th)
+	if th.Graph["bgcolor"] != "transparent" || th.Node["fillcolor"] != "#373737" || th.Node["color"] != "#d77757" || th.Edge["fontcolor"] != "#4eba65" {
+		t.Errorf("Claude Code's dark theme read back wrong: %+v", th)
+	}
+	if th.Source != src {
+		t.Error("a theme does not keep the DOT it was read from")
 	}
 	if th.Face() != "monospace" {
 		t.Errorf("face is %q with no fontname declared", th.Face())
-	}
-	if day, err := ParseTheme(DayTheme); err != nil {
-		t.Fatal(err)
-	} else if day.Graph["bgcolor"] != "transparent" || day.Node["fillcolor"] != "#d0d5e3" || day.Edge["fontcolor"] != "#587539" {
-		t.Errorf("the day theme read back wrong: %+v", day)
 	}
 	if _, err := ParseTheme("node ["); err == nil {
 		t.Error("an unclosed declaration parsed")
 	}
 }
 
-// Which built-in theme draws is the ground Claude Code was told it stands
-// on: its `theme` setting, in settings.json first and the older
-// ~/.claude.json where that has none, with a custom theme answered by the
-// `base` of its file. Anything unreadable is night.
-func TestBuiltinThemeFollowsClaudeCodesGround(t *testing.T) {
+// The theme in force is the one Claude Code was told to use, resolved as
+// Claude Code resolves it: the `theme` setting, in settings.json first and
+// the older ~/.claude.json where that has none; a stock name is its
+// palette, an ansi variant its base's, a custom name the base its file
+// declares with the overrides laid over; auto and anything unreadable are
+// dark. An override is a colour in a form a picture can use, or nothing.
+func TestThemeFollowsClaudeCodesTheme(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Cleanup(func() { setTheme(nil) })
@@ -389,34 +393,36 @@ func TestBuiltinThemeFollowsClaudeCodesGround(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	builtin := func() string {
+	// what the picture is drawn in: node fill, stroke, text; edge label.
+	drawn := func() string {
 		t.Helper()
 		setTheme(nil)
-		switch currentTheme().Node["fillcolor"] {
-		case "#24283b":
-			return "night"
-		case "#d0d5e3":
-			return "day"
-		}
-		return "neither"
+		th := currentTheme()
+		return th.Node["fillcolor"] + " " + th.Node["color"] + " " + th.Node["fontcolor"] + " " + th.Edge["fontcolor"]
 	}
+	dark := "#373737 #d77757 #ffffff #4eba65"
+	light := "#f0f0f0 #d77757 #000000 #2c7a39"
 	for _, c := range []struct{ name, settings, older, custom, want string }{
-		{"nothing readable", "", "", "", "night"},
-		{"dark", `{"theme":"dark"}`, "", "", "night"},
-		{"light", `{"theme":"light"}`, "", "", "day"},
-		{"light-daltonized", `{"theme":"light-daltonized"}`, "", "", "day"},
-		{"the older file alone", "", `{"theme":"light-ansi"}`, "", "day"},
-		{"settings.json over the older file", `{"theme":"dark"}`, `{"theme":"light"}`, "", "night"},
-		{"custom on a light base", `{"theme":"custom:x"}`, "", `{"name":"x","base":"light"}`, "day"},
-		{"custom on a dark base", `{"theme":"custom:x"}`, "", `{"name":"x","base":"dark"}`, "night"},
-		{"custom with no file", `{"theme":"custom:x"}`, "", "", "night"},
-		{"not JSON", `{"theme":`, "", "", "night"},
-		{"not a string", `{"theme":7}`, "", "", "night"},
+		{"nothing readable", "", "", "", dark},
+		{"dark", `{"theme":"dark"}`, "", "", dark},
+		{"light", `{"theme":"light"}`, "", "", light},
+		{"light-daltonized", `{"theme":"light-daltonized"}`, "", "", "#dcdcdc #ff9933 #000000 #006699"},
+		{"dark-ansi draws as dark", `{"theme":"dark-ansi"}`, "", "", dark},
+		{"auto is dark", `{"theme":"auto"}`, "", "", dark},
+		{"the older file alone", "", `{"theme":"light"}`, "", light},
+		{"settings.json over the older file", `{"theme":"dark"}`, `{"theme":"light"}`, "", dark},
+		{"custom on a light base, overrides in every form", `{"theme":"custom:x"}`, "",
+			`{"name":"x","base":"light","overrides":{"claude":"#123456","text":"rgb(1, 2, 3)","success":"ansi:green","userMessageBackground":"#abc"}}`,
+			"#aabbcc #123456 #010203 #2c7a39"},
+		{"custom on an ansi base", `{"theme":"custom:x"}`, "", `{"name":"x","base":"dark-ansi"}`, dark},
+		{"custom with no file", `{"theme":"custom:x"}`, "", "", dark},
+		{"not JSON", `{"theme":`, "", "", dark},
+		{"not a string", `{"theme":7}`, "", "", dark},
 	} {
 		put(".claude/settings.json", c.settings)
 		put(".claude.json", c.older)
 		put(".claude/themes/x.json", c.custom)
-		if got := builtin(); got != c.want {
+		if got := drawn(); got != c.want {
 			t.Errorf("%s: drew %s, want %s", c.name, got, c.want)
 		}
 	}
@@ -464,12 +470,64 @@ func TestThemeFileYieldsToTheModel(t *testing.T) {
 	}
 }
 
+// ---------- the ledger ----------
+
+// The pictures a session drew are sent to the terminal again, under their
+// own ids, when the theme in force is not the one they stand in — each
+// once, however often it was drawn — and not otherwise.
+func TestPixelLedgerRepaintsUnderTheOldIDs(t *testing.T) {
+	r := FindRaster()
+	if r == nil {
+		t.Skip("no rasteriser on the PATH")
+	}
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DRAWER_STATE", t.TempDir())
+	t.Setenv("TMPDIR", t.TempDir()) // the pictures kitty is not here to collect
+	t.Cleanup(func() { setTheme(nil) })
+	setTheme(nil)
+	// the terminal is a file here: transmitFile opens it, it does not make it
+	tty := filepath.Join(t.TempDir(), "tty")
+	if err := os.WriteFile(tty, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	geom := PxGeom{CellW: 10, CellH: 24}
+	a := picture{Src: "digraph { a -> b }", Cols: 20, Rows: 3, Geom: geom}
+	b := picture{Src: "digraph { c -> d }", Cols: 20, Rows: 3, Geom: geom}
+	recordPicture("s1", a)
+	recordPicture("s1", b)
+	recordPicture("s1", a)
+	if n := repaintPictures("s1", tty, r); n != 0 {
+		t.Errorf("repainted %d pictures under the theme they were drawn in", n)
+	}
+	withTheme(t, `node [color=red]`)
+	if n := repaintPictures("s1", tty, r); n != 2 {
+		t.Fatalf("repainted %d pictures, want 2", n)
+	}
+	out, err := os.ReadFile(tty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []picture{a, b} {
+		id := ",i=" + strconv.Itoa(int(hookImageID(p.Src, p.Cols, p.Rows))) + ","
+		if n := strings.Count(string(out), id); n != 1 {
+			t.Errorf("%q was sent %d times under its id, want once", p.Src, n)
+		}
+	}
+	if n := repaintPictures("s1", tty, r); n != 0 {
+		t.Errorf("repainted %d pictures with nothing changed", n)
+	}
+	if n := repaintPictures("s2", tty, r); n != 0 {
+		t.Errorf("repainted %d pictures for a session that drew none", n)
+	}
+}
+
 // ---------- edge labels on their lines ----------
 
 // rewritten parses a source and puts its edge labels on their edges, for a
 // look at the graph itself. The caller closes both.
 func rewritten(t *testing.T, src string) (*graphviz.Graphviz, *cgraph.Graph) {
 	t.Helper()
+	th := currentTheme() // before the lock: parsing a fresh theme takes it
 	graphvizMu.Lock()
 	defer graphvizMu.Unlock()
 	g, err := graphviz.New(context.Background())
@@ -480,7 +538,7 @@ func rewritten(t *testing.T, src string) (*graphviz.Graphviz, *cgraph.Graph) {
 	if err != nil || graph == nil {
 		t.Fatal("no graph:", err)
 	}
-	inlineEdgeLabels(graph, currentTheme(), 0, true)
+	inlineEdgeLabels(graph, th, 0, true)
 	return g, graph
 }
 

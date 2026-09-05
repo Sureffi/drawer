@@ -9,6 +9,7 @@
 //
 //	drawer -install            # write the hook into ~/.claude/settings.json
 //	drawer -install -theme F   # the same, drawing with the theme in F
+//	drawer -show-theme         # the theme in force, as DOT: a theme file starts here
 //	drawer -uninstall          # take it out again
 //	drawer -hook               # what CC runs: payload on stdin, JSON out
 //	drawer -dot FILE -size WxH # draw a file offline, at a size
@@ -40,7 +41,8 @@ func main() {
 	size := flag.String("size", "100x40", "screen size for -dot and -deltas, WxH")
 	pngOut := flag.String("png", "", "with -dot: write the pixels rung's picture here, as the hook would draw it")
 	cell := flag.String("cell", "10x24", "with -png: a terminal cell in pixels, WxH")
-	themePath := flag.String("theme", "", "a theme file: DOT graph/node/edge defaults for the pixels rung (built-in: tokyonight, night or day by Claude Code's theme)")
+	themePath := flag.String("theme", "", "a theme file: DOT graph/node/edge defaults for the pixels rung (default: Claude Code's own theme)")
+	showTheme := flag.Bool("show-theme", false, "print the theme in force as DOT and exit: Claude Code's, or the file given with -theme")
 	flag.Parse()
 
 	// A theme the hook cannot read is the built-in one: the picture draws.
@@ -56,6 +58,8 @@ func main() {
 	w, h := drawer.ParseSize(*size, 100, 40)
 
 	switch {
+	case *showTheme:
+		fmt.Print(drawer.ThemeSource())
 	case *install || *uninstall:
 		if err := installHook(*uninstall, *themePath); err != nil {
 			fmt.Fprintln(os.Stderr, "drawer:", err)

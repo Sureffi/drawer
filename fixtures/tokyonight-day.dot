@@ -1,0 +1,6 @@
+// An example theme for a light terminal: tokyonight day, the same strokes
+// in the palette's own light variant. The fill is its bg_dark, one step
+// off the day ground as the night fill is off the night one.
+graph [bgcolor=transparent, pad=0.15, color="#848cb5", fontcolor="#6172b0", style="rounded,dashed", penwidth=1]
+node  [shape=box, style=rounded, fillcolor="#d0d5e3", color="#2e7de9", fontcolor="#3760bf", penwidth=1.4]
+edge  [color="#2e7de9", fontcolor="#587539", penwidth=1.2]

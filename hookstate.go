@@ -28,34 +28,44 @@ import (
 const FenceOpen = "```dot"
 const FenceTick = "```"
 
-func statePath(msgID string) string {
+// stateDir is where the hook keeps what one process leaves for the next.
+func stateDir() string {
 	dir := os.Getenv("DRAWER_STATE")
 	if dir == "" {
 		dir = filepath.Join(os.TempDir(), "drawer")
 	}
 	os.MkdirAll(dir, 0o700)
-	// message ids are uuids from CC; keep only what cannot escape the dir
-	safe := strings.Map(func(r rune) rune {
+	return dir
+}
+
+// safeName keeps of an id only what cannot escape a directory. Message and
+// session ids are uuids from CC.
+func safeName(id string) string {
+	return strings.Map(func(r rune) rune {
 		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' {
 			return r
 		}
 		return '_'
-	}, msgID)
-	return filepath.Join(dir, safe+".json")
+	}, id)
 }
 
-// sweepState drops state left by turns that ended without a final delta —
-// an abort mid-fence writes a file nothing will ever come back for. The
-// cost of dropping a live one is a fence that shows its source, which is
-// the failure this whole file is built to fall back to anyway.
-func sweepState(dir string) {
+func statePath(msgID string) string {
+	return filepath.Join(stateDir(), safeName(msgID)+".json")
+}
+
+// sweepState drops files older than `age` — state left by turns that ended
+// without a final delta: an abort mid-fence writes a file nothing will ever
+// come back for. The cost of dropping a live one is a fence that shows its
+// source, which is the failure this whole file is built to fall back to
+// anyway. Directories are somebody else's and are left alone.
+func sweepState(dir string, age time.Duration) {
 	ents, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
 	for _, e := range ents {
 		info, err := e.Info()
-		if err != nil || time.Since(info.ModTime()) < 10*time.Minute {
+		if err != nil || e.IsDir() || time.Since(info.ModTime()) < age {
 			continue
 		}
 		os.Remove(filepath.Join(dir, e.Name()))
@@ -65,7 +75,7 @@ func sweepState(dir string) {
 func loadState(msgID string) State {
 	var s State
 	p := statePath(msgID)
-	sweepState(filepath.Dir(p))
+	sweepState(filepath.Dir(p), 10*time.Minute)
 	b, err := os.ReadFile(p)
 	if err != nil {
 		return s

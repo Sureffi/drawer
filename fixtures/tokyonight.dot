@@ -1,0 +1,10 @@
+// An example theme: tokyonight, the look the pixels rung was tuned on.
+// The hook draws in Claude Code's own theme; this goes on the hook line
+// with
+//
+//     drawer -install -theme fixtures/tokyonight.dot
+//
+// and `drawer -show-theme` prints the one it replaces.
+graph [bgcolor=transparent, pad=0.15, color="#565f89", fontcolor="#a9b1d6", style="rounded,dashed", penwidth=1]
+node  [shape=box, style=rounded, fillcolor="#24283b", color="#7aa2f7", fontcolor="#c0caf5", penwidth=1.4]
+edge  [color="#7aa2f7", fontcolor="#9ece6a", penwidth=1.2]

@@ -37,6 +37,7 @@ type hookIn struct {
 	Final     bool   `json:"final"`
 	MessageID string `json:"message_id"`
 	Index     int    `json:"index"`
+	SessionID string `json:"session_id"`
 }
 
 // The output shape is nested and the nesting is load-bearing: a flat
@@ -169,9 +170,15 @@ func RunHook(m Mode) int {
 		fmt.Print("{}")
 		return 0
 	}
+	hookSession = in.SessionID
 	st := loadState(in.MessageID)
 	before := *&st
 	width, rows := hookSize()
+	// The first delta of a message is the first thing the hook hears after
+	// a theme switch; pixelledger.go says why, and what is repainted.
+	if in.Index == 0 && pickRung() == "pixels" {
+		repaintPictures(hookSession, parentTTYOut(), ProbeRaster("auto"))
+	}
 	text := Stream(in.Delta, in.Final, &st, func(src string) []string {
 		return m.Emit(src, width, rows)
 	})

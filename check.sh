@@ -39,9 +39,12 @@ for r in cells braille octants; do
   stage "dot: $r" ./bin/drawer -dot fixtures/chain.dot -size 100x14 -render $r || true
 done
 
-# A theme file is read by graphviz's parser; the fixture is a second theme
-# and must load. There is no offline pixel output, so loading is the check.
-stage "theme: fixtures/theme.dot" ./bin/drawer -theme fixtures/theme.dot -dot fixtures/chain.dot -size 100x14 -render cells || true
+# A theme file is read by graphviz's parser; the example themes must load,
+# and the theme in force — Claude Code's, derived — must print as DOT.
+for f in fixtures/theme.dot fixtures/tokyonight.dot fixtures/tokyonight-day.dot; do
+  stage "theme: $f" ./bin/drawer -theme $f -dot fixtures/chain.dot -size 100x14 -render cells || true
+done
+stage "show-theme" ./bin/drawer -show-theme || true
 
 # The pixels rung, to a file: the same cut the hook makes. Only where this
 # machine can rasterise; a box without cairo is not wrong, only glyph-bound.
