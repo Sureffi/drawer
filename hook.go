@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/sureffi/drawer/internal/term"
 )
 
 // hookIn is CC's payload. Only the fields we use are named; the rest of
@@ -101,7 +103,7 @@ func (r run) runHook() int {
 	// The first delta of a message is the first thing the hook hears after
 	// a theme switch; ledger.go says why, and what is repainted.
 	if in.Index == 0 && r.pickRung() == rungPixels {
-		r.repaintPictures(parentTTYOut(), probeRaster())
+		r.repaintPictures(term.TTYOut(), probeRaster())
 	}
 	st, done := takeTurn(in.MessageID, in.Index, turnPatience)
 	defer done()

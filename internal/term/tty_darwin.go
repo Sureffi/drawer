@@ -1,6 +1,6 @@
 //go:build darwin
 
-package main
+package term
 
 import (
 	"os"
@@ -25,7 +25,7 @@ func parentTTY() string {
 	return "/dev/" + t
 }
 
-func parentTTYOut() string { return parentTTY() }
+func TTYOut() string { return parentTTY() }
 
 // The parent's environment is not readable here: macOS has no /proc, and
 // ps does not carry it. A hook whose own TERM was scrubbed is blind, which

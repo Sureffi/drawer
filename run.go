@@ -15,12 +15,14 @@
 
 package main
 
+import "github.com/sureffi/drawer/internal/term"
+
 type run struct {
-	rung rung   // -render / DRAWER_RENDER; rungAuto reads the terminal
-	geom pxGeom // a cell in pixels, where the terminal reported one
-	term string // TERM, for the auto rung
-	sess string // Claude Code's session id: the ledger's key
-	tee  string // -hooktee / DRAWER_TEE
+	rung rung      // -render / DRAWER_RENDER; rungAuto reads the terminal
+	geom term.Geom // a cell in pixels, where the terminal reported one
+	term string    // TERM, for the auto rung
+	sess string    // Claude Code's session id: the ledger's key
+	tee  string    // -hooktee / DRAWER_TEE
 
 	theme *inForce // the theme, derived when the first picture asks
 }
@@ -30,13 +32,13 @@ type run struct {
 // -deltas replay never asks the window how big it is, and it still gets to
 // know what terminal it is replaying for.
 func newRun(r rung, tee string, th *theme) run {
-	return run{rung: r, term: termName(), tee: tee, theme: &inForce{th: th}}
+	return run{rung: r, term: term.Name(), tee: tee, theme: &inForce{th: th}}
 }
 
 // probe asks the window how big it is. The columns come back; the cell's
 // pixel size lands in the run. Where there is no terminal the geometry is
 // zero and every rung below pixels still draws.
-func (r *run) probe() int { cols, g := termSize(); r.geom = g; return cols }
+func (r *run) probe() int { cols, g := term.Size(); r.geom = g; return cols }
 
 // rung is which drawing this run makes. The zero value is auto, which
 // reads the terminal; the four others name themselves.

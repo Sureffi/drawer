@@ -10,10 +10,12 @@
 
 package main
 
+import "github.com/sureffi/drawer/internal/term"
+
 // drawPixels is the pixels rung: the rows that show a picture, or nil.
 func (r run) drawPixels(src string, width int) []string {
 	ras := probeRaster()
-	if ras == nil || !r.geom.ok() {
+	if ras == nil || !r.geom.OK() {
 		return nil
 	}
 	png, p, err := pixelCut(r.theme.get(), ras, src, width, r.geom)
@@ -21,7 +23,7 @@ func (r run) drawPixels(src string, width int) []string {
 		return nil
 	}
 	id := hookImageID(p.Src, p.Cols, p.Rows)
-	if !transmitFile(parentTTYOut(), png, id, p.Cols, p.Rows) {
+	if !transmitFile(term.TTYOut(), png, id, p.Cols, p.Rows) {
 		return nil
 	}
 	r.recordPicture(p)

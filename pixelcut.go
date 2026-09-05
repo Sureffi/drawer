@@ -27,6 +27,7 @@ import (
 
 	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/sureffi/drawer/internal/grid"
+	"github.com/sureffi/drawer/internal/term"
 )
 
 // picture is one drawn picture: enough to draw it again at the same cut.
@@ -37,7 +38,7 @@ type picture struct {
 	Src     string         `json:"src"`
 	Cols    int            `json:"cols"`
 	Rows    int            `json:"rows"`
-	Geom    pxGeom         `json:"geom"`
+	Geom    term.Geom      `json:"geom"`
 	Rankdir cgraph.RankDir `json:"rankdir,omitempty"`
 }
 
@@ -56,8 +57,8 @@ type picture struct {
 // rows; top-down it keeps 0.97 in 56. An error is a picture that will
 // not fit either way — too narrow to be anything, or taller than
 // grid.MaxRows.
-func pixelCut(th *theme, r *raster, src string, width int, geom pxGeom) ([]byte, picture, error) {
-	if r == nil || !geom.ok() {
+func pixelCut(th *theme, r *raster, src string, width int, geom term.Geom) ([]byte, picture, error) {
+	if r == nil || !geom.OK() {
 		return nil, picture{}, errors.New("no rasteriser or no cell size")
 	}
 	if width > len(rowColumnDiacritics) {
@@ -103,7 +104,7 @@ func pixelCut(th *theme, r *raster, src string, width int, geom pxGeom) ([]byte,
 // picture's width on exactly `cols` columns, and the rows that follow. An
 // error is a block that will not do — too narrow to be anything, or
 // taller than grid.MaxRows.
-func pixelZoom(svg []byte, cols int, geom pxGeom) (float64, int, error) {
+func pixelZoom(svg []byte, cols int, geom term.Geom) (float64, int, error) {
 	if cols < 4 {
 		return 0, 0, errors.New("too narrow to draw")
 	}
@@ -125,7 +126,7 @@ func pixelZoom(svg []byte, cols int, geom pxGeom) (float64, int, error) {
 
 // pixelFit rasterises a laid-out picture into a block `cols` wide, at the
 // zoom pixelZoom chose: the pixels, and the rows they stand on.
-func pixelFit(r *raster, svg []byte, cols int, geom pxGeom) ([]byte, int, error) {
+func pixelFit(r *raster, svg []byte, cols int, geom term.Geom) ([]byte, int, error) {
 	zoom, rows, err := pixelZoom(svg, cols, geom)
 	if err != nil {
 		return nil, 0, err

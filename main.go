@@ -20,6 +20,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+
+	"github.com/sureffi/drawer/internal/term"
 )
 
 func main() {
@@ -62,7 +64,7 @@ func main() {
 		fmt.Print(r.sessionContext())
 	case *dotDump != "" && *pngOut != "":
 		cw, ch := parseSize(*cell, 10, 24)
-		os.Exit(r.runPNG(*dotDump, *pngOut, w, pxGeom{CellW: cw, CellH: ch}))
+		os.Exit(r.runPNG(*dotDump, *pngOut, w, term.Geom{CellW: cw, CellH: ch}))
 	case *dotDump != "":
 		os.Exit(r.runDotDump(*dotDump, w, h))
 	case *deltaDump != "":

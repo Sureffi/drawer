@@ -7,6 +7,8 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/sureffi/drawer/internal/term"
 )
 
 // parseSize reads WxH, or hands back the default.
@@ -65,7 +67,7 @@ func (r run) runDotDump(path string, w, h int) int {
 // cells wide with cells of `geom` pixels, and writes the picture to a file:
 // a theme, or a graph, looked at without a session. Nonzero when there is
 // no picture, with the reason on stderr.
-func (r run) runPNG(dotPath, pngPath string, width int, geom pxGeom) int {
+func (r run) runPNG(dotPath, pngPath string, width int, geom term.Geom) int {
 	src, err := os.ReadFile(dotPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "drawer:", err)

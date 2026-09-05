@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/sureffi/drawer/internal/grid"
+	"github.com/sureffi/drawer/internal/term"
 )
 
 // drawBlock turns one fence source into the rows that replace it, or nil
@@ -90,12 +91,12 @@ func bare(rows []string) []string {
 // PATH: it is asked only where the terminal and the geometry have already
 // said yes. Everything else it needs is what the run already knows, so the
 // judgement can be read — and tested — without a terminal anywhere near it.
-func pickRung(want rung, name string, geom pxGeom, raster func() bool) rung {
+func pickRung(want rung, name string, geom term.Geom, raster func() bool) rung {
 	if want != rungAuto {
 		return want
 	}
 	kitty := strings.Contains(name, "kitty")
-	if kitty && geom.ok() && raster() {
+	if kitty && geom.OK() && raster() {
 		return rungPixels
 	}
 	if kitty || strings.Contains(name, "ghostty") {

@@ -16,6 +16,7 @@ import (
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/sureffi/drawer/internal/grid"
+	"github.com/sureffi/drawer/internal/term"
 )
 
 // The hook wire quantises a truecolor foreground, so a picture's id rides
@@ -389,7 +390,7 @@ func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
 		zooms = append(zooms, zoom)
 		return []byte("png"), nil
 	}}
-	geom := pxGeom{CellW: 10, CellH: 24}
+	geom := term.Geom{CellW: 10, CellH: 24}
 	chain := func(n int) string {
 		var b strings.Builder
 		b.WriteString("digraph { rankdir=LR; ")
@@ -459,7 +460,7 @@ func TestPixelLedgerRepaintsUnderTheOldIDs(t *testing.T) {
 	if err := os.WriteFile(tty, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	geom := pxGeom{CellW: 10, CellH: 24}
+	geom := term.Geom{CellW: 10, CellH: 24}
 	a := picture{Src: "digraph { a -> b }", Cols: 20, Rows: 3, Geom: geom}
 	b := picture{Src: "digraph { c -> d }", Cols: 20, Rows: 3, Geom: geom}
 	s1 := run{sess: "s1", theme: &inForce{}}
@@ -508,7 +509,7 @@ func TestPixelLedgerRepaintsAsLaidOut(t *testing.T) {
 		got = svg
 		return []byte("png"), nil
 	}}
-	geom := pxGeom{CellW: 10, CellH: 24}
+	geom := term.Geom{CellW: 10, CellH: 24}
 	s1 := run{sess: "s1", theme: &inForce{}}
 	s1.recordPicture(picture{Src: "digraph { rankdir=LR; a -> b }", Cols: 12, Rows: 7, Geom: geom, Rankdir: cgraph.TBRank})
 	s1.theme = &inForce{th: mustTheme(t, `node [color=red]`)}

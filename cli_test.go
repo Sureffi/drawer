@@ -8,6 +8,8 @@ import (
 	"errors"
 	"os"
 	"testing"
+
+	"github.com/sureffi/drawer/internal/term"
 )
 
 // The offline picture is the hook's picture: cut to whole columns of the
@@ -22,7 +24,7 @@ func TestRunPNGWritesTheHooksPicture(t *testing.T) {
 	if err := os.WriteFile(dot, []byte("digraph { rankdir=LR; a -> b [label=\"x\"]; b -> c }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code := (run{theme: &inForce{}}).runPNG(dot, png, 100, pxGeom{CellW: 10, CellH: 24}); code != 0 {
+	if code := (run{theme: &inForce{}}).runPNG(dot, png, 100, term.Geom{CellW: 10, CellH: 24}); code != 0 {
 		t.Fatalf("runPNG exited %d", code)
 	}
 	b, err := os.ReadFile(png)
