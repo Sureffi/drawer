@@ -5,7 +5,12 @@
   "plugins": [
     {
       "name": "drawer",
-      "source": "./",
+      "source": {
+        "source": "archive",
+        "url": "https://github.com/sureffi/drawer/releases/download/v0.1.0/drawer-plugin.zip",
+        "sha256": "fa0a3710001f5913908758fc454d2779f51a048212890b79210181bf0eaf1836"
+      },
+      "version": "0.1.0",
       "description": "A ```dot fence in a reply is drawn in place."
     }
   ]
