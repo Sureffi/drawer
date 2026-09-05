@@ -11,7 +11,12 @@
 
 package drawer
 
-import "github.com/sureffi/drawer/internal/theme"
+import (
+	"fmt"
+	"os"
+
+	"github.com/sureffi/drawer/internal/theme"
+)
 
 type inForce struct{ th *theme.Theme }
 
@@ -19,7 +24,14 @@ func (f *inForce) get() *theme.Theme {
 	if f.th == nil {
 		th, err := theme.Claude()
 		if err != nil {
-			panic("drawer: the derived theme does not parse: " + err.Error())
+			// The DOT being parsed here was built a package away out of a
+			// fixed palette, so it not parsing is a bug in this tree and
+			// nothing a reader did. It would still be found on the display
+			// wire, where the answer to any bug is to draw: an empty theme
+			// is graphviz's own defaults, so the picture comes out plain
+			// rather than not at all, and the line says which happened.
+			fmt.Fprintf(os.Stderr, "drawer: theme: %v; drawing in graphviz's defaults\n", err)
+			th = &theme.Theme{}
 		}
 		f.th = th
 	}
