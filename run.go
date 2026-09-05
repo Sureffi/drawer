@@ -15,7 +15,10 @@
 
 package main
 
-import "github.com/sureffi/drawer/internal/term"
+import (
+	"github.com/sureffi/drawer/internal/term"
+	"github.com/sureffi/drawer/internal/theme"
+)
 
 type run struct {
 	rung rung      // -render / DRAWER_RENDER; rungAuto reads the terminal
@@ -31,7 +34,7 @@ type run struct {
 // time, because it is available on every door and the window is not: a
 // -deltas replay never asks the window how big it is, and it still gets to
 // know what terminal it is replaying for.
-func newRun(r rung, tee string, th *theme) run {
+func newRun(r rung, tee string, th *theme.Theme) run {
 	return run{rung: r, term: term.Name(), tee: tee, theme: &inForce{th: th}}
 }
 

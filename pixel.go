@@ -33,6 +33,7 @@ import (
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/sureffi/drawer/internal/layout"
+	"github.com/sureffi/drawer/internal/theme"
 )
 
 // ---------- capability ----------
@@ -113,8 +114,8 @@ func rasterExec(bin string, svg []byte, args ...string) ([]byte, error) {
 // chose, and it is the readable fallback — a theme that edits it can damage
 // the one thing that always has to keep working.
 //
-// What the theme says is in theme.go; Claude Code's stands the picture on
-// the terminal's own ground. Measured on a translucent kitty over a
+// What the theme says is in internal/theme; Claude Code's stands the picture
+// on the terminal's own ground. Measured on a translucent kitty over a
 // wallpaper: an opaque slab was the one thing in the picture that said
 // "pasted in", and it was the first thing a reader saw.
 
@@ -154,7 +155,7 @@ func pxFontPt(cellW int) float64 {
 //
 // force overrides the orientation the source asked for; empty leaves the
 // author's choice alone.
-func renderThemedSVG(th *theme, src string, fontPt float64, force cgraph.RankDir) ([]byte, error) {
+func renderThemedSVG(th *theme.Theme, src string, fontPt float64, force cgraph.RankDir) ([]byte, error) {
 	var svg []byte
 	err := layout.Door(src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
 		if force != "" {
@@ -246,7 +247,7 @@ func renderThemedSVG(th *theme, src string, fontPt float64, force cgraph.RankDir
 		}
 		// graphviz writes Courier as a family with its generic behind it.
 		svg = bytes.ReplaceAll(buf.Bytes(),
-			[]byte(`font-family="`+pxLayoutFont+`,monospace"`), []byte(`font-family="`+th.face()+`"`))
+			[]byte(`font-family="`+pxLayoutFont+`,monospace"`), []byte(`font-family="`+th.Face()+`"`))
 		return nil
 	})
 	return svg, err

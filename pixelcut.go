@@ -29,6 +29,7 @@ import (
 	"github.com/sureffi/drawer/internal/grid"
 	"github.com/sureffi/drawer/internal/layout"
 	"github.com/sureffi/drawer/internal/term"
+	"github.com/sureffi/drawer/internal/theme"
 )
 
 // picture is one drawn picture: enough to draw it again at the same cut.
@@ -58,7 +59,7 @@ type picture struct {
 // rows; top-down it keeps 0.97 in 56. An error is a picture that will
 // not fit either way — too narrow to be anything, or taller than
 // grid.MaxRows.
-func pixelCut(th *theme, r *raster, src string, width int, geom term.Geom) ([]byte, picture, error) {
+func pixelCut(th *theme.Theme, r *raster, src string, width int, geom term.Geom) ([]byte, picture, error) {
 	if r == nil || !geom.OK() {
 		return nil, picture{}, errors.New("no rasteriser or no cell size")
 	}
@@ -152,7 +153,7 @@ func hookImageID(src string, cols, rows int) uint32 {
 }
 
 // themeSig names a theme, for the ledger to compare.
-func themeSig(th *theme) string {
+func themeSig(th *theme.Theme) string {
 	return strconv.FormatUint(uint64(fnv1a32(th.Source)), 16)
 }
 

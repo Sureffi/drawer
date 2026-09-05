@@ -24,7 +24,7 @@
 // hook cannot read at run time is Claude Code's theme — the picture draws;
 // `drawer -theme FILE -dot ...` says what is wrong with it.
 
-package main
+package theme
 
 import (
 	"context"
@@ -52,12 +52,12 @@ var claudePalettes = map[string]map[string]string{
 	"light-daltonized": {"claude": "#ff9933", "text": "#000000", "subtle": "#afafaf", "inactive": "#666666", "success": "#006699", "userMessageBackground": "#dcdcdc"},
 }
 
-// claudeThemeDOT is Claude Code's theme as a theme: its palette on the
+// ClaudeDOT is Claude Code's theme as a theme: its palette on the
 // picture. A node is drawn as the user's own message is — that background
 // for the fill, the text colour for the label — with claude, the accent,
 // for every stroke; an edge label is in success, a cluster's outline in
 // inactive and its caption in subtle.
-func claudeThemeDOT() string {
+func ClaudeDOT() string {
 	p := claudePalette()
 	return "graph [bgcolor=transparent, pad=0.15, color=\"" + p["inactive"] + "\", fontcolor=\"" + p["subtle"] + "\", style=\"rounded,dashed\", penwidth=1]\n" +
 		"node  [shape=box, style=rounded, fillcolor=\"" + p["userMessageBackground"] + "\", color=\"" + p["claude"] + "\", fontcolor=\"" + p["text"] + "\", penwidth=1.4]\n" +
@@ -153,16 +153,16 @@ func jsonString(path, key string) string {
 	return s
 }
 
-// theme is a parsed theme: for each kind of object, what it declares, and
+// Theme is a parsed theme: for each kind of object, what it declares, and
 // the DOT it was read from.
-type theme struct {
+type Theme struct {
 	Graph, Node, Edge map[string]string
 	Source            string
 }
 
-// face is the font the picture is set in: the theme's fontname, from
+// Face is the font the picture is set in: the theme's fontname, from
 // whichever kind declares one, or the terminal's generic monospace.
-func (t *theme) face() string {
+func (t *Theme) Face() string {
 	for _, m := range []map[string]string{t.Node, t.Graph, t.Edge} {
 		if f := m["fontname"]; f != "" {
 			return f
@@ -173,18 +173,18 @@ func (t *theme) face() string {
 
 // cgraph's object kinds, as agattr and agnxtattr take them.
 const (
-	agGraph = 0
-	agNode  = 1
-	agEdge  = 2
+	KindGraph = 0
+	KindNode  = 1
+	KindEdge  = 2
 )
 
-// parseTheme reads a theme from DOT declarations. The declarations are
-// parsed inside a graph of their own, and what that graph declares as its
-// defaults is the theme.
-func parseTheme(src string) (*theme, error) {
-	th := &theme{Graph: map[string]string{}, Node: map[string]string{}, Edge: map[string]string{}, Source: src}
+// Parse reads a theme from DOT declarations. The declarations are parsed
+// inside a graph of their own, and what that graph declares as its defaults
+// is the theme.
+func Parse(src string) (*Theme, error) {
+	th := &Theme{Graph: map[string]string{}, Node: map[string]string{}, Edge: map[string]string{}, Source: src}
 	err := layout.Door("digraph {\n"+src+"\n}\n", func(_ context.Context, _ *graphviz.Graphviz, graph *cgraph.Graph) error {
-		for kind, m := range map[int]map[string]string{agGraph: th.Graph, agNode: th.Node, agEdge: th.Edge} {
+		for kind, m := range map[int]map[string]string{KindGraph: th.Graph, KindNode: th.Node, KindEdge: th.Edge} {
 			var sym *cgraph.Symbol
 			for {
 				var err error
@@ -205,15 +205,15 @@ func parseTheme(src string) (*theme, error) {
 	return th, nil
 }
 
-// loadTheme reads a theme file, or says what is wrong with it.
-func loadTheme(path string) (*theme, error) {
+// Load reads a theme file, or says what is wrong with it.
+func Load(path string) (*Theme, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	return parseTheme(string(src))
+	return Parse(string(src))
 }
 
-// claudeTheme is Claude Code's own theme, derived from its settings and
-// read back as a theme.
-func claudeTheme() (*theme, error) { return parseTheme(claudeThemeDOT()) }
+// Claude is Claude Code's own theme, derived from its settings and read
+// back as a theme.
+func Claude() (*Theme, error) { return Parse(ClaudeDOT()) }

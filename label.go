@@ -35,6 +35,7 @@ import (
 	"strings"
 
 	"github.com/goccy/go-graphviz/cgraph"
+	"github.com/sureffi/drawer/internal/theme"
 )
 
 // labelNodePrefix names the nodes this file makes. A name the model would
@@ -55,7 +56,7 @@ func isDigraph(src string) bool {
 
 // inlineEdgeLabels puts every edge label on its edge. fontPt is the type
 // size the labels will be set at, which fixes the air around them.
-func inlineEdgeLabels(graph *cgraph.Graph, th *theme, fontPt float64, directed bool) {
+func inlineEdgeLabels(graph *cgraph.Graph, th *theme.Theme, fontPt float64, directed bool) {
 	// Collect first: rewriting the out-lists while walking them is undefined.
 	var todo, plain []*cgraph.Edge
 	for n, _ := graph.FirstNode(); n != nil; n, _ = graph.NextNode(n) {
@@ -99,7 +100,7 @@ func inlineEdgeLabels(graph *cgraph.Graph, th *theme, fontPt float64, directed b
 	// Every edge attribute the source declared, by name, so the copy is the
 	// model's whole edge and not a list somebody thought of.
 	var attrs []string
-	for sym, _ := graph.NextAttr(agEdge, nil); sym != nil; sym, _ = graph.NextAttr(agEdge, sym) {
+	for sym, _ := graph.NextAttr(theme.KindEdge, nil); sym != nil; sym, _ = graph.NextAttr(theme.KindEdge, sym) {
 		attrs = append(attrs, sym.Name())
 	}
 	if fontPt <= 0 {

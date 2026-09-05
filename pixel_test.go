@@ -18,6 +18,7 @@ import (
 	"github.com/sureffi/drawer/internal/grid"
 	"github.com/sureffi/drawer/internal/layout"
 	"github.com/sureffi/drawer/internal/term"
+	"github.com/sureffi/drawer/internal/theme"
 )
 
 // The hook wire quantises a truecolor foreground, so a picture's id rides
@@ -84,7 +85,7 @@ func svgTextY(group string) float64 {
 // and set in another runs out of its box. At a known cell width the size is
 // the one that puts a glyph in a cell.
 func TestPixelTypeIsMeasuredInCourierAndSetInMonospace(t *testing.T) {
-	svg, err := renderThemedSVG(mustTheme(t, claudeThemeDOT()), "digraph { a -> b }", pxFontPt(10), "")
+	svg, err := renderThemedSVG(mustTheme(t, theme.ClaudeDOT()), "digraph { a -> b }", pxFontPt(10), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +112,7 @@ func TestPixelThemeKeepsTheModelsPaint(t *testing.T) {
 		d
 		a -> b -> c -> d
 	}`
-	th := mustTheme(t, claudeThemeDOT())
+	th := mustTheme(t, theme.ClaudeDOT())
 	svg, err := renderThemedSVG(th, src, 0, "")
 	if err != nil {
 		t.Fatal(err)
@@ -145,7 +146,7 @@ func TestPixelThemeReachesEveryCluster(t *testing.T) {
 		subgraph cluster_b { label="b side"; y }
 		x -> y
 	}`
-	th := mustTheme(t, claudeThemeDOT())
+	th := mustTheme(t, theme.ClaudeDOT())
 	svg, err := renderThemedSVG(th, src, 0, "")
 	if err != nil {
 		t.Fatal(err)
@@ -167,7 +168,7 @@ func TestPixelThemeReachesEveryCluster(t *testing.T) {
 // The picture stands on the terminal's own ground: no background unless
 // the model asked for one.
 func TestPixelBackgroundIsTheTerminalsUnlessSet(t *testing.T) {
-	th := mustTheme(t, claudeThemeDOT())
+	th := mustTheme(t, theme.ClaudeDOT())
 	svg, err := renderThemedSVG(th, "digraph { a -> b }", 0, "")
 	if err != nil {
 		t.Fatal(err)
@@ -190,7 +191,7 @@ func TestPixelBackgroundIsTheTerminalsUnlessSet(t *testing.T) {
 // look at the graph itself. The caller closes both.
 func rewritten(t *testing.T, src string) (*graphviz.Graphviz, *cgraph.Graph) {
 	t.Helper()
-	th := mustTheme(t, claudeThemeDOT())
+	th := mustTheme(t, theme.ClaudeDOT())
 	g, err := graphviz.New(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -255,7 +256,7 @@ func TestPixelLabelsSpaceAsDotDoes(t *testing.T) {
 // each half in the edge's own paint, and a `dir=both` edge keeps a head at
 // each end: the back arrow on the first half, the forward on the second.
 func TestPixelEdgeLabelSitsOnItsLine(t *testing.T) {
-	th := mustTheme(t, claudeThemeDOT())
+	th := mustTheme(t, theme.ClaudeDOT())
 	svg, err := renderThemedSVG(th, `digraph { a -> b [label="x", color=red, dir=both] }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
@@ -284,7 +285,7 @@ func TestPixelEdgeLabelSitsOnItsLine(t *testing.T) {
 
 // An undirected labelled edge grows no heads.
 func TestPixelUndirectedLabelGrowsNoHeads(t *testing.T) {
-	svg, err := renderThemedSVG(mustTheme(t, claudeThemeDOT()), `graph { a -- b [label="x"] }`, 0, "")
+	svg, err := renderThemedSVG(mustTheme(t, theme.ClaudeDOT()), `graph { a -- b [label="x"] }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +303,7 @@ func TestPixelUndirectedLabelGrowsNoHeads(t *testing.T) {
 // A labelled edge inside a cluster keeps its label in the cluster, or dot
 // would route the edge out of the cluster and back to visit it.
 func TestPixelEdgeLabelStaysInItsCluster(t *testing.T) {
-	svg, err := renderThemedSVG(mustTheme(t, claudeThemeDOT()), `digraph { subgraph cluster_c { a -> b [label="x"] } c -> a }`, 0, "")
+	svg, err := renderThemedSVG(mustTheme(t, theme.ClaudeDOT()), `digraph { subgraph cluster_c { a -> b [label="x"] } c -> a }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +324,7 @@ func TestPixelEdgeLabelStaysInItsCluster(t *testing.T) {
 // The label of an edge that closes a cycle sits between the edge's ends,
 // and the arrow still points where the model pointed it.
 func TestPixelLabelOnABackEdgeSitsBetweenItsEnds(t *testing.T) {
-	svg, err := renderThemedSVG(mustTheme(t, claudeThemeDOT()), `digraph { a -> b -> c; c -> a [label="no"] }`, 0, "")
+	svg, err := renderThemedSVG(mustTheme(t, theme.ClaudeDOT()), `digraph { a -> b -> c; c -> a [label="no"] }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -352,8 +353,8 @@ func TestPixelLabelOnABackEdgeSitsBetweenItsEnds(t *testing.T) {
 // theme's, else dot's half inch. A model writing dot's default draws the
 // same chain as one writing nothing, and a theme's inch is a half.
 func TestPixelLabelsHalveRanksepAsDotDoes(t *testing.T) {
-	claude := mustTheme(t, claudeThemeDOT())
-	height := func(th *theme, src string) float64 {
+	claude := mustTheme(t, theme.ClaudeDOT())
+	height := func(th *theme.Theme, src string) float64 {
 		svg, err := renderThemedSVG(th, src, 0, "")
 		if err != nil {
 			t.Fatal(err)
@@ -385,7 +386,7 @@ func TestPixelLabelsHalveRanksepAsDotDoes(t *testing.T) {
 // cut says which way it went.
 func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	th := mustTheme(t, claudeThemeDOT())
+	th := mustTheme(t, theme.ClaudeDOT())
 	var zooms []float64
 	r := &raster{name: "stub", run: func(_ []byte, zoom float64) ([]byte, error) {
 		zooms = append(zooms, zoom)

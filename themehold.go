@@ -11,11 +11,13 @@
 
 package main
 
-type inForce struct{ th *theme }
+import "github.com/sureffi/drawer/internal/theme"
 
-func (f *inForce) get() *theme {
+type inForce struct{ th *theme.Theme }
+
+func (f *inForce) get() *theme.Theme {
 	if f.th == nil {
-		th, err := claudeTheme()
+		th, err := theme.Claude()
 		if err != nil {
 			panic("drawer: the derived theme does not parse: " + err.Error())
 		}

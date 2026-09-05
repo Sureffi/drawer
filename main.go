@@ -22,6 +22,7 @@ import (
 	"os"
 
 	"github.com/sureffi/drawer/internal/term"
+	"github.com/sureffi/drawer/internal/theme"
 )
 
 func main() {
@@ -44,9 +45,9 @@ func main() {
 	// A theme the hook cannot read is the built-in one: the picture draws,
 	// and the session opens. Everywhere else — -dot, -png, -deltas — a bad
 	// theme is an answer.
-	var th *theme
+	var th *theme.Theme
 	if *themePath != "" {
-		loaded, err := loadTheme(*themePath)
+		loaded, err := theme.Load(*themePath)
 		if err != nil && !*hook && !*contextLine {
 			fmt.Fprintln(os.Stderr, "drawer: theme:", err)
 			os.Exit(1)
