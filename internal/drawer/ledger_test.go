@@ -4,6 +4,7 @@
 package drawer
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -21,7 +22,7 @@ import (
 // back.
 func mustTheme(t *testing.T, src string) *theme.Theme {
 	t.Helper()
-	th, err := theme.Parse(src)
+	th, err := theme.Parse(t.Context(), src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,14 +49,14 @@ func TestPixelLedgerRepaintsUnderTheOldIDs(t *testing.T) {
 	a := pixel.Picture{Src: "digraph { a -> b }", Cols: 20, Rows: 3, Geom: geom}
 	b := pixel.Picture{Src: "digraph { c -> d }", Cols: 20, Rows: 3, Geom: geom}
 	s1 := run{sess: "s1", theme: &inForce{}}
-	s1.recordPicture(a)
-	s1.recordPicture(b)
-	s1.recordPicture(a)
-	if n := s1.repaintPictures(tty, r); n != 0 {
+	s1.recordPicture(t.Context(), a)
+	s1.recordPicture(t.Context(), b)
+	s1.recordPicture(t.Context(), a)
+	if n := s1.repaintPictures(t.Context(), tty, r); n != 0 {
 		t.Errorf("repainted %d pictures under the theme they were drawn in", n)
 	}
 	s1.theme = &inForce{th: mustTheme(t, `node [color=red]`)}
-	if n := s1.repaintPictures(tty, r); n != 2 {
+	if n := s1.repaintPictures(t.Context(), tty, r); n != 2 {
 		t.Fatalf("repainted %d pictures, want 2", n)
 	}
 	out, err := os.ReadFile(tty)
@@ -68,10 +69,10 @@ func TestPixelLedgerRepaintsUnderTheOldIDs(t *testing.T) {
 			t.Errorf("%q was sent %d times under its id, want once", p.Src, n)
 		}
 	}
-	if n := s1.repaintPictures(tty, r); n != 0 {
+	if n := s1.repaintPictures(t.Context(), tty, r); n != 0 {
 		t.Errorf("repainted %d pictures with nothing changed", n)
 	}
-	if n := (run{sess: "s2", theme: s1.theme}).repaintPictures(tty, r); n != 0 {
+	if n := (run{sess: "s2", theme: s1.theme}).repaintPictures(t.Context(), tty, r); n != 0 {
 		t.Errorf("repainted %d pictures for a session that drew none", n)
 	}
 }
@@ -89,15 +90,15 @@ func TestPixelLedgerRepaintsAsLaidOut(t *testing.T) {
 		t.Fatal(err)
 	}
 	var got []byte
-	r := &pixel.Raster{Name: "stub", Run: func(svg []byte, _ float64) ([]byte, error) {
+	r := &pixel.Raster{Name: "stub", Run: func(_ context.Context, svg []byte, _ float64) ([]byte, error) {
 		got = svg
 		return []byte("png"), nil
 	}}
 	geom := term.Geom{CellW: 10, CellH: 24}
 	s1 := run{sess: "s1", theme: &inForce{}}
-	s1.recordPicture(pixel.Picture{Src: "digraph { rankdir=LR; a -> b }", Cols: 12, Rows: 7, Geom: geom, Rankdir: cgraph.TBRank})
+	s1.recordPicture(t.Context(), pixel.Picture{Src: "digraph { rankdir=LR; a -> b }", Cols: 12, Rows: 7, Geom: geom, Rankdir: cgraph.TBRank})
 	s1.theme = &inForce{th: mustTheme(t, `node [color=red]`)}
-	if n := s1.repaintPictures(tty, r); n != 1 {
+	if n := s1.repaintPictures(t.Context(), tty, r); n != 1 {
 		t.Fatalf("repainted %d pictures, want 1", n)
 	}
 	ya, yb := svgtest.TextY(svgtest.Group(got, "a")), svgtest.TextY(svgtest.Group(got, "b"))

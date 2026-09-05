@@ -12,13 +12,23 @@
 package drawer
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/sureffi/drawer/internal/term"
 	"github.com/sureffi/drawer/internal/theme"
 )
+
+// layoutTimeout is how long one process may spend at graphviz's door. A
+// hook is one process per delta and a delta is on screen in milliseconds,
+// so ten seconds is not a budget anybody draws inside — it is the bound on
+// a wasm that has stopped answering. Past it the door refuses, and a fence
+// shows its source under a notice, which is the same fail-open path a typo
+// takes.
+const layoutTimeout = 10 * time.Second
 
 // Main is the binary. The flag set is named for the binary and exits on a
 // bad flag, exactly as flag.CommandLine does, so -h prints what it always
@@ -42,12 +52,17 @@ func Main(args []string) int {
 	showVersion := fs.Bool("version", false, "print the version this binary was built from and exit")
 	fs.Parse(args)
 
+	// One deadline, derived here and threaded down: everything below draws
+	// through the one door, and the process has this long to be at it.
+	ctx, cancel := context.WithTimeout(context.Background(), layoutTimeout)
+	defer cancel()
+
 	// A theme the hook cannot read is the built-in one: the picture draws,
 	// and the session opens. Everywhere else — -dot, -png, -deltas — a bad
 	// theme is an answer.
 	var th *theme.Theme
 	if *themePath != "" {
-		loaded, err := theme.Load(*themePath)
+		loaded, err := theme.Load(ctx, *themePath)
 		if err != nil && !*hook && !*contextLine {
 			fmt.Fprintln(os.Stderr, "drawer: theme:", err)
 			return 1
@@ -62,18 +77,18 @@ func Main(args []string) int {
 	case *showVersion:
 		fmt.Println("drawer", version)
 	case *showTheme:
-		fmt.Print(r.theme.get().Source)
+		fmt.Print(r.theme.get(ctx).Source)
 	case *contextLine:
 		fmt.Print(r.sessionContext())
 	case *dotDump != "" && *pngOut != "":
 		cw, ch := parseSize(*cell, 10, 24)
-		return r.runPNG(*dotDump, *pngOut, w, term.Geom{CellW: cw, CellH: ch})
+		return r.runPNG(ctx, *dotDump, *pngOut, w, term.Geom{CellW: cw, CellH: ch})
 	case *dotDump != "":
-		return r.runDotDump(*dotDump, w, h)
+		return r.runDotDump(ctx, *dotDump, w, h)
 	case *deltaDump != "":
-		return r.runDeltas(*deltaDump, w)
+		return r.runDeltas(ctx, *deltaDump, w)
 	case *hook:
-		return r.runHook()
+		return r.runHook(ctx)
 	default:
 		fs.Usage()
 		return 2

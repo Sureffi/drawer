@@ -182,9 +182,9 @@ const (
 // Parse reads a theme from DOT declarations. The declarations are parsed
 // inside a graph of their own, and what that graph declares as its defaults
 // is the theme.
-func Parse(src string) (*Theme, error) {
+func Parse(ctx context.Context, src string) (*Theme, error) {
 	th := &Theme{Graph: map[string]string{}, Node: map[string]string{}, Edge: map[string]string{}, Source: src}
-	err := layout.Door("digraph {\n"+src+"\n}\n", func(_ context.Context, _ *graphviz.Graphviz, graph *cgraph.Graph) error {
+	err := layout.Door(ctx, "digraph {\n"+src+"\n}\n", func(_ context.Context, _ *graphviz.Graphviz, graph *cgraph.Graph) error {
 		for kind, m := range map[int]map[string]string{KindGraph: th.Graph, KindNode: th.Node, KindEdge: th.Edge} {
 			var sym *cgraph.Symbol
 			for {
@@ -207,14 +207,14 @@ func Parse(src string) (*Theme, error) {
 }
 
 // Load reads a theme file, or says what is wrong with it.
-func Load(path string) (*Theme, error) {
+func Load(ctx context.Context, path string) (*Theme, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	return Parse(string(src))
+	return Parse(ctx, string(src))
 }
 
 // Claude is Claude Code's own theme, derived from its settings and read
 // back as a theme.
-func Claude() (*Theme, error) { return Parse(ClaudeDOT()) }
+func Claude(ctx context.Context) (*Theme, error) { return Parse(ctx, ClaudeDOT()) }

@@ -23,7 +23,7 @@ func TestAFenceThatWillNotDrawSaysWhy(t *testing.T) {
 		{"will not parse", "digraph { a -> ", 90, 8, false},
 	}
 	for _, c := range cases {
-		rows := Draw(Reason(c.src, c.w, c.region), c.w, c.region)
+		rows := Draw(Reason(t.Context(), c.src, c.w, c.region), c.w, c.region)
 		if rows == nil {
 			t.Fatalf("%s: nothing drawn, and the reader learns nothing", c.name)
 		}

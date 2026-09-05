@@ -57,7 +57,7 @@ func TestPlaceholderRowsNameTheirImageOnEveryCell(t *testing.T) {
 // and set in another runs out of its box. At a known cell width the size is
 // the one that puts a glyph in a cell.
 func TestPixelTypeIsMeasuredInCourierAndSetInMonospace(t *testing.T) {
-	svg, err := RenderThemedSVG(mustTheme(t, theme.ClaudeDOT()), "digraph { a -> b }", FontPt(10), "")
+	svg, err := RenderThemedSVG(t.Context(), mustTheme(t, theme.ClaudeDOT()), "digraph { a -> b }", FontPt(10), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestPixelThemeKeepsTheModelsPaint(t *testing.T) {
 		a -> b -> c -> d
 	}`
 	th := mustTheme(t, theme.ClaudeDOT())
-	svg, err := RenderThemedSVG(th, src, 0, "")
+	svg, err := RenderThemedSVG(t.Context(), th, src, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestPixelThemeReachesEveryCluster(t *testing.T) {
 		x -> y
 	}`
 	th := mustTheme(t, theme.ClaudeDOT())
-	svg, err := RenderThemedSVG(th, src, 0, "")
+	svg, err := RenderThemedSVG(t.Context(), th, src, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,14 +141,14 @@ func TestPixelThemeReachesEveryCluster(t *testing.T) {
 // the model asked for one.
 func TestPixelBackgroundIsTheTerminalsUnlessSet(t *testing.T) {
 	th := mustTheme(t, theme.ClaudeDOT())
-	svg, err := RenderThemedSVG(th, "digraph { a -> b }", 0, "")
+	svg, err := RenderThemedSVG(t.Context(), th, "digraph { a -> b }", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(svg), `fill="white"`) || strings.Contains(string(svg), `stroke="transparent"`) {
 		t.Error("a background was painted under a graph that set none")
 	}
-	svg, err = RenderThemedSVG(th, "digraph { bgcolor=white; a -> b }", 0, "")
+	svg, err = RenderThemedSVG(t.Context(), th, "digraph { bgcolor=white; a -> b }", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +229,7 @@ func TestPixelLabelsSpaceAsDotDoes(t *testing.T) {
 // each end: the back arrow on the first half, the forward on the second.
 func TestPixelEdgeLabelSitsOnItsLine(t *testing.T) {
 	th := mustTheme(t, theme.ClaudeDOT())
-	svg, err := RenderThemedSVG(th, `digraph { a -> b [label="x", color=red, dir=both] }`, 0, "")
+	svg, err := RenderThemedSVG(t.Context(), th, `digraph { a -> b [label="x", color=red, dir=both] }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +257,7 @@ func TestPixelEdgeLabelSitsOnItsLine(t *testing.T) {
 
 // An undirected labelled edge grows no heads.
 func TestPixelUndirectedLabelGrowsNoHeads(t *testing.T) {
-	svg, err := RenderThemedSVG(mustTheme(t, theme.ClaudeDOT()), `graph { a -- b [label="x"] }`, 0, "")
+	svg, err := RenderThemedSVG(t.Context(), mustTheme(t, theme.ClaudeDOT()), `graph { a -- b [label="x"] }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func TestPixelUndirectedLabelGrowsNoHeads(t *testing.T) {
 // A labelled edge inside a cluster keeps its label in the cluster, or dot
 // would route the edge out of the cluster and back to visit it.
 func TestPixelEdgeLabelStaysInItsCluster(t *testing.T) {
-	svg, err := RenderThemedSVG(mustTheme(t, theme.ClaudeDOT()), `digraph { subgraph cluster_c { a -> b [label="x"] } c -> a }`, 0, "")
+	svg, err := RenderThemedSVG(t.Context(), mustTheme(t, theme.ClaudeDOT()), `digraph { subgraph cluster_c { a -> b [label="x"] } c -> a }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,7 +296,7 @@ func TestPixelEdgeLabelStaysInItsCluster(t *testing.T) {
 // The label of an edge that closes a cycle sits between the edge's ends,
 // and the arrow still points where the model pointed it.
 func TestPixelLabelOnABackEdgeSitsBetweenItsEnds(t *testing.T) {
-	svg, err := RenderThemedSVG(mustTheme(t, theme.ClaudeDOT()), `digraph { a -> b -> c; c -> a [label="no"] }`, 0, "")
+	svg, err := RenderThemedSVG(t.Context(), mustTheme(t, theme.ClaudeDOT()), `digraph { a -> b -> c; c -> a [label="no"] }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +327,7 @@ func TestPixelLabelOnABackEdgeSitsBetweenItsEnds(t *testing.T) {
 func TestPixelLabelsHalveRanksepAsDotDoes(t *testing.T) {
 	claude := mustTheme(t, theme.ClaudeDOT())
 	height := func(th *theme.Theme, src string) float64 {
-		svg, err := RenderThemedSVG(th, src, 0, "")
+		svg, err := RenderThemedSVG(t.Context(), th, src, 0, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -360,7 +360,7 @@ func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	th := mustTheme(t, theme.ClaudeDOT())
 	var zooms []float64
-	r := &Raster{Name: "stub", Run: func(_ []byte, zoom float64) ([]byte, error) {
+	r := &Raster{Name: "stub", Run: func(_ context.Context, _ []byte, zoom float64) ([]byte, error) {
 		zooms = append(zooms, zoom)
 		return []byte("png"), nil
 	}}
@@ -380,7 +380,7 @@ func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
 	last := func() float64 { return zooms[len(zooms)-1] }
 
 	wide := chain(6)
-	_, p, err := Cut(th, r, wide, 100, geom)
+	_, p, err := Cut(t.Context(), th, r, wide, 100, geom)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -390,7 +390,7 @@ func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
 	if last() < 1 {
 		t.Errorf("flipped top-down and still squeezed: zoom %v", last())
 	}
-	_, p, err = Cut(th, r, wide, len(rowColumnDiacritics), geom)
+	_, p, err = Cut(t.Context(), th, r, wide, len(rowColumnDiacritics), geom)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,7 +398,7 @@ func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
 		t.Errorf("a chain with room to spare was laid out %q at zoom %v; want as written at the cell's own type", p.Rankdir, last())
 	}
 
-	_, p, err = Cut(th, r, wide, 12, geom)
+	_, p, err = Cut(t.Context(), th, r, wide, 12, geom)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -407,7 +407,7 @@ func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
 	}
 
 	tall := chain(60)
-	_, p, err = Cut(th, r, tall, 100, geom)
+	_, p, err = Cut(t.Context(), th, r, tall, 100, geom)
 	if err != nil {
 		t.Fatal(err)
 	}

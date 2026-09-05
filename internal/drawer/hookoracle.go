@@ -20,6 +20,7 @@ package drawer
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -36,7 +37,7 @@ import (
 // checks what a reader would have seen against the text CC handed us.
 //
 //	drawer -deltas testdata/deltas-split-a.jsonl -size 100x40
-func (r run) runDeltas(path string, w int) int {
+func (r run) runDeltas(ctx context.Context, path string, w int) int {
 	f, err := os.Open(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "-deltas:", err)
@@ -44,7 +45,7 @@ func (r run) runDeltas(path string, w int) int {
 	}
 	defer f.Close()
 
-	emit := func(src string, indent int) []string { return r.drawBlock(src, w-indent) }
+	emit := func(src string, indent int) []string { return r.drawBlock(ctx, src, w-indent) }
 	var in, shown strings.Builder
 	var st fence.State
 	// A recording is in the order the hook processes wrote it, which is the
@@ -84,7 +85,7 @@ func (r run) runDeltas(path string, w int) int {
 	})
 	for _, p := range deltas {
 		in.WriteString(p.Delta)
-		shown.WriteString(fence.Stream(p.Delta, p.Final, &st, emit))
+		shown.WriteString(fence.Stream(ctx, p.Delta, p.Final, &st, emit))
 	}
 	if st.InFence {
 		fmt.Fprintf(os.Stderr, "-deltas: %s: stream ended with a fence still held — "+

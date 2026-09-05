@@ -25,6 +25,7 @@
 package fence
 
 import (
+	"context"
 	"regexp"
 	"strings"
 
@@ -171,7 +172,12 @@ func firstText(body string) string {
 // Held text leaves in exactly two ways: as what emit made of it, or as the
 // bytes it arrived as. There is no third exit, which is what keeps a suppressed
 // delta from becoming a lost one.
-func Stream(delta string, final bool, st *State, emit func(src string, indent int) []string) string {
+//
+// The context bounds the completeness question — which is a layout, and the
+// most-asked one, being asked of every held fence on every delta. emit
+// carries its own; the caller that supplies it has the same context in
+// hand.
+func Stream(ctx context.Context, delta string, final bool, st *State, emit func(src string, indent int) []string) string {
 	var out strings.Builder
 	st.Buf += delta
 	closer := func() (int, int) { return findLine(st.Buf, final, st.Fence.Closes) }
@@ -286,7 +292,7 @@ func Stream(delta string, final bool, st *State, emit func(src string, indent in
 		// with "yes, and here is why it is broken" on the first delta. A
 		// source that is finished and wrong is told apart at the close,
 		// where emit gets it whatever it is.
-		if src := Body(st.Held, st.Fence); layout.Complete(src) {
+		if src := Body(st.Held, st.Fence); layout.Complete(ctx, src) {
 			if rows := emitIn(st.Fence, src, emit); rows != nil {
 				out.WriteString(strings.Join(rows, "\n"))
 				st.InFence, st.Ours, st.Held = false, false, ""

@@ -20,6 +20,7 @@
 package drawer
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -43,7 +44,7 @@ func ledgerPath(session string) string {
 
 // recordPicture writes a picture into its session's ledger, once, and
 // marks the ledger with the theme it was drawn in.
-func (r run) recordPicture(p pixel.Picture) {
+func (r run) recordPicture(ctx context.Context, p pixel.Picture) {
 	if r.sess == "" {
 		return
 	}
@@ -64,7 +65,7 @@ func (r run) recordPicture(p pixel.Picture) {
 	if len(l.Pictures) > ledgerMax {
 		l.Pictures = l.Pictures[len(l.Pictures)-ledgerMax:]
 	}
-	l.Theme = pixel.ThemeSig(r.theme.get())
+	l.Theme = pixel.ThemeSig(r.theme.get(ctx))
 	if b, err := json.Marshal(l); err == nil {
 		os.WriteFile(path, b, 0o600)
 	}
@@ -73,7 +74,7 @@ func (r run) recordPicture(p pixel.Picture) {
 // repaintPictures sends every picture in a session's ledger to the terminal
 // again, in the theme in force, when that is not the theme they stand in.
 // How many were sent; none when nothing changed, or nothing was drawn.
-func (r run) repaintPictures(tty string, ras *pixel.Raster) int {
+func (r run) repaintPictures(ctx context.Context, tty string, ras *pixel.Raster) int {
 	if r.sess == "" || ras == nil {
 		return 0
 	}
@@ -86,17 +87,17 @@ func (r run) repaintPictures(tty string, ras *pixel.Raster) int {
 	if json.Unmarshal(b, &l) != nil || len(l.Pictures) == 0 {
 		return 0
 	}
-	sig := pixel.ThemeSig(r.theme.get())
+	sig := pixel.ThemeSig(r.theme.get(ctx))
 	if l.Theme == sig {
 		return 0
 	}
 	n := 0
 	for _, p := range l.Pictures {
-		svg, err := pixel.RenderThemedSVG(r.theme.get(), p.Src, pixel.FontPt(p.Geom.CellW), p.Rankdir)
+		svg, err := pixel.RenderThemedSVG(ctx, r.theme.get(ctx), p.Src, pixel.FontPt(p.Geom.CellW), p.Rankdir)
 		if err != nil {
 			continue
 		}
-		png, _, err := pixel.Fit(ras, svg, p.Cols, p.Geom)
+		png, _, err := pixel.Fit(ctx, ras, svg, p.Cols, p.Geom)
 		if err != nil {
 			continue
 		}

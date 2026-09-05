@@ -34,7 +34,7 @@ func (s *stub) emit(src string, indent int) []string {
 func TestADotFenceReachesEmitWithItsSourceAndIndent(t *testing.T) {
 	var s stub
 	var st State
-	out := Stream("  ```dot\n  digraph { a -> b }\n  ```\n", true, &st, s.emit)
+	out := Stream(t.Context(), "  ```dot\n  digraph { a -> b }\n  ```\n", true, &st, s.emit)
 	if len(s.srcs) != 1 {
 		t.Fatalf("emit was called %d times, want once", len(s.srcs))
 	}
@@ -58,7 +58,7 @@ func TestAQuotedDotFenceIsContent(t *testing.T) {
 	var s stub
 	var st State
 	in := "````\n```dot\ndigraph { a -> b }\n```\n````\n"
-	if out := Stream(in, true, &st, s.emit); out != in {
+	if out := Stream(t.Context(), in, true, &st, s.emit); out != in {
 		t.Errorf("a quoted fence was touched:\n in: %q\nout: %q", in, out)
 	}
 	if len(s.srcs) != 0 {
@@ -75,7 +75,7 @@ func TestAMarkerMidSentenceIsProse(t *testing.T) {
 	} {
 		var s stub
 		var st State
-		if out := Stream(in, true, &st, s.emit); out != in {
+		if out := Stream(t.Context(), in, true, &st, s.emit); out != in {
 			t.Errorf("prose was touched:\n in: %q\nout: %q", in, out)
 		}
 		if len(s.srcs) != 0 {
@@ -90,13 +90,13 @@ func TestAMarkerMidSentenceIsProse(t *testing.T) {
 func TestAFenceSplitOverTwoDeltasReassembles(t *testing.T) {
 	var s stub
 	var st State
-	if out := Stream("```dot\ndigraph { rankdir=LR; a -> ", false, &st, s.emit); out != "" {
+	if out := Stream(t.Context(), "```dot\ndigraph { rankdir=LR; a -> ", false, &st, s.emit); out != "" {
 		t.Errorf("half a fence was displayed: %q", out)
 	}
 	if len(s.srcs) != 0 {
 		t.Fatalf("emit was handed half a source: %q", s.srcs)
 	}
-	if out := Stream("b }\n```\n", true, &st, s.emit); out != mark+"\n" {
+	if out := Stream(t.Context(), "b }\n```\n", true, &st, s.emit); out != mark+"\n" {
 		t.Errorf("the reassembled fence was not replaced by the drawing: %q", out)
 	}
 	if len(s.srcs) != 1 || s.srcs[0] != "digraph { rankdir=LR; a -> b }" {
@@ -114,8 +114,8 @@ func TestAForeignFenceStreamsThrough(t *testing.T) {
 	var st State
 	in := "```go\nfunc main() {}\n```\nafter\n"
 	var out strings.Builder
-	out.WriteString(Stream(in[:12], false, &st, s.emit))
-	out.WriteString(Stream(in[12:], true, &st, s.emit))
+	out.WriteString(Stream(t.Context(), in[:12], false, &st, s.emit))
+	out.WriteString(Stream(t.Context(), in[12:], true, &st, s.emit))
 	if got := out.String(); got != in {
 		t.Errorf("a foreign fence was touched:\n in: %q\nout: %q", in, got)
 	}

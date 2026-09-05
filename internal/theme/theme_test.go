@@ -15,7 +15,7 @@ import (
 func TestThemeIsDOTDeclarations(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	src := ClaudeDOT()
-	th, err := Parse(src)
+	th, err := Parse(t.Context(), src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func TestThemeIsDOTDeclarations(t *testing.T) {
 	if th.Face() != "monospace" {
 		t.Errorf("face is %q with no fontname declared", th.Face())
 	}
-	if _, err := Parse("node ["); err == nil {
+	if _, err := Parse(t.Context(), "node ["); err == nil {
 		t.Error("an unclosed declaration parsed")
 	}
 }
@@ -59,7 +59,7 @@ func TestThemeFollowsClaudeCodesTheme(t *testing.T) {
 	// what the picture is drawn in: node fill, stroke, text; edge label.
 	drawn := func() string {
 		t.Helper()
-		th, err := Claude()
+		th, err := Claude(t.Context())
 		if err != nil {
 			t.Fatal(err)
 		}

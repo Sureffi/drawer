@@ -5,6 +5,7 @@
 package drawer
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -20,7 +21,7 @@ import (
 // session in the way.
 //
 //	drawer -dot graph.dot -size 100x14 -render braille
-func (r run) runDotDump(path string, w, h int) int {
+func (r run) runDotDump(ctx context.Context, path string, w, h int) int {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "-dot:", err)
@@ -28,13 +29,13 @@ func (r run) runDotDump(path string, w, h int) int {
 	}
 	var rows []string
 	if r.rung == rungBraille || r.rung == rungOctants {
-		rows = subcell.Draw(string(b), w, r.rung == rungOctants)
+		rows = subcell.Draw(ctx, string(b), w, r.rung == rungOctants)
 		if rows == nil {
 			fmt.Fprintf(os.Stderr, "-dot: will not fit in %d columns as strokes (source would be left alone)\n", w)
 			return 1
 		}
 	}
-	l, _, ok := layout.Fit(string(b), w, 0)
+	l, _, ok := layout.Fit(ctx, string(b), w, 0)
 	if ok && rows == nil {
 		rows = cells.Draw(l, w, h)
 	}
@@ -42,7 +43,7 @@ func (r run) runDotDump(path string, w, h int) int {
 		// the layout already worked the answer out; reporting only "will
 		// not fit" makes the caller hand-search for a size the tool knows
 		if l == nil {
-			l, _ = layout.DOT(string(b), "")
+			l, _ = layout.DOT(ctx, string(b), "")
 		}
 		if dw, dh := layout.Footprint(l); dw > 0 && dh > 0 {
 			fmt.Fprintf(os.Stderr, "-dot: needs %dx%d, given %dx%d (source would be left alone)\n",
@@ -62,7 +63,7 @@ func (r run) runDotDump(path string, w, h int) int {
 // cells wide with cells of `geom` pixels, and writes the picture to a file:
 // a theme, or a graph, looked at without a session. Nonzero when there is
 // no picture, with the reason on stderr.
-func (r run) runPNG(dotPath, pngPath string, width int, geom term.Geom) int {
+func (r run) runPNG(ctx context.Context, dotPath, pngPath string, width int, geom term.Geom) int {
 	src, err := os.ReadFile(dotPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "drawer:", err)
@@ -73,7 +74,7 @@ func (r run) runPNG(dotPath, pngPath string, width int, geom term.Geom) int {
 		fmt.Fprintln(os.Stderr, "drawer: no rasteriser on the PATH (rsvg-convert or magick)")
 		return 1
 	}
-	png, p, err := pixel.Cut(r.theme.get(), ras, string(src), width, geom)
+	png, p, err := pixel.Cut(ctx, r.theme.get(ctx), ras, string(src), width, geom)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "drawer:", err)
 		return 1

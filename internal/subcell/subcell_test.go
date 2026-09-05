@@ -13,7 +13,7 @@ import (
 // stroke — the outline of an ellipse passes around them, and an edge
 // label interrupts its own edge the way the cell renderer's do.
 func TestSubcellLabelsAreGlyphsOverClearedStrokes(t *testing.T) {
-	rows := Draw("digraph { rankdir=LR; alpha -> beta [label=\"go\"] }\n", 90, false)
+	rows := Draw(t.Context(), "digraph { rankdir=LR; alpha -> beta [label=\"go\"] }\n", 90, false)
 	if rows == nil {
 		t.Fatal("nothing drawn")
 	}
@@ -43,7 +43,7 @@ func TestSubcellLabelsAreGlyphsOverClearedStrokes(t *testing.T) {
 // so the law checks that they were read rather than what they looked like.
 func TestSubcellReadsClustersAndStyles(t *testing.T) {
 	src := "digraph { rankdir=LR; subgraph cluster_a { label=\"front\"; ui -> store }; store -> api [style=dashed]; api -> db [dir=both] }\n"
-	jg, _, _, ok := fitInk(src, 100, 0)
+	jg, _, _, ok := fitInk(t.Context(), src, 100, 0)
 	if !ok {
 		t.Fatal("layout failed")
 	}

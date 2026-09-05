@@ -21,16 +21,27 @@ import (
 	"github.com/sureffi/drawer/internal/grid"
 )
 
-// Door is the one way through to graphviz: it opens a context, parses the
-// source and hands the graph to fn, closing everything after it. A source
-// with no graph in it parses to (nil, nil): graphviz reports nothing wrong
-// because nothing was asked of it. Every caller dereferences the result, so
-// the nil dies here — an empty ```dot fence is one the model opened and
-// closed, not a diagram. graphviz.New registers into package-level maps and
-// two at once are a fatal error; nothing here runs two, the hook being one
-// process per delta. A layout measures about a millisecond.
-func Door(src string, fn func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error) error {
-	ctx := context.Background()
+// Door is the one way through to graphviz: it parses the source under the
+// caller's context and hands the graph to fn, closing everything after it.
+// A source with no graph in it parses to (nil, nil): graphviz reports
+// nothing wrong because nothing was asked of it. Every caller dereferences
+// the result, so the nil dies here — an empty ```dot fence is one the model
+// opened and closed, not a diagram. graphviz.New registers into
+// package-level maps and two at once are a fatal error; nothing here runs
+// two, the hook being one process per delta. A layout measures about a
+// millisecond.
+//
+// The context is spent at the door and nowhere deeper. Measured on
+// go-graphviz v0.2.10: New, ParseBytes and Render all run a cancelled
+// context to completion and hand back an answer, so a layout already under
+// way cannot be called off — the wasm runs to its end. What a deadline
+// therefore buys is that the next layout does not start, which for a caller
+// laying out two orientations or a session's worth of pictures is the
+// difference between late and never.
+func Door(ctx context.Context, src string, fn func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	g, err := graphviz.New(ctx)
 	if err != nil {
 		return err
@@ -119,9 +130,9 @@ const (
 //
 // force overrides the orientation the source asked for; empty leaves the
 // author's choice alone.
-func DOT(src string, force cgraph.RankDir) (*Plain, error) {
+func DOT(ctx context.Context, src string, force cgraph.RankDir) (*Plain, error) {
 	var l *Plain
-	err := Door(src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
+	err := Door(ctx, src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
 		rd := force
 		if rd == "" {
 			rd = RankdirOf(src)
@@ -318,9 +329,9 @@ func Footprint(l *Plain) (w, h int) {
 // out, and the drawing that follows needs exactly that layout; running
 // graphviz a second time to rediscover what this call already knows would
 // be the plainest waste in the file.
-func Fit(src string, width, maxRows int) (*Plain, int, bool) {
+func Fit(ctx context.Context, src string, width, maxRows int) (*Plain, int, bool) {
 	for _, rd := range Orientations(src) {
-		l, err := DOT(src, rd)
+		l, err := DOT(ctx, src, rd)
 		if err != nil {
 			continue
 		}
@@ -338,7 +349,7 @@ func Fit(src string, width, maxRows int) (*Plain, int, bool) {
 
 // Complete says whether a source is a whole graph: graphviz reads it, and
 // there is a graph in it.
-func Complete(src string) bool {
-	l, err := DOT(src, "")
+func Complete(ctx context.Context, src string) bool {
+	l, err := DOT(ctx, src, "")
 	return err == nil && l != nil
 }

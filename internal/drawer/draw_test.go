@@ -57,7 +57,7 @@ func TestPickRungReadsTheTerminal(t *testing.T) {
 func TestDrawModeEmitsABareFenceThatFits(t *testing.T) {
 	r := run{rung: rungCells, theme: &inForce{}}
 	src := "digraph { rankdir=LR; parse -> check -> emit; check -> warn }\n"
-	rows := r.drawBlock(src, 90)
+	rows := r.drawBlock(t.Context(), src, 90)
 	if rows == nil {
 		t.Fatal("nothing drawn")
 	}
@@ -84,7 +84,7 @@ func TestDrawModeNoticeKeepsTheSourceInOneFence(t *testing.T) {
 	r := run{rung: rungCells, theme: &inForce{}}
 	// a label wider than the window: no orientation can save it
 	src := "digraph { rankdir=LR; alpha -> \"a label far wider than thirty columns of window\" }\n"
-	rows := r.drawBlock(src, 30)
+	rows := r.drawBlock(t.Context(), src, 30)
 	if rows == nil {
 		t.Fatal("a too-narrow window produced nothing, not even a reason")
 	}

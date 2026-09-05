@@ -15,7 +15,7 @@ import (
 // back. Claude Code's own is mustTheme(t, theme.ClaudeDOT()).
 func mustTheme(t *testing.T, src string) *theme.Theme {
 	t.Helper()
-	th, err := theme.Parse(src)
+	th, err := theme.Parse(t.Context(), src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func mustTheme(t *testing.T, src string) *theme.Theme {
 func TestThemeFileReachesThePicture(t *testing.T) {
 	th := mustTheme(t, `node [fillcolor="#7aa2f71f", fontname="JetBrains Mono"]
 	                    edge [color=red]`)
-	svg, err := RenderThemedSVG(th, "digraph { a -> b }", 0, "")
+	svg, err := RenderThemedSVG(t.Context(), th, "digraph { a -> b }", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestThemeFileReachesThePicture(t *testing.T) {
 // built-in one.
 func TestThemeFileYieldsToTheModel(t *testing.T) {
 	th := mustTheme(t, `node [fillcolor="#000000", color="#111111"]`)
-	svg, err := RenderThemedSVG(th, "digraph { a [color=red]; a -> b }", 0, "")
+	svg, err := RenderThemedSVG(t.Context(), th, "digraph { a [color=red]; a -> b }", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}

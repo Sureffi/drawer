@@ -35,7 +35,7 @@ func walled(row, label string) bool {
 // One ruler. Measuring a label in bytes and its box in runes drew the box
 // one cell short and ate its own left border.
 func TestLabelKeepsItsBox(t *testing.T) {
-	l, h, ok := layout.Fit("digraph { rankdir=LR; \"käyttö\" -> \"sivu\" }\n", 100, 0)
+	l, h, ok := layout.Fit(t.Context(), "digraph { rankdir=LR; \"käyttö\" -> \"sivu\" }\n", 100, 0)
 	if !ok {
 		t.Fatal("layout failed")
 	}
@@ -52,7 +52,7 @@ func TestLabelKeepsItsBox(t *testing.T) {
 // rasteriser, so every row carrying one came out wider than the box drawn
 // around it — right by the ruler, crooked on screen.
 func TestWideLabelKeepsItsColumns(t *testing.T) {
-	l, h, ok := layout.Fit(`digraph { rankdir=LR; "日本語" -> "ok" }`+"\n", 100, 0)
+	l, h, ok := layout.Fit(t.Context(), `digraph { rankdir=LR; "日本語" -> "ok" }`+"\n", 100, 0)
 	if !ok {
 		t.Fatal("layout failed")
 	}
@@ -78,7 +78,7 @@ func TestWideLabelKeepsItsColumns(t *testing.T) {
 // everything else turned a label of `a\nb` into `anb` — a word nobody
 // wrote, drawn with full confidence. Absent is survivable; invented is not.
 func TestLabelEscapesAreNotEaten(t *testing.T) {
-	l, h, ok := layout.Fit(`digraph { rankdir=LR; A[label="a\nb"]; A -> B }`+"\n", 100, 0)
+	l, h, ok := layout.Fit(t.Context(), `digraph { rankdir=LR; A[label="a\nb"]; A -> B }`+"\n", 100, 0)
 	if !ok {
 		t.Fatal("layout failed")
 	}
@@ -93,7 +93,7 @@ func TestLabelEscapesAreNotEaten(t *testing.T) {
 // text looks like a number dropped every numeric one. graphviz had already
 // answered by how many fields it wrote.
 func TestNumericEdgeLabelDraws(t *testing.T) {
-	l, h, ok := layout.Fit(`digraph { rankdir=LR; A -> B [label="42"] }`+"\n", 100, 0)
+	l, h, ok := layout.Fit(t.Context(), `digraph { rankdir=LR; A -> B [label="42"] }`+"\n", 100, 0)
 	if !ok {
 		t.Fatal("layout failed")
 	}
@@ -108,7 +108,7 @@ func TestNumericEdgeLabelDraws(t *testing.T) {
 // end literally left a cell of white between every arrow and its target.
 // The boxes are ours; where they are is not something to infer.
 func TestArrowMeetsItsBox(t *testing.T) {
-	l, h, ok := layout.Fit("digraph { rankdir=LR; wire -> grid -> paint }\n", 100, 0)
+	l, h, ok := layout.Fit(t.Context(), "digraph { rankdir=LR; wire -> grid -> paint }\n", 100, 0)
 	if !ok {
 		t.Fatal("layout failed")
 	}
@@ -133,7 +133,7 @@ func TestALeavingEdgeJoinsItsWall(t *testing.T) {
 	// b's tail edge back to a has to leave b and cross the whole drawing,
 	// which is what pushes its port onto a border row.
 	src := "digraph { rankdir=LR; a -> b; a -> c; c -> d; d -> b; b -> a }\n"
-	l, h, ok := layout.Fit(src, 100, 40)
+	l, h, ok := layout.Fit(t.Context(), src, 100, 40)
 	if !ok {
 		t.Fatal("layout failed")
 	}
@@ -162,7 +162,7 @@ func TestALeavingEdgeJoinsItsWall(t *testing.T) {
 // "accent": right width, wrong word, and nothing anywhere said so.
 func TestDiagramLabelKeepsItsCombiningMarks(t *testing.T) {
 	const decomposed = "áccent" // á, spelled as base + mark
-	l, h, ok := layout.Fit("digraph { rankdir=LR\n x [label=\""+decomposed+"\"]\n x -> y\n}", 100, 40)
+	l, h, ok := layout.Fit(t.Context(), "digraph { rankdir=LR\n x [label=\""+decomposed+"\"]\n x -> y\n}", 100, 40)
 	if !ok {
 		t.Fatal("the graph did not lay out")
 	}
@@ -186,7 +186,7 @@ func TestDiagramLabelKeepsItsCombiningMarks(t *testing.T) {
 // read as left-right and collapse onto its root's row.
 func TestTopDownTreeKeepsItsRanks(t *testing.T) {
 	src := "digraph { rankdir=TB; root -> parser; root -> checker; root -> emitter; parser -> lexer; parser -> ast; checker -> types; checker -> scopes; emitter -> ir; emitter -> asm }\n"
-	l, h, ok := layout.Fit(src, 116, 0)
+	l, h, ok := layout.Fit(t.Context(), src, 116, 0)
 	if !ok {
 		t.Fatal("layout failed")
 	}
@@ -210,7 +210,7 @@ func TestTopDownTreeKeepsItsRanks(t *testing.T) {
 
 // A `graph { a -- b }` has no heads to draw.
 func TestUndirectedGraphHasNoArrowheads(t *testing.T) {
-	l, h, ok := layout.Fit("graph { rankdir=LR; a -- b -- c }\n", 80, 0)
+	l, h, ok := layout.Fit(t.Context(), "graph { rankdir=LR; a -- b -- c }\n", 80, 0)
 	if !ok {
 		t.Fatal("layout failed")
 	}
@@ -244,7 +244,7 @@ const corpusLR = `digraph { rankdir=LR
 
 func renderOf(t *testing.T, src string, w int) []string {
 	t.Helper()
-	l, h, ok := layout.Fit(src+"\n", w, 0)
+	l, h, ok := layout.Fit(t.Context(), src+"\n", w, 0)
 	if !ok {
 		t.Fatal("layout failed")
 	}

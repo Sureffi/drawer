@@ -90,9 +90,9 @@ const (
 )
 
 // layoutInk runs graphviz and reads back what it would have drawn.
-func layoutInk(src string, force cgraph.RankDir) (*jgraph, error) {
+func layoutInk(ctx context.Context, src string, force cgraph.RankDir) (*jgraph, error) {
 	var jg jgraph
-	err := layout.Door(src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
+	err := layout.Door(ctx, src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
 		rd := force
 		if rd == "" {
 			rd = layout.RankdirOf(src)
@@ -148,9 +148,9 @@ func inkFootprint(jg *jgraph) (cols, rows int) {
 
 // fitInk is layout.Fit for this renderer: as written, then top-down, the
 // first that fits the width and the height wins.
-func fitInk(src string, width, maxRows int) (*jgraph, int, int, bool) {
+func fitInk(ctx context.Context, src string, width, maxRows int) (*jgraph, int, int, bool) {
 	for _, rd := range layout.Orientations(src) {
-		jg, err := layoutInk(src, rd)
+		jg, err := layoutInk(ctx, src, rd)
 		if err != nil {
 			continue
 		}
@@ -557,8 +557,8 @@ func renderInk(jg *jgraph, cols, rows int, octants bool) []string {
 
 // Draw is the braille and octant rung: rows, or nil when nothing fits and
 // the caller steps down.
-func Draw(src string, width int, octants bool) []string {
-	jg, cols, rows, ok := fitInk(src, width, grid.MaxRows)
+func Draw(ctx context.Context, src string, width int, octants bool) []string {
+	jg, cols, rows, ok := fitInk(ctx, src, width, grid.MaxRows)
 	if !ok {
 		return nil
 	}

@@ -15,6 +15,7 @@
 package pixel
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -59,7 +60,7 @@ type Picture struct {
 // rows; top-down it keeps 0.97 in 56. An error is a picture that will
 // not fit either way — too narrow to be anything, or taller than
 // grid.MaxRows.
-func Cut(th *theme.Theme, r *Raster, src string, width int, geom term.Geom) ([]byte, Picture, error) {
+func Cut(ctx context.Context, th *theme.Theme, r *Raster, src string, width int, geom term.Geom) ([]byte, Picture, error) {
 	if r == nil || !geom.OK() {
 		return nil, Picture{}, errors.New("no rasteriser or no cell size")
 	}
@@ -71,7 +72,7 @@ func Cut(th *theme.Theme, r *Raster, src string, width int, geom term.Geom) ([]b
 	rd := cgraph.RankDir("")
 	var last error
 	for _, try := range layout.Orientations(src) {
-		s, err := RenderThemedSVG(th, src, FontPt(geom.CellW), try)
+		s, err := RenderThemedSVG(ctx, th, src, FontPt(geom.CellW), try)
 		if err != nil {
 			return nil, Picture{}, err
 		}
@@ -95,7 +96,7 @@ func Cut(th *theme.Theme, r *Raster, src string, width int, geom term.Geom) ([]b
 	if svg == nil {
 		return nil, Picture{}, last
 	}
-	png, rows, err := Fit(r, svg, cols, geom)
+	png, rows, err := Fit(ctx, r, svg, cols, geom)
 	if err != nil {
 		return nil, Picture{}, err
 	}
@@ -128,12 +129,12 @@ func pixelZoom(svg []byte, cols int, geom term.Geom) (float64, int, error) {
 
 // Fit rasterises a laid-out picture into a block `cols` wide, at the zoom
 // pixelZoom chose: the pixels, and the rows they stand on.
-func Fit(r *Raster, svg []byte, cols int, geom term.Geom) ([]byte, int, error) {
+func Fit(ctx context.Context, r *Raster, svg []byte, cols int, geom term.Geom) ([]byte, int, error) {
 	zoom, rows, err := pixelZoom(svg, cols, geom)
 	if err != nil {
 		return nil, 0, err
 	}
-	png, err := r.Run(svg, zoom)
+	png, err := r.Run(ctx, svg, zoom)
 	if err != nil {
 		return nil, 0, err
 	}

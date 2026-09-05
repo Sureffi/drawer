@@ -41,10 +41,11 @@ import (
 // Raster is the rasteriser this machine actually has: a name, and the one
 // call it can make. A func rather than a command line so a law can stand in
 // a stub and read the zoom it was asked for, with no rasteriser anywhere in
-// the loop.
+// the loop. The call takes the caller's context because it is another
+// process, and the one thing in this tree most able to hang.
 type Raster struct {
 	Name string
-	Run  func(svg []byte, zoom float64) ([]byte, error)
+	Run  func(ctx context.Context, svg []byte, zoom float64) ([]byte, error)
 }
 
 // Probe answers whether pixels are possible here: the terminal is kitty
@@ -60,16 +61,16 @@ func Probe() *Raster {
 // that is going to a file rather than a screen.
 func Find() *Raster {
 	if p, err := exec.LookPath("rsvg-convert"); err == nil {
-		return &Raster{Name: "rsvg-convert", Run: func(svg []byte, zoom float64) ([]byte, error) {
-			return rasterExec(p, svg, "--zoom", strconv.FormatFloat(zoom, 'f', 4, 64))
+		return &Raster{Name: "rsvg-convert", Run: func(ctx context.Context, svg []byte, zoom float64) ([]byte, error) {
+			return rasterExec(ctx, p, svg, "--zoom", strconv.FormatFloat(zoom, 'f', 4, 64))
 		}}
 	}
 	if p, err := exec.LookPath("magick"); err == nil {
 		// magick has no --zoom: it rasterises SVG at a density, and 96dpi is
 		// the density rsvg renders at unzoomed, so the same number means the
 		// same picture on either.
-		return &Raster{Name: "magick", Run: func(svg []byte, zoom float64) ([]byte, error) {
-			return rasterExec(p, svg, "-background", "none",
+		return &Raster{Name: "magick", Run: func(ctx context.Context, svg []byte, zoom float64) ([]byte, error) {
+			return rasterExec(ctx, p, svg, "-background", "none",
 				"-density", strconv.FormatFloat(96*zoom, 'f', 2, 64), "svg:-", "png:-")
 		}}
 	}
@@ -78,7 +79,9 @@ func Find() *Raster {
 
 // A rasteriser is another process on somebody else's machine: it can hang,
 // it can hand back a gigabyte, it can be a shell script. Bound both ends and
-// read anything outside them as no picture at all.
+// read anything outside them as no picture at all. This bound is its own,
+// under whatever the caller's context already allows: two seconds is what a
+// rasteriser gets, and never more than what is left of the draw.
 const (
 	rasterTimeout = 2 * time.Second
 	rasterMaxPNG  = 4 << 20
@@ -87,8 +90,8 @@ const (
 	rasterMaxZoom = 8.0
 )
 
-func rasterExec(bin string, svg []byte, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), rasterTimeout)
+func rasterExec(ctx context.Context, bin string, svg []byte, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, rasterTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Stdin = bytes.NewReader(svg)
@@ -155,9 +158,9 @@ func FontPt(cellW int) float64 {
 //
 // force overrides the orientation the source asked for; empty leaves the
 // author's choice alone.
-func RenderThemedSVG(th *theme.Theme, src string, fontPt float64, force cgraph.RankDir) ([]byte, error) {
+func RenderThemedSVG(ctx context.Context, th *theme.Theme, src string, fontPt float64, force cgraph.RankDir) ([]byte, error) {
 	var svg []byte
-	err := layout.Door(src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
+	err := layout.Door(ctx, src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
 		if force != "" {
 			graph.SetRankDir(force)
 		}

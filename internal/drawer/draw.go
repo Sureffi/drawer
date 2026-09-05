@@ -24,6 +24,7 @@
 package drawer
 
 import (
+	"context"
 	"strings"
 
 	"github.com/sureffi/drawer/internal/cells"
@@ -39,23 +40,23 @@ import (
 // to leave the fence exactly as it arrived. A fence that will not draw at
 // this width still says why: the notice rides above the source, so a typo
 // and a narrow window stop looking alike.
-func (r run) drawBlock(src string, width int) []string {
+func (r run) drawBlock(ctx context.Context, src string, width int) []string {
 	if width <= 0 {
 		width = 100
 	}
 	pick := r.pickRung()
 	if pick == rungPixels {
-		if rows := r.drawPixels(src, width); rows != nil {
+		if rows := r.drawPixels(ctx, src, width); rows != nil {
 			return bare(rows)
 		}
 		pick = rungOctants // cairo said no; the glyphs still can
 	}
 	if pick == rungOctants || pick == rungBraille {
-		if rows := subcell.Draw(src, width, pick == rungOctants); rows != nil {
+		if rows := subcell.Draw(ctx, src, width, pick == rungOctants); rows != nil {
 			return bare(rows)
 		}
 	}
-	l, h, ok := layout.Fit(src, width, 0)
+	l, h, ok := layout.Fit(ctx, src, width, 0)
 	if ok && h <= grid.MaxRows {
 		if rows := cells.Draw(l, width, h); rows != nil {
 			return bare(grid.TrimBlank(rows))
@@ -65,7 +66,7 @@ func (r run) drawBlock(src string, width int) []string {
 	// notice, in the same fence: one fence in, one fence out is the law the
 	// oracle holds the wire to, and a reader gets both the reason and the
 	// DOT it was about.
-	reason := notice.Reason(src, width, grid.MaxRows)
+	reason := notice.Reason(ctx, src, width, grid.MaxRows)
 	box := notice.Draw(reason, width, 8)
 	if box == nil {
 		return nil

@@ -11,6 +11,7 @@
 package notice
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -93,8 +94,8 @@ func wrapWords(s string, width int) []string {
 // column count that does it rather than the row count that failed.
 //
 // Asked only on the failing path: it lays the graph out again to find out.
-func Reason(src string, width, region int) string {
-	l, err := layout.DOT(src, "")
+func Reason(ctx context.Context, src string, width, region int) string {
+	l, err := layout.DOT(ctx, src, "")
 	if err != nil {
 		return "graphviz could not read this: " + firstLine(err.Error())
 	}
@@ -106,7 +107,7 @@ func Reason(src string, width, region int) string {
 		return "nothing to draw"
 	}
 	th := 0
-	if td, err := layout.DOT(src, cgraph.TBRank); err == nil && td != nil {
+	if td, err := layout.DOT(ctx, src, cgraph.TBRank); err == nil && td != nil {
 		if tw, h := layout.Footprint(td); tw > 0 && tw <= width {
 			th = h
 		}

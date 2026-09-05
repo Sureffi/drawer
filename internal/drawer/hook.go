@@ -17,6 +17,7 @@ package drawer
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -88,7 +89,7 @@ func (r run) teePayload(raw []byte) {
 // runHook is the whole of the -hook entry point: one payload in, one
 // replacement out, through drawBlock. Any failure prints an empty object,
 // which CC reads as "display the original".
-func (r run) runHook() int {
+func (r run) runHook(ctx context.Context) int {
 	raw, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		fmt.Print("{}")
@@ -105,13 +106,13 @@ func (r run) runHook() int {
 	// The first delta of a message is the first thing the hook hears after
 	// a theme switch; ledger.go says why, and what is repainted.
 	if in.Index == 0 && r.pickRung() == rungPixels {
-		r.repaintPictures(term.TTYOut(), pixel.Probe())
+		r.repaintPictures(ctx, term.TTYOut(), pixel.Probe())
 	}
 	st, done := takeTurn(in.MessageID, in.Index, turnPatience)
 	defer done()
 	before := st
-	text := fence.Stream(in.Delta, in.Final, &st, func(src string, indent int) []string {
-		return r.drawBlock(src, width-indent)
+	text := fence.Stream(ctx, in.Delta, in.Final, &st, func(src string, indent int) []string {
+		return r.drawBlock(ctx, src, width-indent)
 	})
 	st.Next = max(st.Next, in.Index+1)
 	saveState(in.MessageID, st, in.Final)

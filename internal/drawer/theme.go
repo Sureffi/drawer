@@ -12,6 +12,7 @@
 package drawer
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -20,9 +21,9 @@ import (
 
 type inForce struct{ th *theme.Theme }
 
-func (f *inForce) get() *theme.Theme {
+func (f *inForce) get(ctx context.Context) *theme.Theme {
 	if f.th == nil {
-		th, err := theme.Claude()
+		th, err := theme.Claude(ctx)
 		if err != nil {
 			// The DOT being parsed here was built a package away out of a
 			// fixed palette, so it not parsing is a bug in this tree and
