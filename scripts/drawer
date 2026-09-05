@@ -15,7 +15,7 @@
 #                      so a rebuild is live in the next reply
 #   shipped            scripts/bin/drawer-OS-ARCH: the release zip
 #   downloaded         the release binary for this OS and ARCH, sha256
-#                      pinned below by release.sh
+#                      pinned below by scripts/release.sh
 #   built              go build, where Go is on the PATH: a checkout with
 #                      no release for this platform, or none reachable
 #
@@ -31,7 +31,7 @@
 # The binary is exec'd, never run as a child: it reads the terminal's size
 # through its parent, and its parent has to be claude.
 
-# release: rewritten by release.sh; the pins for this version's binaries.
+# release: rewritten by scripts/release.sh; the pins for this version's binaries.
 release=0.1.0
 release_url=https://github.com/sureffi/drawer/releases/download
 sha_darwin_amd64=2c1d7e5638cf03637e16b531cd16635dcefe0bb1eafbb22667ff3933c4f80102
@@ -73,8 +73,8 @@ sha256() {
 	fi
 }
 
-# checkout: bin/drawer beside go.mod, linked, so check.sh's build is what
-# the next reply runs.
+# checkout: bin/drawer beside go.mod, linked, so what scripts/check.sh
+# builds is what the next reply runs.
 from_checkout() {
 	[ -f "$root/go.mod" ] && [ -x "$root/bin/drawer" ] || return 1
 	rm -f "$bin" && ln -s "$root/bin/drawer" "$bin" && printf 'checkout\n' >"$stamp"
@@ -104,7 +104,7 @@ from_release() {
 
 from_build() {
 	[ -f "$root/go.mod" ] && command -v go >/dev/null 2>&1 || return 1
-	if (cd "$root" && go build -o "$bin.$$" .) >&2; then
+	if (cd "$root" && go build -o "$bin.$$" ./cmd/drawer) >&2; then
 		place "$bin.$$" "built"
 	else
 		rm -f "$bin.$$"

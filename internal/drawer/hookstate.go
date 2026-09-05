@@ -18,7 +18,7 @@
 // A turn nobody takes is waited for only so long, then taken anyway,
 // which is the old behaviour and its old hazard.
 
-package main
+package drawer
 
 import (
 	"encoding/json"

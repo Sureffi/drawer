@@ -12,4 +12,4 @@ jobs:
         with:
           go-version-file: go.mod
       - run: sudo apt-get update -q && sudo apt-get install -y -q librsvg2-bin
-      - run: ./check.sh
+      - run: scripts/check.sh

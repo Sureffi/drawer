@@ -1,5 +1,5 @@
 #!/bin/sh
-# release.sh VERSION — the release, as one command.
+# scripts/release.sh VERSION — the release, as one command.
 #
 # Four binaries, a checksums file, the plugin zipped with all four inside,
 # and the repo's own marketplace pointed at the zip: what a stranger's
@@ -13,14 +13,14 @@
 # into the wrapper, the wrapper goes into the zip, the zip's sum goes into
 # the marketplace, and the commit carries all three.
 #
-#   ./release.sh 0.2.0                   # build, rewrite, commit, tag, push, release
-#   DRAWER_RELEASE_DRY=1 ./release.sh 0.2.0   # build and rewrite; no git, no gh
+#   scripts/release.sh 0.2.0             # build, rewrite, commit, tag, push, release
+#   DRAWER_RELEASE_DRY=1 scripts/release.sh 0.2.0   # build and rewrite; no git, no gh
 #
 # Needs: go, gh (logged in), and a clean tree on main. A dry run leaves the
 # rewritten files in the tree for reading; `git checkout` takes them back.
 set -e
-cd "$(dirname "$0")"
-v=${1:?usage: release.sh VERSION}
+cd "$(dirname "$0")/.."
+v=${1:?usage: scripts/release.sh VERSION}
 dry=${DRAWER_RELEASE_DRY:-}
 repo=sureffi/drawer
 url=https://github.com/$repo/releases/download/v$v
@@ -44,7 +44,7 @@ for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
 	os=${t%/*}
 	arch=${t#*/}
 	CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags='-s -w' \
-		-o "dist/drawer-$os-$arch" .
+		-o "dist/drawer-$os-$arch" ./cmd/drawer
 	echo "built drawer-$os-$arch $(du -h "dist/drawer-$os-$arch" | cut -f1)"
 done
 (cd dist && for f in drawer-*; do echo "$(sha256 "$f")  $f"; done >checksums.txt)

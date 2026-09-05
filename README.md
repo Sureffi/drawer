@@ -224,27 +224,27 @@ plugin's data directory itself, at the first session, by the first of
 four ways that works: a built checkout's `bin/drawer`, linked, so a
 rebuild is live at the next reply; the binaries the release zip carries,
 one per platform; the release binary downloaded for this platform and
-checked against the sum `release.sh` pinned in the script; or `go build`,
-where Go is on the PATH. A stranger's install is the zip. A checkout that
-arrived by git — an organisation pushing the plugin to its people can only
-point at git — downloads the same binary the zip would have carried. Until
-one of the four lands, both hooks fail open: a session without the line is
-a fence that shows its source. The script execs the binary rather than
-running it, because the binary reads the terminal's size as its parent's,
-and its parent has to be `claude`. The hook wire is Unix through and
-through and Windows does not build.
+checked against the sum `scripts/release.sh` pinned in the script; or
+`go build`, where Go is on the PATH. A stranger's install is the zip. A
+checkout that arrived by git — an organisation pushing the plugin to its
+people can only point at git — downloads the same binary the zip would
+have carried. Until one of the four lands, both hooks fail open: a
+session without the line is a fence that shows its source. The script
+execs the binary rather than running it, because the binary reads the
+terminal's size as its parent's, and its parent has to be `claude`. The
+hook wire is Unix through and through and Windows does not build.
 
 Install from the checkout: `/plugin marketplace add /path/to/drawer` then
 `/plugin install drawer@drawer`. Claude Code copies the tree into its cache
 but runs the hooks with the checkout as the plugin root (measured on
 2.1.261: the data directory's link points into the checkout), so the
-checkout's `bin/drawer` is what the next reply runs and `./check.sh`
+checkout's `bin/drawer` is what the next reply runs and `scripts/check.sh`
 rebuilds it. A change to the script or the manifests is safest
 reinstalled. A checkout loaded with `--plugin-dir` beside an installed
 plugin is two hooks on every delta sharing the state files, and a fence
 split across deltas comes out doubled.
 
-`./check.sh` is every oracle in one command: the build, vet, the laws
+`scripts/check.sh` is every oracle in one command: the build, vet, the laws
 under `-race`, every rung on a fixture, the theme files, the plugin's
 manifests and wrapper, and the recorded delta streams replayed. Offline:
 
@@ -258,39 +258,32 @@ for byte, every fence must come back untouched or as one drawn block that
 fits its width, and a notice must carry the source it is about. A live
 session writes its own fixture with `DRAWER_TEE`.
 
-`./release.sh VERSION` is the release as one command: four binaries, a
-checksums file, the plugin zipped with all four inside, the sums pinned
-into the script, the marketplace pointed at the zip, commit, tag, push,
-GitHub release.
+`scripts/release.sh VERSION` is the release as one command: four
+binaries, a checksums file, the plugin zipped with all four inside, the
+sums pinned into the script, the marketplace pointed at the zip, commit,
+tag, push, GitHub release.
 
-**The tree.** One binary, one package.
+**The tree.** One binary; ten packages under `internal/`, and every import
+points down this list.
 
-    main.go          the flags, and the entry
-    fence.go         the transducer: a fence in, a drawing or the same bytes out
-    hook.go          the MessageDisplay wire: the payload, the width, the context line
-    hookstate.go     what one delta's process leaves for the next
-    hookoracle.go    -deltas: the three laws a replay is held to
-    hooktty_*.go     the parent's terminal, by platform
-    draw.go          the rungs, best first, each failing open to the next
-    layout.go        graphviz: the one door, and the scale from inches to cells
-    cells.go         the cells rung: a canvas of box-drawing characters
-    route.go         the cells rung: edges routed on the grid
-    notice.go        why there is no drawing, drawn
-    subcell.go       the braille and octant rung
-    octants.go       the octant glyphs, by their bits
-    pixel.go         the pixels rung: the rasteriser, the themed SVG, the placeholders
-    pixelhook.go     the pixels rung in the hook: the cut, and the file down the tty
-    pixellabel.go    an edge label on its line, by rewriting the graph
-    pixelledger.go   the pictures a session drew, repainted at a theme switch
-    theme.go         Claude Code's theme, and a theme file
-    cli.go           -dot and -png, offline
-    scripts/drawer   the plugin's two hooks, one script
+    cmd/drawer/          the binary: os.Exit(drawer.Main(os.Args[1:]))
+    internal/drawer      the flags, the hook wire, the ladder of rungs, the ledger
+    internal/pixel       the pixels rung: the rasteriser, the themed SVG, the cut, the placeholders
+    internal/theme       Claude Code's theme, and a theme file
+    internal/subcell     the braille and octant rung, and the octant glyphs
+    internal/cells       the cells rung: a canvas of box-drawing characters, and edges routed on it
+    internal/notice      why there is no drawing, drawn
+    internal/fence       the transducer: a fence in, a drawing or the same bytes out
+    internal/layout      graphviz: the one door, and the scale from inches to cells
+    internal/grid        a row of terminal cells, and what text costs in one
+    internal/term        the parent's terminal: how big it is, and where its output goes
+    scripts/drawer       the plugin's two hooks, one script
+    scripts/check.sh     every oracle, one command
+    scripts/release.sh   the release, one command
     hooks/ .claude-plugin/   the plugin's manifests
-    themes/          two theme files to start from
-    demo/            the session the README shows, as gif and mp4, and how it was made
-    testdata/        a graph, and the recorded delta streams -deltas replays
-    check.sh         every oracle, one command
-    release.sh       the release, one command
+    themes/              two theme files to start from
+    demo/                the session the README shows, as gif and mp4, and how it was made
+    testdata/            a graph, and the recorded delta streams -deltas replays
 
 ## license
 

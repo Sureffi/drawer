@@ -1,4 +1,4 @@
-// pixelcut.go — the picture goes round Claude Code, not through it.
+// cut.go — the picture goes round Claude Code, not through it.
 //
 // The hook writes the PNG to a temp file and hands the terminal one short
 // escape naming that file, straight down the parent's own tty via /proc.

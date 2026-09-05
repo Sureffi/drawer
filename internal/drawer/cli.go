@@ -2,7 +2,7 @@
 // pty and no live session, which is deliberate: this feature cost a lot of
 // live calls to debug before they existed.
 
-package main
+package drawer
 
 import (
 	"fmt"
@@ -14,15 +14,6 @@ import (
 	"github.com/sureffi/drawer/internal/subcell"
 	"github.com/sureffi/drawer/internal/term"
 )
-
-// parseSize reads WxH, or hands back the default.
-func parseSize(s string, dw, dh int) (int, int) {
-	var w, h int
-	if n, _ := fmt.Sscanf(s, "%dx%d", &w, &h); n == 2 && w > 0 && h > 0 {
-		return w, h
-	}
-	return dw, dh
-}
 
 // runDotDump draws a DOT source at a given cell size and prints it — the
 // fast loop for judging how a diagram actually reads, without a live

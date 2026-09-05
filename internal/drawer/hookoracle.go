@@ -1,4 +1,4 @@
-package main
+package drawer
 
 // The oracle for the hook wire. Not a golden file: the laws below are
 // checked against the input the fixture carries, so a fixture cannot bless

@@ -3,7 +3,8 @@
 //
 // These exist to show that each design actually kills the class of bug it
 // claims to; the real oracles are the recorded delta streams (-deltas) and
-// the drawings themselves (-dot), and check.sh runs all of it together.
+// the drawings themselves (-dot), and scripts/check.sh runs all of it
+// together.
 
 package cells
 

@@ -1,6 +1,6 @@
 // cli_test.go — laws for the offline doors.
 
-package main
+package drawer
 
 import (
 	"bytes"

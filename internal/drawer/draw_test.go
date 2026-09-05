@@ -1,7 +1,7 @@
 // draw_test.go — laws for the ladder: which rung a run draws on, and what
 // it hands back in place of a fence.
 
-package main
+package drawer
 
 import (
 	"strings"

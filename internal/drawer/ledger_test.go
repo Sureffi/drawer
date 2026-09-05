@@ -1,7 +1,7 @@
 // ledger_test.go — laws for the ledger: which pictures a theme switch
 // sends to the terminal again, and as what.
 
-package main
+package drawer
 
 import (
 	"os"

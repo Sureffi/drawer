@@ -1,5 +1,5 @@
 #!/bin/sh
-# check.sh — every oracle this repo has, in one command.
+# scripts/check.sh — every oracle this repo has, in one command.
 #
 # None of these is a golden file. The delta fixtures are checked against the
 # text they carry, so prose outside a fence must survive byte for byte and
@@ -10,7 +10,7 @@
 # may set `fail`. POSIX exempts every non-final command of an AND-OR list
 # from `set -e`, so `cmd && say ok` would let a red suite end on "all clear".
 set -e
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 fail=0
 say() { printf '%-34s %s\n' "$1" "$2"; }
 
@@ -28,11 +28,52 @@ stage() {
   fi
 }
 
+# The layers, and what each of them may import. A cycle is the compiler's
+# to catch; a sideways edge — a rung importing a rung, notice importing
+# cells — compiles fine and is the thing this asserts. drawer is the top
+# and may import any of them.
+layers_table() {
+  cat <<'TABLE'
+  grid     (nothing internal)
+  term     (nothing internal)
+  layout   grid
+  theme    layout
+  fence    grid layout
+  notice   grid layout
+  cells    grid layout
+  subcell  grid layout
+  pixel    grid term layout theme
+  drawer   grid term layout theme fence notice cells subcell pixel
+TABLE
+}
+layers() {
+  bad=$(go list -f '{{.ImportPath}} {{join .Imports " "}}' ./internal/... | while read -r p rest; do
+    pkg=${p#github.com/sureffi/drawer/internal/}
+    allowed=$(layers_table | awk -v k="$pkg" '$1 == k { $1 = ""; print }')
+    for i in $rest; do
+      case $i in
+      github.com/sureffi/drawer/internal/*) ;;
+      *) continue ;;
+      esac
+      d=${i#github.com/sureffi/drawer/internal/}
+      case " $allowed " in
+      *" $d "*) ;;
+      *) echo "$pkg -> $d is not a layer $pkg may import" ;;
+      esac
+    done
+  done)
+  [ -z "$bad" ] || { printf '%s\n\nthe layers, and what each may import:\n' "$bad"; layers_table; return 1; }
+}
+
 mkdir -p bin
 # A failed build makes every stage below it a lie. Stop rather than report
 # on the last binary that happened to compile.
-stage "build" go build -o bin/drawer . || exit 1
+stage "build" go build -o bin/drawer ./cmd/drawer || exit 1
 stage "vet" go vet ./... || true
+# macOS is a platform this repo ships and nobody here runs. The build-tagged
+# files compile on every push or they compile on nobody's machine.
+stage "vet: darwin" env GOOS=darwin GOARCH=arm64 go vet ./... || true
+stage "layers" layers || true
 gofmt_clean() { f=$(gofmt -l .); [ -z "$f" ] || { printf '%s\n' "$f"; return 1; }; }
 stage "gofmt" gofmt_clean || true
 stage "laws (go test -race)" go test -race ./... || true
@@ -59,7 +100,7 @@ fi
 # The wrapper, on this checkout: a built bin/drawer is linked into a scratch
 # data dir and the context line comes back through it, then the hook route
 # draws a fence through the same link.
-stage "plugin: sh -n" sh -n scripts/drawer release.sh || true
+stage "plugin: sh -n" sh -n scripts/drawer scripts/release.sh || true
 rm -rf bin/pdata
 session_speaks() {
   CLAUDE_PLUGIN_ROOT=. CLAUDE_PLUGIN_DATA=bin/pdata ./scripts/drawer session </dev/null |

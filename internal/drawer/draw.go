@@ -21,7 +21,7 @@
 // drawing every frame and win that row; this takes the trade so that the
 // graphs work with nothing but `claude` and the plugin.
 
-package main
+package drawer
 
 import (
 	"strings"

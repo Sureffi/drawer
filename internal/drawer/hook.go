@@ -1,4 +1,4 @@
-package main
+package drawer
 
 // The native way in. CC ships a MessageDisplay hook that hands us the
 // text it is about to draw and takes back a replacement, so a ```dot

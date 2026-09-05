@@ -1,7 +1,7 @@
 // run.go — what one run of the binary knows: the rung asked for, and what
 // the terminal answered when asked.
 //
-// Built once, in main, and filled out again in runHook when the payload
+// Built once, in Main, and filled out again in runHook when the payload
 // names its session, then carried down by value. Nothing below reads a
 // package global and nothing below can write one, which is why a law can
 // stand a run up with a literal instead of saving a variable and putting
@@ -13,7 +13,7 @@
 // what -render already defaulted to, so a run nobody filled in reads the
 // terminal.
 
-package main
+package drawer
 
 import (
 	"github.com/sureffi/drawer/internal/term"

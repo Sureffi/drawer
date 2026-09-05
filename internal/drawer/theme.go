@@ -1,4 +1,4 @@
-// themehold.go — the theme this run draws in.
+// theme.go — the theme this run draws in.
 //
 // Deriving Claude Code's theme reads its settings and opens graphviz, so it
 // is not done until a picture actually asks: most deltas are prose and draw
@@ -9,7 +9,7 @@
 // One process per delta and one goroutine in it, so the memo is a nil check
 // and not a sync.Once.
 
-package main
+package drawer
 
 import "github.com/sureffi/drawer/internal/theme"
 

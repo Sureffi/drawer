@@ -8,7 +8,7 @@
 // U+10EEEE with its diacritics and a 256-colour foreground came out byte
 // for byte and counted as one column each.
 
-package main
+package drawer
 
 import (
 	"github.com/sureffi/drawer/internal/pixel"

@@ -1,7 +1,7 @@
-// fence_test.go — laws for the transducer: what the hook wire may and may
-// not do to a reply, and how a delta's process takes its turn.
+// wire_test.go — laws for the hook wire: what it may and may not do to a
+// reply, and how a delta's process takes its turn.
 
-package main
+package drawer
 
 import (
 	"os"
