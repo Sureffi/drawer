@@ -1,0 +1,2 @@
+{"delta": "```dot\ndigraph {\n    rankdir=LR;\n    alpha -> beta;\n    beta -> gamma;\n    gamma -> delta;\n}\n", "final": false, "message_id": "live-capture", "index": 0}
+{"delta": "```", "final": true, "message_id": "live-capture", "index": 1}

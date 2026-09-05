@@ -1,0 +1,6 @@
+digraph {
+  rankdir=LR;
+  wire -> grid [label="cells"];
+  grid -> paint;
+  paint -> glass;
+}

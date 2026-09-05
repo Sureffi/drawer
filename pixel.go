@@ -1,0 +1,345 @@
+// pixel.go — the same drawing, in real pixels, where the terminal can.
+//
+// The cells and the sub-cell strokes are the floor: they need nothing but
+// this binary and draw in any terminal that can show a `┌`. This is the
+// ceiling, and it is optional in the strongest sense — every stage fails
+// open to the glyph drawing, so a missing rasteriser, a slow one, a
+// terminal that is not kitty, or a graph cairo chokes on all end in the
+// picture that was already there. No error from here reaches the screen.
+//
+// Two things have to be true. The terminal has to be kitty, because the
+// graphics protocol's Unicode placeholders are the one way an image can
+// live in cells and therefore scroll, wrap and copy exactly like text. And
+// something on the PATH has to turn SVG into pixels. graphviz's own PNG
+// backend is not that something: goccy/go-graphviz carries graphviz's real
+// SVG writer, which is exact, and its own rasteriser, which silently drops
+// any edge stroke past hairline and loses them outright at dpi=192. So the
+// wasm writes SVG and cairo — rsvg-convert, else magick — makes the pixels.
+
+package drawer
+
+import (
+	"bytes"
+	"context"
+	"encoding/binary"
+	"errors"
+	"math"
+	"os"
+	"os/exec"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/goccy/go-graphviz"
+	"github.com/goccy/go-graphviz/cgraph"
+)
+
+// ---------- capability ----------
+
+// Raster is the rasteriser this machine actually has: a name, and the one
+// call it can make. A func rather than a command line because the law worth
+// testing is the failure one — a stub that counts its calls is how "a
+// rasteriser that failed once is not asked again" gets proven without a
+// rasteriser anywhere in the loop.
+type Raster struct {
+	name string
+	run  func(svg []byte, zoom float64) ([]byte, error)
+}
+
+// ProbeRaster answers whether pixels are possible here: the terminal is
+// kitty and a rasteriser exists, and "off" kills it regardless.
+func ProbeRaster(mode string) *Raster {
+	if mode == "off" {
+		return nil
+	}
+	if !strings.Contains(os.Getenv("TERM"), "kitty") && os.Getenv("KITTY_WINDOW_ID") == "" {
+		return nil
+	}
+	if p, err := exec.LookPath("rsvg-convert"); err == nil {
+		return &Raster{name: "rsvg-convert", run: func(svg []byte, zoom float64) ([]byte, error) {
+			return rasterExec(p, svg, "--zoom", strconv.FormatFloat(zoom, 'f', 4, 64))
+		}}
+	}
+	if p, err := exec.LookPath("magick"); err == nil {
+		// magick has no --zoom: it rasterises SVG at a density, and 96dpi is
+		// the density rsvg renders at unzoomed, so the same number means the
+		// same picture on either.
+		return &Raster{name: "magick", run: func(svg []byte, zoom float64) ([]byte, error) {
+			return rasterExec(p, svg, "-background", "none",
+				"-density", strconv.FormatFloat(96*zoom, 'f', 2, 64), "svg:-", "png:-")
+		}}
+	}
+	return nil
+}
+
+// A rasteriser is another process on somebody else's machine: it can hang,
+// it can hand back a gigabyte, it can be a shell script. Bound both ends and
+// read anything outside them as no picture at all.
+const (
+	rasterTimeout = 2 * time.Second
+	rasterMaxPNG  = 4 << 20
+	// A tiny graph in a tall region would otherwise be blown up without
+	// limit; past this the picture is not better, only heavier.
+	rasterMaxZoom = 8.0
+)
+
+func rasterExec(bin string, svg []byte, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), rasterTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.Stdin = bytes.NewReader(svg)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return nil, err
+	}
+	if out.Len() == 0 || out.Len() > rasterMaxPNG {
+		return nil, errors.New("rasteriser output out of bounds")
+	}
+	return out.Bytes(), nil
+}
+
+// ---------- the terminal's pixel geometry ----------
+
+// PxGeom is how big a cell is in pixels, measured from the terminal itself:
+// TIOCGWINSZ carries the window's pixel size beside its cell size, so the
+// answer is already there and does not have to be asked for with an escape
+// and waited on. Zero means the terminal did not answer — an ordinary thing
+// for a terminal to do — and reads here as no pixels.
+type PxGeom struct{ CellW, CellH int }
+
+func (g PxGeom) OK() bool { return g.CellW > 0 && g.CellH > 0 }
+
+// ---------- SVG, themed ----------
+
+// The theme, measured off a reference render rather than invented here:
+// tokyonight through graphviz 12.1.2's own SVG writer, monospace so the
+// picture speaks in the terminal's voice, and a penwidth just past hairline
+// so a stroke survives being scaled down into a handful of cells.
+//
+// It goes on through cgraph, on the parsed graph. Nothing is spliced into
+// the source text: that text is the model's, it arrives split at boundaries
+// nobody chose, and it is the readable fallback — a theme that edits it can
+// damage the one thing that always has to keep working.
+const (
+	pxBackground = "#1a1b26"
+	pxNodeFill   = "#24283b"
+	pxNodeStroke = "#7aa2f7"
+	pxNodeText   = "#c0caf5"
+	pxEdgeStroke = "#7aa2f7"
+	pxEdgeText   = "#9ece6a"
+	pxFont       = "monospace"
+)
+
+// renderThemedSVG lays the source out and writes graphviz's SVG for it.
+// Through the same door as every other graphviz call: two concurrent
+// graphviz.New calls are a `fatal error: concurrent map writes`, which
+// takes the process and the session with it.
+//
+// Node sizes are graphviz's own here, unlike the cell renderer's, which
+// forces every box to its label's width in cells. There the cells do the
+// typography and graphviz only places boxes; here graphviz is drawing the
+// picture, so it gets to measure its own type.
+func renderThemedSVG(src string) ([]byte, error) {
+	graphvizMu.Lock()
+	defer graphvizMu.Unlock()
+	ctx := context.Background()
+	g, err := graphviz.New(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer g.Close()
+	graph, err := graphviz.ParseBytes([]byte(src))
+	if err != nil {
+		return nil, err
+	}
+	// A fence the model opened and closed parses to (nil, nil): nothing was
+	// wrong with what graphviz was asked, there was simply no graph in it.
+	if graph == nil {
+		return nil, errors.New("no graph in source")
+	}
+	defer graph.Close()
+	graph.SetBackgroundColor(pxBackground)
+	graph.SetFontName(pxFont)
+	graph.SetPad(0.15)
+	for n, _ := graph.FirstNode(); n != nil; n, _ = graph.NextNode(n) {
+		n.SetShape(cgraph.BoxShape)
+		n.SetStyle(cgraph.RoundedNodeStyle + "," + cgraph.FilledNodeStyle)
+		n.SetFillColor(pxNodeFill)
+		n.SetColor(pxNodeStroke)
+		n.SetFontColor(pxNodeText)
+		n.SetFontName(pxFont)
+		n.SetPenWidth(1.4)
+		for e, _ := graph.FirstOut(n); e != nil; e, _ = graph.NextOut(e) {
+			e.SetColor(pxEdgeStroke)
+			e.SetFontColor(pxEdgeText)
+			e.SetFontName(pxFont)
+			e.SetPenWidth(1.2)
+		}
+	}
+	var buf bytes.Buffer
+	if err := g.Render(ctx, graph, graphviz.SVG, &buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// ---------- pixels ----------
+
+// An SVG length is in points and a rasteriser renders a point at 96dpi.
+// Measured, not assumed: the reference 672pt × 121pt render comes back
+// 896 × 162 px at --zoom 1, and 672 × 96/72 is 896.
+const pxPerPt = 96.0 / 72.0
+
+var svgSizeRe = regexp.MustCompile(`width="([0-9.]+)pt"\s+height="([0-9.]+)pt"`)
+
+// svgSize reads the size graphviz wrote into its own output. The layout
+// already answered how big this picture is; measuring it again from the
+// geometry inside would be a second guess at an answer already given.
+func svgSize(svg []byte) (float64, float64, error) {
+	head := svg
+	if len(head) > 4096 {
+		head = head[:4096]
+	}
+	m := svgSizeRe.FindSubmatch(head)
+	if m == nil {
+		return 0, 0, errors.New("svg carries no size")
+	}
+	w, h := atof(string(m[1])), atof(string(m[2]))
+	if w <= 0 || h <= 0 {
+		return 0, 0, errors.New("svg size is not a size")
+	}
+	return w, h, nil
+}
+
+var pngMagic = []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}
+
+// pngSize reads the dimensions out of the IHDR chunk, which is the first
+// chunk of every PNG and holds them in its first eight bytes. Decoding the
+// whole image to learn two numbers would cost the pixels twice.
+func pngSize(png []byte) (int, int, error) {
+	if len(png) < 24 || !bytes.Equal(png[:8], pngMagic) || string(png[12:16]) != "IHDR" {
+		return 0, 0, errors.New("not a png")
+	}
+	w := int(binary.BigEndian.Uint32(png[16:20]))
+	h := int(binary.BigEndian.Uint32(png[20:24]))
+	if w <= 0 || h <= 0 {
+		return 0, 0, errors.New("png has no size")
+	}
+	return w, h, nil
+}
+
+// Rasterise turns a source into pixels sized for a rectangle somebody else
+// owns: an embedding program's region, in pixels. Zoom is chosen so the whole
+// picture lands inside it with its aspect kept, which is also what kitty
+// does when it fits an image to placeholder cells — the two agreeing is
+// what keeps the drawing from being squashed on one axis.
+func Rasterise(r *Raster, src string, availPxW, regionPxH int) ([]byte, int, int, error) {
+	if r == nil || availPxW <= 0 || regionPxH <= 0 {
+		return nil, 0, 0, errors.New("no room for pixels")
+	}
+	svg, err := renderThemedSVG(src)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	ptW, ptH, err := svgSize(svg)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	zoom := math.Min(float64(availPxW)/(ptW*pxPerPt), float64(regionPxH)/(ptH*pxPerPt))
+	if !(zoom > 0) || math.IsInf(zoom, 0) {
+		return nil, 0, 0, errors.New("no zoom fits")
+	}
+	if zoom > rasterMaxZoom {
+		zoom = rasterMaxZoom
+	}
+	png, err := r.run(svg, zoom)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	w, h, err := pngSize(png)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	return png, w, h, nil
+}
+
+// ---------- names ----------
+
+// fnv1a32 hashes a cut into a name. Names here are derived, never minted:
+// kitty's image ids are a namespace shared with every program on the same
+// terminal, and a counter beside a screen that cannot check it is the bug
+// that drew the first diagram of every reply as the last one. See
+// hookImageID.
+func fnv1a32(s string) uint32 {
+	h := uint32(2166136261)
+	for i := 0; i < len(s); i++ {
+		h ^= uint32(s[i])
+		h *= 16777619
+	}
+	return h
+}
+
+// ---------- placeholders ----------
+
+// The placeholder character. A cell holding it, coloured with an image id,
+// tells kitty to draw that image's pixels there — and it is ordinary text
+// to everything else, which is the entire reason a picture can ride through
+// CC's display wire.
+const PlaceholderRune = '\U0010EEEE'
+
+// RowColumnDiacritics carries the row and column of a placeholder cell as
+// combining marks. Not guessed: this is kitty's own rowcolumn-diacritics.txt
+// (297 entries), fetched 2026-08-27 from
+// https://sw.kovidgoyal.net/kitty/graphics-protocol/ — combining class 230
+// characters from Unicode 6.0.0 with no decomposition mappings, so no
+// normalisation anywhere along the wire can fuse one into its base
+// character. Index is the number; the first is U+0305 for 0.
+var RowColumnDiacritics = [...]rune{
+	0x0305, 0x030D, 0x030E, 0x0310, 0x0312, 0x033D, 0x033E, 0x033F,
+	0x0346, 0x034A, 0x034B, 0x034C, 0x0350, 0x0351, 0x0352, 0x0357,
+	0x035B, 0x0363, 0x0364, 0x0365, 0x0366, 0x0367, 0x0368, 0x0369,
+	0x036A, 0x036B, 0x036C, 0x036D, 0x036E, 0x036F, 0x0483, 0x0484,
+	0x0485, 0x0486, 0x0487, 0x0592, 0x0593, 0x0594, 0x0595, 0x0597,
+	0x0598, 0x0599, 0x059C, 0x059D, 0x059E, 0x059F, 0x05A0, 0x05A1,
+	0x05A8, 0x05A9, 0x05AB, 0x05AC, 0x05AF, 0x05C4, 0x0610, 0x0611,
+	0x0612, 0x0613, 0x0614, 0x0615, 0x0616, 0x0617, 0x0657, 0x0658,
+	0x0659, 0x065A, 0x065B, 0x065D, 0x065E, 0x06D6, 0x06D7, 0x06D8,
+	0x06D9, 0x06DA, 0x06DB, 0x06DC, 0x06DF, 0x06E0, 0x06E1, 0x06E2,
+	0x06E4, 0x06E7, 0x06E8, 0x06EB, 0x06EC, 0x0730, 0x0732, 0x0733,
+	0x0735, 0x0736, 0x073A, 0x073D, 0x073F, 0x0740, 0x0741, 0x0743,
+	0x0745, 0x0747, 0x0749, 0x074A, 0x07EB, 0x07EC, 0x07ED, 0x07EE,
+	0x07EF, 0x07F0, 0x07F1, 0x07F3, 0x0816, 0x0817, 0x0818, 0x0819,
+	0x081B, 0x081C, 0x081D, 0x081E, 0x081F, 0x0820, 0x0821, 0x0822,
+	0x0823, 0x0825, 0x0826, 0x0827, 0x0829, 0x082A, 0x082B, 0x082C,
+	0x082D, 0x0951, 0x0953, 0x0954, 0x0F82, 0x0F83, 0x0F86, 0x0F87,
+	0x135D, 0x135E, 0x135F, 0x17DD, 0x193A, 0x1A17, 0x1A75, 0x1A76,
+	0x1A77, 0x1A78, 0x1A79, 0x1A7A, 0x1A7B, 0x1A7C, 0x1B6B, 0x1B6D,
+	0x1B6E, 0x1B6F, 0x1B70, 0x1B71, 0x1B72, 0x1B73, 0x1CD0, 0x1CD1,
+	0x1CD2, 0x1CDA, 0x1CDB, 0x1CE0, 0x1DC0, 0x1DC1, 0x1DC3, 0x1DC4,
+	0x1DC5, 0x1DC6, 0x1DC7, 0x1DC8, 0x1DC9, 0x1DCB, 0x1DCC, 0x1DD1,
+	0x1DD2, 0x1DD3, 0x1DD4, 0x1DD5, 0x1DD6, 0x1DD7, 0x1DD8, 0x1DD9,
+	0x1DDA, 0x1DDB, 0x1DDC, 0x1DDD, 0x1DDE, 0x1DDF, 0x1DE0, 0x1DE1,
+	0x1DE2, 0x1DE3, 0x1DE4, 0x1DE5, 0x1DE6, 0x1DFE, 0x20D0, 0x20D1,
+	0x20D4, 0x20D5, 0x20D6, 0x20D7, 0x20DB, 0x20DC, 0x20E1, 0x20E7,
+	0x20E9, 0x20F0, 0x2CEF, 0x2CF0, 0x2CF1, 0x2DE0, 0x2DE1, 0x2DE2,
+	0x2DE3, 0x2DE4, 0x2DE5, 0x2DE6, 0x2DE7, 0x2DE8, 0x2DE9, 0x2DEA,
+	0x2DEB, 0x2DEC, 0x2DED, 0x2DEE, 0x2DEF, 0x2DF0, 0x2DF1, 0x2DF2,
+	0x2DF3, 0x2DF4, 0x2DF5, 0x2DF6, 0x2DF7, 0x2DF8, 0x2DF9, 0x2DFA,
+	0x2DFB, 0x2DFC, 0x2DFD, 0x2DFE, 0x2DFF, 0xA66F, 0xA67C, 0xA67D,
+	0xA6F0, 0xA6F1, 0xA8E0, 0xA8E1, 0xA8E2, 0xA8E3, 0xA8E4, 0xA8E5,
+	0xA8E6, 0xA8E7, 0xA8E8, 0xA8E9, 0xA8EA, 0xA8EB, 0xA8EC, 0xA8ED,
+	0xA8EE, 0xA8EF, 0xA8F0, 0xA8F1, 0xAAB0, 0xAAB2, 0xAAB3, 0xAAB7,
+	0xAAB8, 0xAABE, 0xAABF, 0xAAC1, 0xFE20, 0xFE21, 0xFE22, 0xFE23,
+	0xFE24, 0xFE25, 0xFE26, 0x10A0F, 0x10A38, 0x1D185, 0x1D186, 0x1D187,
+	0x1D188, 0x1D189, 0x1D1AA, 0x1D1AB, 0x1D1AC, 0x1D1AD, 0x1D242, 0x1D243,
+	0x1D244,
+}
+
+// NewRaster wraps a rasterising call as a capability. It exists so a caller
+// outside the package can stand in a stub for cairo and count what it was
+// asked.
+func NewRaster(name string, run func(svg []byte, zoom float64) ([]byte, error)) *Raster {
+	return &Raster{name: name, run: run}
+}

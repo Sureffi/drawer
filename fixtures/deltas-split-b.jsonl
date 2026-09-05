@@ -1,0 +1,3 @@
+{"delta": "```dot\n", "final": false, "message_id": "deltas-split-b.jsonl", "index": 0}
+{"delta": "digraph { rankdir=LR; parse -> grid -> paint -> glass }\n", "final": false, "message_id": "deltas-split-b.jsonl", "index": 1}
+{"delta": "```", "final": true, "message_id": "deltas-split-b.jsonl", "index": 2}

@@ -1,0 +1,2 @@
+{"delta": "```dot\ndigraph { rankdir=LR; parse -> grid -> paint -> glass }\n", "final": false, "message_id": "deltas-split-a.jsonl", "index": 0}
+{"delta": "```", "final": true, "message_id": "deltas-split-a.jsonl", "index": 1}

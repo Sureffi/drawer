@@ -1,0 +1,2 @@
+{"delta": "```dot\ndigraph { a -> ", "final": false, "message_id": "deltas-broken.jsonl", "index": 0}
+{"delta": "b", "final": true, "message_id": "deltas-broken.jsonl", "index": 1}

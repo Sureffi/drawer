@@ -1,0 +1,2 @@
+{"delta": "One:\n\n```dot\ndigraph { a -> b }\n```\n\nTwo:\n\n", "final": false, "message_id": "deltas-two.jsonl", "index": 0}
+{"delta": "```dot\ndigraph { c -> d }\n```\n", "final": true, "message_id": "deltas-two.jsonl", "index": 1}
