@@ -64,12 +64,12 @@ func TestDrawModeEmitsABareFenceThatFits(t *testing.T) {
 	if rows[0] != fenceTick || rows[len(rows)-1] != fenceTick {
 		t.Fatalf("not a bare fence:\n%s", strings.Join(rows, "\n"))
 	}
-	for _, r := range rows[1 : len(rows)-1] {
-		if n := grid.Cells(grid.StripSGR(r)); n > 90 {
-			t.Errorf("row is %d cells in 90 columns: %q", n, r)
+	for _, row := range rows[1 : len(rows)-1] {
+		if n := grid.Cells(grid.StripSGR(row)); n > 90 {
+			t.Errorf("row is %d cells in 90 columns: %q", n, row)
 		}
-		if strings.Contains(r, "digraph") {
-			t.Errorf("the source reached the reader: %q", r)
+		if strings.Contains(row, "digraph") {
+			t.Errorf("the source reached the reader: %q", row)
 		}
 	}
 	if !strings.Contains(strings.Join(rows, "\n"), "▶") {

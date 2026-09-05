@@ -3,6 +3,11 @@
 // Main is the whole of this package's surface: cmd/drawer hands it the
 // arguments and makes its answer the exit status, so every door below can
 // be reached from a law as readily as from a shell.
+//
+// Main itself has no law of its own: the flag set is named from os.Args[0]
+// and exits on a bad flag, so -h prints what it always printed and a law
+// that called it would take the test binary down with it. Every door below
+// it stands on its own, and that is where the laws are.
 
 package drawer
 

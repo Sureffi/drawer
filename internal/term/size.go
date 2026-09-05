@@ -36,6 +36,8 @@ func ioctl(fd uintptr, req uintptr, arg unsafe.Pointer) error {
 // for a terminal to do — and reads here as no pixels.
 type Geom struct{ CellW, CellH int }
 
+// OK says the terminal answered with a cell size. Zero on either axis is
+// no answer, and every rung above the glyphs reads that as no pixels.
 func (g Geom) OK() bool { return g.CellW > 0 && g.CellH > 0 }
 
 // Size is what the window says about itself: its columns, and the pixel

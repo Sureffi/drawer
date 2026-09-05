@@ -146,8 +146,8 @@ func inkFootprint(jg *jgraph) (cols, rows int) {
 	return int(math.Ceil(jg.w/ptPerCell)) + 1, int(math.Ceil(jg.h/ptPerRow)) + 1
 }
 
-// fitInk is layout.Fit for this renderer: as written, then top-down, the first
-// that fits the width and the height wins.
+// fitInk is layout.Fit for this renderer: as written, then top-down, the
+// first that fits the width and the height wins.
 func fitInk(src string, width, maxRows int) (*jgraph, int, int, bool) {
 	for _, rd := range layout.Orientations(src) {
 		jg, err := layoutInk(src, rd)

@@ -52,8 +52,8 @@ func (r run) runDotDump(path string, w, h int) int {
 		}
 		return 1
 	}
-	for _, r := range rows {
-		fmt.Println(r)
+	for _, row := range rows {
+		fmt.Println(row)
 	}
 	return 0
 }

@@ -66,12 +66,16 @@ func LabelOf(n *cgraph.Node) string {
 	return name
 }
 
+// Node is a node as graphviz placed it: its name, the centre it was given
+// in inches, and the label it carries.
 type Node struct {
 	Name  string
 	X, Y  float64
 	Label string
 }
 
+// Edge is an edge as graphviz routed it: its two ends, the spline as a
+// list of points, and where the label goes when it carries one.
 type Edge struct {
 	Tail, Head string
 	Pts        [][2]float64
@@ -80,6 +84,9 @@ type Edge struct {
 	LY         float64
 }
 
+// Plain is one laid-out graph, as graphviz's plain format describes it:
+// how big the drawing is and everything in it, in inches with the origin
+// bottom-left. The cells rung draws from this and nothing else.
 type Plain struct {
 	W, H  float64
 	Nodes []Node
@@ -155,10 +162,7 @@ func sizeNodesInCells(g *cgraph.Graph) {
 	}
 }
 
-// RankdirOf reports the orientation a source asks for. graphviz exposes
-// no getter for it, and the axis is what decides whether a gap measured
-// in cells divides by columns-per-inch or rows-per-inch. Absent means TB,
-// which is graphviz's own default.
+// rankdirRe reads the orientation out of the source text.
 var rankdirRe = regexp.MustCompile(`(?i)rankdir\s*=\s*"?(TB|LR|BT|RL)"?`)
 
 // directedRe reads the graph's own first word. The binding exposes no
@@ -166,6 +170,10 @@ var rankdirRe = regexp.MustCompile(`(?i)rankdir\s*=\s*"?(TB|LR|BT|RL)"?`)
 // wrote.
 var directedRe = regexp.MustCompile(`(?i)^\s*(strict\s+)?digraph\b`)
 
+// RankdirOf reports the orientation a source asks for. graphviz exposes
+// no getter for it, and the axis is what decides whether a gap measured
+// in cells divides by columns-per-inch or rows-per-inch. Absent means TB,
+// which is graphviz's own default.
 func RankdirOf(src string) cgraph.RankDir {
 	if m := rankdirRe.FindStringSubmatch(src); m != nil {
 		return cgraph.RankDir(strings.ToUpper(m[1]))
@@ -195,6 +203,9 @@ func SetSeparation(g *cgraph.Graph, rd cgraph.RankDir) {
 	g.SetNodeSeparator(node / nodePerInch)
 }
 
+// Atof is a number as graphviz wrote it, or zero. Only graphviz's own
+// output is read through here, so a field that is not a number is this
+// parser reading the wrong field and not an error worth carrying.
 func Atof(s string) float64 { v, _ := strconv.ParseFloat(s, 64); return v }
 
 // parsePlain reads graphviz's plain format. Fields are space separated

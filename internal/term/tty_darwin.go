@@ -25,6 +25,8 @@ func parentTTY() string {
 	return "/dev/" + t
 }
 
+// TTYOut is where a picture is written: the parent's terminal device,
+// which is the same device its size was read from.
 func TTYOut() string { return parentTTY() }
 
 // The parent's environment is not readable here: macOS has no /proc, and
