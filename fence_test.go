@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/sureffi/drawer/internal/fence"
 )
 
 // drawAt is Draw's emit bound to a width, in the cells rung: what the
@@ -31,14 +33,14 @@ func drawAt(w int) func(string, int) []string {
 // a corrupted message whenever it did not.
 func TestProseSurvivesTheHookWire(t *testing.T) {
 	in := "Use a ```dot fence when you want a drawing.\nRows get reserved for it.\n```\ndone\n"
-	var st state
+	var st fence.State
 	var b strings.Builder
 	for i := 0; i < len(in); i += 7 {
 		end := i + 7
 		if end > len(in) {
 			end = len(in)
 		}
-		b.WriteString(stream(in[i:end], end == len(in), &st, drawAt(100)))
+		b.WriteString(fence.Stream(in[i:end], end == len(in), &st, drawAt(100)))
 	}
 	if got := b.String(); got != in {
 		t.Errorf("hook wire damaged prose:\n in: %q\nout: %q", in, got)
@@ -54,14 +56,14 @@ func TestProseSurvivesTheHookWire(t *testing.T) {
 func TestDeltaBoundariesAreNotLineBreaks(t *testing.T) {
 	in := "digraph { a -> b } and some prose after it, all on one line with no newline at all"
 	for _, chunk := range []int{1, 3, 7, 13} {
-		var st state
+		var st fence.State
 		var b strings.Builder
 		for i := 0; i < len(in); i += chunk {
 			end := i + chunk
 			if end > len(in) {
 				end = len(in)
 			}
-			b.WriteString(stream(in[i:end], end == len(in), &st, drawAt(100)))
+			b.WriteString(fence.Stream(in[i:end], end == len(in), &st, drawAt(100)))
 		}
 		if got := b.String(); got != in {
 			t.Errorf("chunk %d: text was rebuilt rather than passed through:\n in: %q\nout: %q",
@@ -82,10 +84,10 @@ func TestFenceDrawsAcrossEitherSplit(t *testing.T) {
 		{"```dot\n" + src + "\n```"},
 	}
 	for i, deltas := range splits {
-		var st state
+		var st fence.State
 		var shown strings.Builder
 		for j, d := range deltas {
-			shown.WriteString(stream(d, j == len(deltas)-1, &st, drawAt(90)))
+			shown.WriteString(fence.Stream(d, j == len(deltas)-1, &st, drawAt(90)))
 		}
 		out := shown.String()
 		if !strings.Contains(out, "▶") {
@@ -106,11 +108,11 @@ func TestFenceDrawsAcrossEitherSplit(t *testing.T) {
 // Seven bytes at a time, so the boundaries land inside the markers too.
 func TestAQuotedFenceIsText(t *testing.T) {
 	in := "Write it like this:\n\n````\n```dot\ndigraph { a -> b }\n```\n````\n\nand it draws.\n"
-	var st state
+	var st fence.State
 	var b strings.Builder
 	for i := 0; i < len(in); i += 7 {
 		end := min(i+7, len(in))
-		b.WriteString(stream(in[i:end], end == len(in), &st, drawAt(100)))
+		b.WriteString(fence.Stream(in[i:end], end == len(in), &st, drawAt(100)))
 	}
 	if got := b.String(); got != in {
 		t.Errorf("a quoted fence was touched:\n in: %q\nout: %q", in, got)
@@ -125,9 +127,9 @@ func TestAQuotedFenceIsText(t *testing.T) {
 // made for the width the indent leaves. The prose around it is untouched.
 func TestAFenceUnderAListItemDraws(t *testing.T) {
 	in := "- the flow:\n\n  ```dot\n  digraph { rankdir=LR; a -> b }\n  ```\n\n- done\n"
-	var st state
+	var st fence.State
 	gotIndent := -1
-	out := stream(in, true, &st, func(src string, indent int) []string {
+	out := fence.Stream(in, true, &st, func(src string, indent int) []string {
 		gotIndent = indent
 		return drawAt(100)(src, indent)
 	})
@@ -177,8 +179,8 @@ func TestOnlyGraphsAreDrawn(t *testing.T) {
 		{"inline code", "```dot``` is the marker\n", false},
 	}
 	for _, c := range cases {
-		var st state
-		out := stream(c.in, true, &st, drawAt(100))
+		var st fence.State
+		out := fence.Stream(c.in, true, &st, drawAt(100))
 		if st.InFence || st.Foreign || st.PendingClose || st.Buf != "" {
 			t.Errorf("%s: state left behind: %+v", c.name, st)
 		}
@@ -196,21 +198,21 @@ func TestOnlyGraphsAreDrawn(t *testing.T) {
 // on no promise at all; an unlabelled fence is held only as far as its
 // first line, which is where the decision lives.
 func TestAForeignFenceIsNotHeld(t *testing.T) {
-	var st state
-	if got := stream("```python\nx = 1\n", false, &st, drawAt(100)); got != "```python\nx = 1\n" {
+	var st fence.State
+	if got := fence.Stream("```python\nx = 1\n", false, &st, drawAt(100)); got != "```python\nx = 1\n" {
 		t.Errorf("a labelled fence was held: %q", got)
 	}
-	if got := stream("y = 2\n```\nafter\n", true, &st, drawAt(100)); got != "y = 2\n```\nafter\n" {
+	if got := fence.Stream("y = 2\n```\nafter\n", true, &st, drawAt(100)); got != "y = 2\n```\nafter\n" {
 		t.Errorf("the rest of it was touched: %q", got)
 	}
-	st = state{}
-	if got := stream("```\n", false, &st, drawAt(100)); got != "" {
+	st = fence.State{}
+	if got := fence.Stream("```\n", false, &st, drawAt(100)); got != "" {
 		t.Errorf("an unlabelled fence was let go before its first line: %q", got)
 	}
-	if got := stream("some text\n", false, &st, drawAt(100)); got != "```\nsome text\n" {
+	if got := fence.Stream("some text\n", false, &st, drawAt(100)); got != "```\nsome text\n" {
 		t.Errorf("an unlabelled fence with prose in it was held past its first line: %q", got)
 	}
-	if got := stream("```\n", true, &st, drawAt(100)); got != "```\n" {
+	if got := fence.Stream("```\n", true, &st, drawAt(100)); got != "```\n" {
 		t.Errorf("its closer was touched: %q", got)
 	}
 	if st.InFence || st.Foreign || st.PendingClose || st.Buf != "" {
@@ -223,10 +225,10 @@ func TestAForeignFenceIsNotHeld(t *testing.T) {
 // whole rather than vanish — the worst acceptable outcome is a visible
 // DOT fence, and silence is not on the list.
 func TestHeldTextIsNeverLost(t *testing.T) {
-	var st state
+	var st fence.State
 	var shown strings.Builder
-	shown.WriteString(stream("```dot\ndigraph { a -> ", false, &st, drawAt(90)))
-	shown.WriteString(stream("b", true, &st, drawAt(90)))
+	shown.WriteString(fence.Stream("```dot\ndigraph { a -> ", false, &st, drawAt(90)))
+	shown.WriteString(fence.Stream("b", true, &st, drawAt(90)))
 	out := shown.String()
 	for _, want := range []string{"```dot", "digraph { a -> ", "b"} {
 		if !strings.Contains(out, want) {
@@ -242,9 +244,9 @@ func TestHeldTextIsNeverLost(t *testing.T) {
 // are mostly that, and the hook sees raw markdown before CC has laid any
 // of it out.
 func TestProseAroundAFenceSurvivesTheHook(t *testing.T) {
-	var st state
+	var st fence.State
 	in := "Before.\n\n```dot\ndigraph { x -> y }\n```\n\nAfter."
-	out := stream(in, true, &st, drawAt(90))
+	out := fence.Stream(in, true, &st, drawAt(90))
 	if !strings.HasPrefix(out, "Before.") || !strings.HasSuffix(out, "After.") {
 		t.Fatalf("prose damaged:\n%q", out)
 	}

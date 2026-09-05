@@ -22,6 +22,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/sureffi/drawer/internal/fence"
 	"github.com/sureffi/drawer/internal/term"
 )
 
@@ -108,7 +109,7 @@ func (r run) runHook() int {
 	st, done := takeTurn(in.MessageID, in.Index, turnPatience)
 	defer done()
 	before := st
-	text := stream(in.Delta, in.Final, &st, func(src string, indent int) []string {
+	text := fence.Stream(in.Delta, in.Final, &st, func(src string, indent int) []string {
 		return r.drawBlock(src, width-indent)
 	})
 	st.Next = max(st.Next, in.Index+1)

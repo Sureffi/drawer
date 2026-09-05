@@ -26,6 +26,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/sureffi/drawer/internal/fence"
 	"github.com/sureffi/drawer/internal/grid"
 )
 
@@ -43,7 +44,7 @@ func (r run) runDeltas(path string, w int) int {
 
 	emit := func(src string, indent int) []string { return r.drawBlock(src, w-indent) }
 	var in, shown strings.Builder
-	var st state
+	var st fence.State
 	// A recording is in the order the hook processes wrote it, which is the
 	// order Claude Code started them and not the order of the deltas —
 	// testdata/deltas-race.jsonl has the second before the first. The hook
@@ -81,7 +82,7 @@ func (r run) runDeltas(path string, w int) int {
 	})
 	for _, p := range deltas {
 		in.WriteString(p.Delta)
-		shown.WriteString(stream(p.Delta, p.Final, &st, emit))
+		shown.WriteString(fence.Stream(p.Delta, p.Final, &st, emit))
 	}
 	if st.InFence {
 		fmt.Fprintf(os.Stderr, "-deltas: %s: stream ended with a fence still held — "+
@@ -110,8 +111,8 @@ func (r run) runDeltas(path string, w int) int {
 		if sf == of {
 			continue // returned untouched: the honest failure
 		}
-		f, _ := openerOf(strings.SplitN(sf, "\n", 2)[0])
-		if err := checkDrawn(of, fenceBody(sf, f), w); err != nil {
+		f, _ := fence.OpenerOf(strings.SplitN(sf, "\n", 2)[0])
+		if err := checkDrawn(of, fence.Body(sf, f), w); err != nil {
 			fmt.Fprintf(os.Stderr, "-deltas: %s: fence %d: %v\n", path, i+1, err)
 			return 1
 		}
@@ -132,11 +133,11 @@ func splitFences(text string) ([]string, string) {
 	var prose strings.Builder
 	lines := strings.Split(text, "\n")
 	for i := 0; i < len(lines); i++ {
-		f, ok := openerOf(lines[i])
+		f, ok := fence.OpenerOf(lines[i])
 		end := -1
 		if ok {
 			for j := i + 1; j < len(lines); j++ {
-				if f.closes(lines[j]) {
+				if f.Closes(lines[j]) {
 					end = j
 					break
 				}

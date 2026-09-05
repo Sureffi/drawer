@@ -4,8 +4,8 @@
 // boundaries it does not promise and does not repeat: the same prompt gave
 // ["```dot\n<source>\n", "```"] on one run and ["```dot\n", "<source>\n",
 // "```"] on the next. A hook is one process per delta, so the transducer
-// that reassembles the fence (fence.go) has to keep its half-finished work
-// somewhere the next process can find it: a file per message id.
+// that reassembles the fence (internal/fence) has to keep its half-finished
+// work somewhere the next process can find it: a file per message id.
 //
 // And the processes are not one after another. Measured: the processes
 // for a reply's two deltas started eleven microseconds apart and ran side
@@ -27,6 +27,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/sureffi/drawer/internal/fence"
 )
 
 // stateDir is where the hook keeps what one process leaves for the next.
@@ -73,8 +75,8 @@ func sweepState(dir string, age time.Duration) {
 	}
 }
 
-func loadState(msgID string) state {
-	var s state
+func loadState(msgID string) fence.State {
+	var s fence.State
 	p := statePath(msgID)
 	sweepState(filepath.Dir(p), 10*time.Minute)
 	b, err := os.ReadFile(p)
@@ -87,7 +89,7 @@ func loadState(msgID string) state {
 
 // saveState keeps the state for the next delta's process, or at the
 // message's final delta takes it away, lock and all.
-func saveState(msgID string, s state, final bool) {
+func saveState(msgID string, s fence.State, final bool) {
 	if final {
 		os.Remove(statePath(msgID))
 		os.Remove(lockPath(msgID))
@@ -108,7 +110,7 @@ const turnPatience = 2 * time.Second
 // state as the process before left it, under the message's lock, which
 // the caller holds through the draw and releases with done. A delta the
 // state has already counted past — a repeat — takes its turn at once.
-func takeTurn(msgID string, index int, patience time.Duration) (state, func()) {
+func takeTurn(msgID string, index int, patience time.Duration) (fence.State, func()) {
 	f, err := os.OpenFile(lockPath(msgID), os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return loadState(msgID), func() {}
