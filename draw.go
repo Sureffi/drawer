@@ -67,6 +67,9 @@ func (r run) drawBlock(src string, width int) []string {
 	return bare(rows)
 }
 
+// fenceTick is the bare fence a drawing is handed back in.
+const fenceTick = "```"
+
 // bare wraps rows in a bare fence: verbatim, monospace, no caption.
 func bare(rows []string) []string {
 	out := make([]string, 0, len(rows)+2)

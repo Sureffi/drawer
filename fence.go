@@ -29,9 +29,6 @@ import (
 	"strings"
 )
 
-// fenceTick is the bare fence a drawing is handed back in.
-const fenceTick = "```"
-
 // opener is a fence's opening line as read: the whitespace before the run,
 // the run itself, and the first word of what followed it. The run says
 // what closes the fence; the indent is what the drawing stands in.
