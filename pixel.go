@@ -102,17 +102,6 @@ func rasterExec(bin string, svg []byte, args ...string) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-// ---------- the terminal's pixel geometry ----------
-
-// pxGeom is how big a cell is in pixels, measured from the terminal itself:
-// TIOCGWINSZ carries the window's pixel size beside its cell size, so the
-// answer is already there and does not have to be asked for with an escape
-// and waited on. Zero means the terminal did not answer — an ordinary thing
-// for a terminal to do — and reads here as no pixels.
-type pxGeom struct{ CellW, CellH int }
-
-func (g pxGeom) ok() bool { return g.CellW > 0 && g.CellH > 0 }
-
 // ---------- SVG, themed ----------
 
 // The theme goes on through cgraph, on the parsed graph, and only where the

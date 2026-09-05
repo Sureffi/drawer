@@ -89,7 +89,7 @@ func pickRung() string {
 	case "cells", "braille", "octants", "pixels":
 		return wantRung
 	}
-	term := hookTerm()
+	term := termName()
 	kitty := strings.Contains(term, "kitty")
 	if kitty && hookGeom.ok() && probeRaster() != nil {
 		return "pixels"

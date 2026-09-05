@@ -21,10 +21,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
-	"strings"
-	"syscall"
-	"unsafe"
 )
 
 // hookIn is CC's payload. Only the fields we use are named; the rest of
@@ -54,49 +50,17 @@ type hookSpecific struct {
 	DisplayContent string `json:"displayContent"`
 }
 
-// hookSize is the one genuinely awkward part of standing here. A command
-// hook has no controlling terminal: fds 0/1/2 are pipes and /dev/tty
-// fails. But the parent process is `claude`, which does have one, so the
-// window size is readable through it — /proc on Linux, the device ps names
-// on macOS — and falls to COLUMNS, then 100, rather than quietly drawing at
-// 80. winsize is TIOCGWINSZ's answer: rows, columns, and the window's pixel
-// size, which kitty fills in and most terminals leave at zero.
-type winsize struct{ rows, cols, x, y uint16 }
-
-func ioctl(fd uintptr, req uintptr, arg unsafe.Pointer) error {
-	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, fd, req, uintptr(arg)); e != 0 {
-		return e
-	}
-	return nil
-}
-
-// hookGeom is what the window said about itself: cells, and the pixel
-// size of a cell where the terminal reports one (kitty does; most leave
-// it zero, which reads as no pixels).
+// hookGeom is what the window said about itself: the pixel size of a cell
+// where the terminal reports one (kitty does; most leave it zero, which
+// reads as no pixels).
 var hookGeom pxGeom
 
-func hookSize() (width int) {
-	cols := 0
-	if f, err := os.Open(parentTTY()); err == nil {
-		var ws winsize
-		if ioctl(f.Fd(), syscall.TIOCGWINSZ, unsafe.Pointer(&ws)) == nil && ws.cols > 0 {
-			cols = int(ws.cols)
-			if ws.x > 0 && ws.y > 0 && ws.rows > 0 {
-				hookGeom = pxGeom{CellW: int(ws.x) / cols, CellH: int(ws.y) / int(ws.rows)}
-			}
-		}
-		f.Close()
-	}
-	if cols == 0 {
-		if v, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && v > 0 {
-			cols = v
-		}
-	}
-	if cols == 0 {
-		cols = 100
-	}
-	// CC's own left margin for a message body.
-	const inset = 6
+// CC's own left margin for a message body.
+const inset = 6
+
+// hookWidth is the room a message body has in a window that many columns
+// wide. The window is the terminal's to describe; the margin is CC's.
+func hookWidth(cols int) int {
 	if cols > inset {
 		return cols - inset
 	}
@@ -140,7 +104,9 @@ func runHook() int {
 		return 0
 	}
 	hookSession = in.SessionID
-	width := hookSize()
+	cols, g := termSize()
+	hookGeom = g
+	width := hookWidth(cols)
 	// The first delta of a message is the first thing the hook hears after
 	// a theme switch; pixelledger.go says why, and what is repainted.
 	if in.Index == 0 && pickRung() == "pixels" {
@@ -168,30 +134,13 @@ func runHook() int {
 	return 0
 }
 
-// hookTerm names the terminal. TERM survives CC's scrub of a hook's
-// environment (measured); when it does not, the parent's environment is
-// readable through /proc and says the same thing.
-func hookTerm() string {
-	if t := os.Getenv("TERM"); t != "" {
-		return t
-	}
-	if b, err := os.ReadFile("/proc/" + strconv.Itoa(os.Getppid()) + "/environ"); err == nil {
-		for _, kv := range strings.Split(string(b), "\x00") {
-			if strings.HasPrefix(kv, "TERM=") {
-				return kv[5:]
-			}
-		}
-	}
-	return ""
-}
-
 // sessionContext is what a model should know at the start of a session, for a
 // SessionStart hook to hand it: that a ```dot fence in a reply is drawn in
 // place, and what this terminal's rung can draw, which is what a graph
 // should be written for. Without it a model that has never heard of the
 // hook writes mermaid, or boxes out of hyphens, and neither is a picture.
 func sessionContext() string {
-	hookSize()
+	_, hookGeom = termSize()
 	var can string
 	switch pickRung() {
 	case "pixels":

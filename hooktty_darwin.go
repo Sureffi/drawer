@@ -26,3 +26,8 @@ func parentTTY() string {
 }
 
 func parentTTYOut() string { return parentTTY() }
+
+// The parent's environment is not readable here: macOS has no /proc, and
+// ps does not carry it. A hook whose own TERM was scrubbed is blind, which
+// is the known gap the README already owns.
+func parentEnv(string) string { return "" }
