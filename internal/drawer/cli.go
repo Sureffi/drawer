@@ -93,14 +93,29 @@ func (r run) runPNG(ctx context.Context, dotPath, pngPath string, width int, geo
 	return 0
 }
 
+// runVersion is the -version door: the release this binary was built from,
+// on the one line a script greps and a stranger reads. It writes to a
+// writer for the same reason the doctor does — a law reads what it wrote,
+// with nothing on the terminal in between.
+func runVersion(w io.Writer) int {
+	fmt.Fprintln(w, "drawer", version)
+	return 0
+}
+
 // runDoctor is the -doctor door: what this binary sees, one fact per line.
 // Every answer is read out of the same run a hook is built from, so what it
 // prints is what a hook process would have decided — which is the point.
 // Nearly every question this tool gets asked is "why that rung", and the
 // nine facts around that line are the ones the answer is made of.
-func (r run) runDoctor(ctx context.Context) int {
-	cols, from := r.probe()
-	r.doctor(ctx, os.Stdout, cols, from)
+//
+// The window arrives as a call rather than being asked for inside: term.Size
+// in the binary, and in a law a window nobody has, because go test runs
+// under the go command and the go command's stdin is a terminal at home and
+// a pipe on CI.
+func (r run) runDoctor(ctx context.Context, w io.Writer, probe func() (int, term.Geom, term.WidthFrom)) int {
+	cols, g, from := probe()
+	r.geom = g
+	r.doctor(ctx, w, cols, from)
 	return 0
 }
 

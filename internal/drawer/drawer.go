@@ -88,9 +88,9 @@ func Main(args []string) int {
 
 	switch {
 	case *showVersion:
-		fmt.Println("drawer", version)
+		return runVersion(os.Stdout)
 	case *doctor:
-		return r.runDoctor(ctx)
+		return r.runDoctor(ctx, os.Stdout, term.Size)
 	case *showTheme:
 		fmt.Print(r.theme.get(ctx).Source)
 	case *contextLine:

@@ -60,6 +60,53 @@ func pngSize(png []byte) (int, int, error) {
 	return w, h, nil
 }
 
+// The version line is what scripts/release.sh asks the binary it has just
+// built, and what a stranger reads to say which release they are running.
+// The linker writes the variable; a law that sets it reads the same line
+// back out.
+func TestVersionSaysTheReleaseItWasBuiltFrom(t *testing.T) {
+	was := version
+	version = "9.9.9-law"
+	defer func() { version = was }()
+	var b strings.Builder
+	if code := runVersion(&b); code != 0 {
+		t.Fatalf("-version exited %d", code)
+	}
+	if b.String() != "drawer 9.9.9-law\n" {
+		t.Fatalf("-version said %q, want %q", b.String(), "drawer 9.9.9-law\n")
+	}
+}
+
+// The door itself, not only the writing: it asks for the window and hands
+// what came back down. The window is the one thing a law must not let it
+// ask for real — go test runs under the go command, whose stdin is a
+// terminal on the machine this was written on and a pipe on CI — so the
+// probe is a parameter and this one answers with a window nobody has.
+func TestTheDoctorDoorSaysTheWindowItWasHanded(t *testing.T) {
+	t.Setenv("TERM", "xterm-kitty")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DRAWER_STATE", t.TempDir())
+	probe := func() (int, term.Geom, term.WidthFrom) {
+		return 120, term.Geom{CellW: 9, CellH: 20}, term.FromTTY
+	}
+	var b strings.Builder
+	r := newRun(rungAuto, "/tmp/deltas.jsonl", &inForce{th: &theme.Theme{}})
+	if code := r.runDoctor(t.Context(), &b, probe); code != 0 {
+		t.Fatalf("-doctor exited %d", code)
+	}
+	for _, want := range []string{
+		"terminal: xterm-kitty",
+		"columns: 120 (from tty)",
+		"cell: 9x20 px",
+		"kitty: yes",
+		"tee: /tmp/deltas.jsonl",
+	} {
+		if !strings.Contains(b.String(), want) {
+			t.Errorf("-doctor did not say %q:\n%s", want, b.String())
+		}
+	}
+}
+
 // -doctor is what a hook process would decide from, said out loud: ten
 // facts, one per line, in the order the ladder decides them. Under a pipe
 // there is no window to ask — the columns are the number nobody chose and
