@@ -323,3 +323,10 @@ func fit(src string, width, maxRows int) (*dlayout, int, bool) {
 	}
 	return nil, 0, false
 }
+
+// complete says whether a source is a whole graph: graphviz reads it, and
+// there is a graph in it.
+func complete(src string) bool {
+	l, err := layoutDOT(src, "")
+	return err == nil && l != nil
+}

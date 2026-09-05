@@ -283,7 +283,9 @@ func stream(delta string, final bool, st *state, emit func(src string, indent in
 		// is a source that is finished. Emitting before the closer is what
 		// makes a notice safe — a fence cut mid-graph does not lay out, so
 		// the transducer keeps holding instead of answering "finished?"
-		// with "yes, and here is why it is broken" on the first delta.
+		// with "yes, and here is why it is broken" on the first delta. A
+		// source that is finished and wrong is told apart at the close,
+		// where emit gets it whatever it is.
 		if src := fenceBody(st.Held, st.Fence); complete(src) {
 			if rows := emitIn(st.Fence, src, emit); rows != nil {
 				out.WriteString(strings.Join(rows, "\n"))
@@ -302,15 +304,6 @@ func stream(delta string, final bool, st *state, emit func(src string, indent in
 		break
 	}
 	return out.String()
-}
-
-// complete says whether a source is a whole graph: graphviz reads it, and
-// there is a graph in it. A fence still streaming fails here, and so does
-// one that is finished and wrong — the second is told apart at the close,
-// when emit gets the source whatever it is.
-func complete(src string) bool {
-	l, err := layoutDOT(src, "")
-	return err == nil && l != nil
 }
 
 // emitIn is emit for a fence: the rows for its source at the width its
