@@ -39,10 +39,11 @@ import (
 // ---------- capability ----------
 
 // Raster is the rasteriser this machine actually has: a name, the program
-// that name found, and the one call it can make. A func rather than a command line so a law can stand in
-// a stub and read the zoom it was asked for, with no rasteriser anywhere in
-// the loop. The call takes the caller's context because it is another
-// process, and the one thing in this tree most able to hang.
+// that name found, and the one call it can make. A func rather than a
+// command line so a law can stand in a stub and read the zoom it was asked
+// for, with no rasteriser anywhere in the loop. The call takes the caller's
+// context because it is another process, and the one thing in this tree
+// most able to hang.
 type Raster struct {
 	Name string
 	Path string

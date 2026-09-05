@@ -46,6 +46,8 @@ const (
 	FromCOLUMNS                  // the variable, where there was no window
 )
 
+// String names the answer the way -doctor prints it: tty, COLUMNS, or
+// default.
 func (f WidthFrom) String() string {
 	switch f {
 	case FromTTY:

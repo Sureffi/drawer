@@ -18,7 +18,8 @@ jobs:
   # parent's tty read off ps, the environment that cannot be read at all —
   # already compile under the cross-vet; here they run. librsvg is what
   # unskips the two laws that need a rasteriser and the png stage; without it
-  # check.sh says so and carries on.
+  # check.sh says so and carries on, so a brew that fails is not this job
+  # failing and the step says as much.
   macos:
     runs-on: macos-latest
     steps:
@@ -27,4 +28,5 @@ jobs:
         with:
           go-version-file: go.mod
       - run: brew install librsvg
+        continue-on-error: true
       - run: scripts/check.sh

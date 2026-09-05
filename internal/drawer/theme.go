@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/sureffi/drawer/internal/theme"
 )
@@ -32,12 +33,17 @@ func (f *inForce) get(ctx context.Context) *theme.Theme {
 		th, err := theme.Claude(ctx)
 		if err != nil {
 			// The DOT being parsed here was built a package away out of a
-			// fixed palette, so it not parsing is a bug in this tree and
-			// nothing a reader did. It would still be found on the display
-			// wire, where the answer to any bug is to draw: an empty theme
-			// is graphviz's own defaults, so the picture comes out plain
+			// fixed palette, so a parse error is a bug in this tree and
+			// nothing a reader did; since the door took a deadline, a
+			// process that ran out of time arrives here as well, and that
+			// one is only a slow machine. Either is found on the display
+			// wire, where the answer is to draw: an empty theme is
+			// graphviz's own defaults, so the picture comes out plain
 			// rather than not at all, and the line says which happened.
-			fmt.Fprintf(os.Stderr, "drawer: theme: %v; drawing in graphviz's defaults\n", err)
+			// graphviz ends its errors with a newline and a session's
+			// stderr wants one line.
+			say, _, _ := strings.Cut(err.Error(), "\n")
+			fmt.Fprintf(os.Stderr, "drawer: theme: %s; drawing in graphviz's defaults\n", say)
 			th = &theme.Theme{}
 		}
 		f.th = th

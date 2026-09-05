@@ -5,10 +5,11 @@
 # checksums file, the plugin zipped with all four inside, and the repo's own
 # marketplace pointed at the zip: what a stranger's `/plugin install
 # drawer@drawer` downloads, sha256 checked, with no Go, no build and nothing
-# on their machine. `drawer -version` then names what they have. The pins for the bare binaries go
-# into scripts/drawer, so a checkout that arrived by git — an organisation
-# pushing the plugin can only point at git — downloads the same binary the
-# zip would have carried and checks it against the same sum.
+# on their machine. `drawer -version` then names what they have. The pins
+# for the bare binaries go into scripts/drawer, so a checkout that arrived
+# by git — an organisation pushing the plugin can only point at git —
+# downloads the same binary the zip would have carried and checks it against
+# the same sum.
 #
 # Order matters and is the reason this is a script: the binaries' sums go
 # into the wrapper, the wrapper goes into the zip, the zip's sum goes into

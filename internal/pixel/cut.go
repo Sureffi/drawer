@@ -141,11 +141,12 @@ func Fit(ctx context.Context, r *Raster, svg []byte, cols int, geom term.Geom) (
 	return png, rows, nil
 }
 
-// ImageID names a picture by hashing its cut: derived, never minted. The low byte rides in the placeholder's 256-colour
-// foreground and the high byte in a third diacritic, because the display
-// wire quantises a truecolor foreground and would have mangled a 24-bit id
-// — measured: 38;2;253;151;31 came back as 38;5;215. Zero is "no image" in
-// the low byte, so it is skipped.
+// ImageID names a picture by hashing its cut: derived, never minted. The
+// low byte rides in the placeholder's 256-colour foreground and the high
+// byte in a third diacritic, because the display wire quantises a truecolor
+// foreground and would have mangled a 24-bit id — measured: 38;2;253;151;31
+// came back as 38;5;215. Zero is "no image" in the low byte, so it is
+// skipped.
 func ImageID(src string, cols, rows int) uint32 {
 	h := fnv1a32(strconv.Itoa(cols) + "x" + strconv.Itoa(rows) + "\x00" + src)
 	lo := 1 + h%255
