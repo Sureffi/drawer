@@ -97,17 +97,20 @@ func (r run) runPNG(ctx context.Context, dotPath, pngPath string, width int, geo
 // Every answer is read out of the same run a hook is built from, so what it
 // prints is what a hook process would have decided — which is the point.
 // Nearly every question this tool gets asked is "why that rung", and the
-// eight facts around that line are the ones the answer is made of.
-func (r run) runDoctor() int {
+// nine facts around that line are the ones the answer is made of.
+func (r run) runDoctor(ctx context.Context) int {
 	cols, from := r.probe()
-	r.doctor(os.Stdout, cols, from)
+	r.doctor(ctx, os.Stdout, cols, from)
 	return 0
 }
 
-// doctor writes the nine facts. The window is handed in rather than asked
+// doctor writes the ten facts. The window is handed in rather than asked
 // for here: asking is the door's job, and a law can then stand this binary
-// in a terminal that is not there.
-func (r run) doctor(w io.Writer, cols int, from term.WidthFrom) {
+// in a terminal that is not there. The theme is the one exception: it is
+// derived here, the way the first picture of a session derives it, because
+// a line that only read the flags would name a theme this run may never
+// get.
+func (r run) doctor(ctx context.Context, w io.Writer, cols int, from term.WidthFrom) {
 	name := r.term
 	if name == "" {
 		name = "unknown"
@@ -131,9 +134,16 @@ func (r run) doctor(w io.Writer, cols int, from term.WidthFrom) {
 		fmt.Fprintln(w, "rasteriser: none: rsvg-convert or magick on the PATH would enable pixels")
 	}
 	fmt.Fprintf(w, "rung: %s (asked: %s)\n", r.pickRung(), r.rung)
-	if r.theme.file != "" {
+	r.theme.get(ctx) // the answer is in the run afterwards, not in the value
+	switch {
+	case r.theme.file != "" && r.theme.readErr != nil:
+		fmt.Fprintf(w, "theme: file %s (would not read: %s)\n", r.theme.file, firstLine(r.theme.readErr.Error()))
+	case r.theme.file != "":
 		fmt.Fprintln(w, "theme: file", r.theme.file)
-	} else {
+	case r.theme.deriveErr != nil:
+		fmt.Fprintf(w, "theme: graphviz's defaults (Claude Code's theme would not derive: %s)\n",
+			firstLine(r.theme.deriveErr.Error()))
+	default:
 		fmt.Fprintln(w, "theme: Claude Code's", theme.ClaudeName())
 	}
 	dir := stateDir()
@@ -148,4 +158,9 @@ func (r run) doctor(w io.Writer, cols int, from term.WidthFrom) {
 		os.Remove(f.Name())
 	}
 	fmt.Fprintf(w, "state: %s (%s)\n", dir, writable)
+	tee := r.tee
+	if tee == "" {
+		tee = "none"
+	}
+	fmt.Fprintln(w, "tee:", tee)
 }

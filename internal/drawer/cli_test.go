@@ -12,6 +12,7 @@ import (
 
 	"github.com/sureffi/drawer/internal/pixel"
 	"github.com/sureffi/drawer/internal/term"
+	"github.com/sureffi/drawer/internal/theme"
 )
 
 // The offline picture is the hook's picture: cut to whole columns of the
@@ -59,7 +60,7 @@ func pngSize(png []byte) (int, int, error) {
 	return w, h, nil
 }
 
-// -doctor is what a hook process would decide from, said out loud: nine
+// -doctor is what a hook process would decide from, said out loud: ten
 // facts, one per line, in the order the ladder decides them. Under a pipe
 // there is no window to ask — the columns are the number nobody chose and
 // the cell size is unknown — and a terminal that says nothing gets braille,
@@ -75,7 +76,7 @@ func TestDoctorSaysWhatAHookWouldSee(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("DRAWER_STATE", t.TempDir())
 	var b strings.Builder
-	newRun(rungAuto, "", nil, "").doctor(&b, 100, term.FromDefault)
+	newRun(rungAuto, "", &inForce{}).doctor(t.Context(), &b, 100, term.FromDefault)
 	said := strings.Split(strings.TrimSuffix(b.String(), "\n"), "\n")
 	want := []string{
 		"drawer: ",
@@ -87,6 +88,7 @@ func TestDoctorSaysWhatAHookWouldSee(t *testing.T) {
 		"rung: braille (asked: auto)",
 		"theme: Claude Code's dark",
 		"state: ",
+		"tee: none",
 	}
 	if len(said) != len(want) {
 		t.Fatalf("-doctor said %d lines, want %d:\n%s", len(said), len(want), b.String())
@@ -98,5 +100,37 @@ func TestDoctorSaysWhatAHookWouldSee(t *testing.T) {
 	}
 	if !strings.HasSuffix(said[8], " (writable)") {
 		t.Errorf("a state directory this law just made is not writable: %q", said[8])
+	}
+}
+
+// The theme line says which theme actually came out, and a -theme file that
+// would not read says so there rather than taking the whole door down: the
+// reader who ran -doctor is the reader whose theme is wrong.
+func TestDoctorSaysWhichThemeCameOut(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DRAWER_STATE", t.TempDir())
+	cases := []struct {
+		name string
+		th   *inForce
+		want string
+	}{
+		{"a file that read", &inForce{th: &theme.Theme{}, file: "/themes/night.dot"},
+			"theme: file /themes/night.dot"},
+		{"a file that would not", &inForce{file: "/themes/gone.dot", readErr: errors.New("open /themes/gone.dot: no such file or directory")},
+			"theme: file /themes/gone.dot (would not read: open /themes/gone.dot: no such file or directory)"},
+	}
+	for _, c := range cases {
+		var b strings.Builder
+		newRun(rungAuto, "", c.th).doctor(t.Context(), &b, 100, term.FromDefault)
+		line := ""
+		for _, l := range strings.Split(b.String(), "\n") {
+			if strings.HasPrefix(l, "theme: ") {
+				line = l
+			}
+		}
+		if line != c.want {
+			t.Errorf("%s: theme line is %q, want %q", c.name, line, c.want)
+		}
 	}
 }

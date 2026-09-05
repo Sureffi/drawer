@@ -63,30 +63,34 @@ func Main(args []string) int {
 	defer cancel()
 
 	// A theme the hook cannot read is the built-in one: the picture draws,
-	// and the session opens. Everywhere else — -dot, -png, -deltas — a bad
-	// theme is an answer.
+	// and the session opens. -doctor stands with the hook there, because it
+	// is asked precisely when something is wrong and its own theme line is
+	// where the reason belongs — exiting first would leave the reader with
+	// none of the other nine facts. Everywhere else — -dot, -png, -deltas —
+	// a bad theme is an answer.
 	var th *theme.Theme
-	file := ""
+	file, readErr := "", error(nil)
 	if *themePath != "" {
+		file = *themePath
 		loaded, err := theme.Load(ctx, *themePath)
-		if err != nil && !*hook && !*contextLine {
-			fmt.Fprintln(os.Stderr, "drawer: theme:", err)
-			return 1
+		if err != nil {
+			if !*hook && !*contextLine && !*doctor {
+				fmt.Fprintln(os.Stderr, "drawer: theme:", err)
+				return 1
+			}
+			readErr = err
 		}
 		th = loaded // nil where it would not read: Claude Code's, as before
-		if th != nil {
-			file = *themePath
-		}
 	}
 
-	r := newRun(parseRung(*render), *hooktee, th, file)
+	r := newRun(parseRung(*render), *hooktee, &inForce{th: th, file: file, readErr: readErr})
 	w, h := parseSize(*size, 100, 40)
 
 	switch {
 	case *showVersion:
 		fmt.Println("drawer", version)
 	case *doctor:
-		return r.runDoctor()
+		return r.runDoctor(ctx)
 	case *showTheme:
 		fmt.Print(r.theme.get(ctx).Source)
 	case *contextLine:

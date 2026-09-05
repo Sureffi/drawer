@@ -55,8 +55,11 @@ Code 2.1.261):
 `drawer -doctor` says what this terminal gets and why: the version, the
 terminal, the window it found and where that number came from, the cell in
 pixels, whether this is kitty, the rasteriser on the PATH, the rung in
-force and the one asked for, the theme it paints in, and the state
-directory — read out of the same run a hook is built from.
+force and the one asked for, the theme it paints in, the state directory,
+and the file `DRAWER_TEE` is recording to, where it is set — read out of the
+same run a hook is built from. It answers where the other doors would not:
+a `-theme` file that will not read is a line in the report rather than an
+exit.
 
 **The theme.** The pixels rung draws in Claude Code's own theme, read the
 way Claude Code reads it: the `theme` of `~/.claude/settings.json`, or of

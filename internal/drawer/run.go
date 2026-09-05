@@ -17,7 +17,6 @@ package drawer
 
 import (
 	"github.com/sureffi/drawer/internal/term"
-	"github.com/sureffi/drawer/internal/theme"
 )
 
 type run struct {
@@ -33,10 +32,10 @@ type run struct {
 // newRun is the run main hands down. TERM is read here and not at probe
 // time, because it is available on every door and the window is not: a
 // -deltas replay never asks the window how big it is, and it still gets to
-// know what terminal it is replaying for. file is where -theme read its
-// theme from, and empty everywhere else.
-func newRun(r rung, tee string, th *theme.Theme, file string) run {
-	return run{rung: r, term: term.Name(), tee: tee, theme: &inForce{th: th, file: file}}
+// know what terminal it is replaying for. The theme arrives whole, because
+// main is where -theme was read and where it was found unreadable.
+func newRun(r rung, tee string, th *inForce) run {
+	return run{rung: r, term: term.Name(), tee: tee, theme: th}
 }
 
 // probe asks the window how big it is. The columns come back, and where

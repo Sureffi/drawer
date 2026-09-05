@@ -22,10 +22,18 @@ import (
 
 type inForce struct {
 	th *theme.Theme
-	// file is where -theme read this theme from, and empty where the theme
-	// is Claude Code's own. Nothing draws from it; -doctor says it, because
-	// a picture in the wrong colours is asking which theme this was.
+	// file is what -theme named, and empty where the theme is Claude Code's
+	// own. Nothing draws from it; -doctor says it, because a picture in the
+	// wrong colours is asking which theme this was.
 	file string
+	// readErr is why that file did not read, on the doors that carry on
+	// without it: the hook, which has a session to open, and -doctor, which
+	// is asked exactly when something is wrong.
+	readErr error
+	// deriveErr is why Claude Code's theme would not derive. get has already
+	// said it on stderr and handed back graphviz's defaults; -doctor says
+	// which theme actually came out.
+	deriveErr error
 }
 
 func (f *inForce) get(ctx context.Context) *theme.Theme {
@@ -40,13 +48,16 @@ func (f *inForce) get(ctx context.Context) *theme.Theme {
 			// wire, where the answer is to draw: an empty theme is
 			// graphviz's own defaults, so the picture comes out plain
 			// rather than not at all, and the line says which happened.
-			// graphviz ends its errors with a newline and a session's
-			// stderr wants one line.
-			say, _, _ := strings.Cut(err.Error(), "\n")
-			fmt.Fprintf(os.Stderr, "drawer: theme: %s; drawing in graphviz's defaults\n", say)
+			fmt.Fprintf(os.Stderr, "drawer: theme: %s; drawing in graphviz's defaults\n", firstLine(err.Error()))
+			f.deriveErr = err
 			th = &theme.Theme{}
 		}
 		f.th = th
 	}
 	return f.th
 }
+
+// firstLine is the head of a message. graphviz ends its errors with a
+// newline, and one line is what a session's stderr and a fact per line both
+// have room for.
+func firstLine(s string) string { s, _, _ = strings.Cut(s, "\n"); return s }
