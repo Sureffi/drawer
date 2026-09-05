@@ -1,18 +1,17 @@
-// cells_test.go — laws for the cells rung and for Draw, one case per rule
-// written into the code.
+// cells_test.go — laws for the cells rung, one case per rule written into
+// the code.
 //
 // These exist to show that each design actually kills the class of bug it
 // claims to; the real oracles are the recorded delta streams (-deltas) and
 // the drawings themselves (-dot), and check.sh runs all of it together.
 
-package main
+package cells
 
 import (
 	"strings"
 	"testing"
 
 	"github.com/mattn/go-runewidth"
-	"github.com/sureffi/drawer/internal/grid"
 	"github.com/sureffi/drawer/internal/layout"
 )
 
@@ -39,7 +38,7 @@ func TestLabelKeepsItsBox(t *testing.T) {
 	if !ok {
 		t.Fatal("layout failed")
 	}
-	rows := renderDiagram(l, 100, h)
+	rows := Draw(l, 100, h)
 	for _, r := range rows {
 		if strings.Contains(r, "käyttö") && !walled(r, "käyttö") {
 			t.Errorf("label lost its border: %q", r)
@@ -56,7 +55,7 @@ func TestWideLabelKeepsItsColumns(t *testing.T) {
 	if !ok {
 		t.Fatal("layout failed")
 	}
-	rows := renderDiagram(l, 100, h)
+	rows := Draw(l, 100, h)
 	var widths []int
 	for _, r := range rows {
 		if strings.TrimSpace(r) != "" {
@@ -82,7 +81,7 @@ func TestLabelEscapesAreNotEaten(t *testing.T) {
 	if !ok {
 		t.Fatal("layout failed")
 	}
-	for _, r := range renderDiagram(l, 100, h) {
+	for _, r := range Draw(l, 100, h) {
 		if strings.Contains(r, "anb") {
 			t.Errorf("escape eaten, invented a word: %q", r)
 		}
@@ -97,7 +96,7 @@ func TestNumericEdgeLabelDraws(t *testing.T) {
 	if !ok {
 		t.Fatal("layout failed")
 	}
-	rows := renderDiagram(l, 100, h)
+	rows := Draw(l, 100, h)
 	if !strings.Contains(strings.Join(rows, "\n"), "42") {
 		t.Errorf("numeric edge label not drawn:\n%s", strings.Join(rows, "\n"))
 	}
@@ -112,7 +111,7 @@ func TestArrowMeetsItsBox(t *testing.T) {
 	if !ok {
 		t.Fatal("layout failed")
 	}
-	rows := renderDiagram(l, 100, h)
+	rows := Draw(l, 100, h)
 	joined := strings.Join(rows, "\n")
 	if strings.Contains(joined, "▶ ") {
 		t.Errorf("arrowhead left short of its box:\n%s", joined)
@@ -137,7 +136,7 @@ func TestALeavingEdgeJoinsItsWall(t *testing.T) {
 	if !ok {
 		t.Fatal("layout failed")
 	}
-	rows := renderDiagram(l, 100, h)
+	rows := Draw(l, 100, h)
 	if rows == nil {
 		t.Fatal("nothing drew")
 	}
@@ -166,7 +165,7 @@ func TestDiagramLabelKeepsItsCombiningMarks(t *testing.T) {
 	if !ok {
 		t.Fatal("the graph did not lay out")
 	}
-	rows := renderDiagram(l, 100, h)
+	rows := Draw(l, 100, h)
 	if rows == nil {
 		t.Fatal("nothing drew")
 	}
@@ -190,7 +189,7 @@ func TestTopDownTreeKeepsItsRanks(t *testing.T) {
 	if !ok {
 		t.Fatal("layout failed")
 	}
-	rows := renderDiagram(l, 116, h)
+	rows := Draw(l, 116, h)
 	rowOf := func(label string) int {
 		for i, r := range rows {
 			if strings.Contains(r, "│"+label+"│") || strings.Contains(r, "│"+label+"├") || strings.Contains(r, "┤"+label+"│") || strings.Contains(r, "┤"+label+"├") {
@@ -214,7 +213,7 @@ func TestUndirectedGraphHasNoArrowheads(t *testing.T) {
 	if !ok {
 		t.Fatal("layout failed")
 	}
-	if joined := strings.Join(renderDiagram(l, 80, h), "\n"); strings.ContainsAny(joined, "▶◀▲▼") {
+	if joined := strings.Join(Draw(l, 80, h), "\n"); strings.ContainsAny(joined, "▶◀▲▼") {
 		t.Errorf("arrowheads on an undirected graph:\n%s", joined)
 	}
 }
@@ -248,7 +247,7 @@ func renderOf(t *testing.T, src string, w int) []string {
 	if !ok {
 		t.Fatal("layout failed")
 	}
-	rows := renderDiagram(l, w, h)
+	rows := Draw(l, w, h)
 	if rows == nil {
 		t.Fatal("render failed")
 	}
@@ -373,51 +372,5 @@ func TestCornersNameTheirOwner(t *testing.T) {
 				t.Errorf("╭ at %d,%d is not a box corner\n%s", x, y, joined)
 			}
 		}
-	}
-}
-
-// Draw hands CC a bare fence. Every row inside it fits the width it was
-// drawn for, and nothing but the fence comes back: no caption, no source —
-// the reader gets the picture, not the plumbing.
-func TestDrawModeEmitsABareFenceThatFits(t *testing.T) {
-	r := run{rung: rungCells, theme: &inForce{}}
-	src := "digraph { rankdir=LR; parse -> check -> emit; check -> warn }\n"
-	rows := r.drawBlock(src, 90)
-	if rows == nil {
-		t.Fatal("nothing drawn")
-	}
-	if rows[0] != fenceTick || rows[len(rows)-1] != fenceTick {
-		t.Fatalf("not a bare fence:\n%s", strings.Join(rows, "\n"))
-	}
-	for _, r := range rows[1 : len(rows)-1] {
-		if n := grid.Cells(grid.StripSGR(r)); n > 90 {
-			t.Errorf("row is %d cells in 90 columns: %q", n, r)
-		}
-		if strings.Contains(r, "digraph") {
-			t.Errorf("the source reached the reader: %q", r)
-		}
-	}
-	if !strings.Contains(strings.Join(rows, "\n"), "▶") {
-		t.Error("no arrowhead: the fence was replaced by something that is not the drawing")
-	}
-}
-
-// A fence that will not fit says why, and the reader keeps the source in
-// the same fence — one fence in, one fence out is what the oracle holds
-// the wire to, so the notice may not become a second block.
-func TestDrawModeNoticeKeepsTheSourceInOneFence(t *testing.T) {
-	r := run{rung: rungCells, theme: &inForce{}}
-	// a label wider than the window: no orientation can save it
-	src := "digraph { rankdir=LR; alpha -> \"a label far wider than thirty columns of window\" }\n"
-	rows := r.drawBlock(src, 30)
-	if rows == nil {
-		t.Fatal("a too-narrow window produced nothing, not even a reason")
-	}
-	joined := strings.Join(rows, "\n")
-	if strings.Count(joined, fenceTick+"\n") != 1 || !strings.HasSuffix(joined, fenceTick) {
-		t.Fatalf("notice and source are not one fence:\n%s", joined)
-	}
-	if !strings.Contains(joined, "no diagram") || !strings.Contains(joined, "alpha ->") {
-		t.Fatalf("notice without its source, or source without its notice:\n%s", joined)
 	}
 }

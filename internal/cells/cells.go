@@ -8,7 +8,7 @@
 // if it does not fit, the source shows under a notice. A failure is
 // visible, never silent. route.go puts the edges on this canvas.
 
-package main
+package cells
 
 import (
 	"strings"

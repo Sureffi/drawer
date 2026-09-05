@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/sureffi/drawer/internal/cells"
 	"github.com/sureffi/drawer/internal/layout"
 	"github.com/sureffi/drawer/internal/term"
 )
@@ -42,7 +43,7 @@ func (r run) runDotDump(path string, w, h int) int {
 	}
 	l, _, ok := layout.Fit(string(b), w, 0)
 	if ok && rows == nil {
-		rows = renderDiagram(l, w, h)
+		rows = cells.Draw(l, w, h)
 	}
 	if rows == nil {
 		// the layout already worked the answer out; reporting only "will

@@ -20,7 +20,7 @@
 // hard question (which boxes go where so edges can behave), and
 // everything after that answer is derived in cell space, never carried.
 
-package main
+package cells
 
 import (
 	"container/heap"
@@ -589,13 +589,13 @@ func routeSelfLoop(cv *canvas, b nbox) {
 
 // ---------- composition root ----------
 
-// renderDiagram lays a DOT source out and draws it into a w x h cell
-// box. graphviz's placement arrives in inches; everything visible is
-// decided here, in cells: the composition is normalised, every edge is
-// routed natively, labels ride their own strokes. Returns nil if it
-// will not fit — the caller then leaves the source alone, which is
-// still the whole failure policy: a failure is visible, never silent.
-func renderDiagram(l *layout.Plain, w, h int) []string {
+// Draw lays a DOT source out and draws it into a w x h cell box.
+// graphviz's placement arrives in inches; everything visible is decided
+// here, in cells: the composition is normalised, every edge is routed
+// natively, labels ride their own strokes. Returns nil if it will not
+// fit — the caller then leaves the source alone, which is still the whole
+// failure policy: a failure is visible, never silent.
+func Draw(l *layout.Plain, w, h int) []string {
 	if w < 12 || h < 3 || l == nil {
 		return nil
 	}

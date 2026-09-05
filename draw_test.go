@@ -1,10 +1,13 @@
-// draw_test.go — laws for the ladder: which rung a run draws on.
+// draw_test.go — laws for the ladder: which rung a run draws on, and what
+// it hands back in place of a fence.
 
 package main
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/sureffi/drawer/internal/grid"
 	"github.com/sureffi/drawer/internal/term"
 )
 
@@ -45,5 +48,51 @@ func TestPickRungReadsTheTerminal(t *testing.T) {
 		if asked != c.asksRaster {
 			t.Errorf("%s: looked for a rasteriser: %v, want %v", c.name, asked, c.asksRaster)
 		}
+	}
+}
+
+// Draw hands CC a bare fence. Every row inside it fits the width it was
+// drawn for, and nothing but the fence comes back: no caption, no source —
+// the reader gets the picture, not the plumbing.
+func TestDrawModeEmitsABareFenceThatFits(t *testing.T) {
+	r := run{rung: rungCells, theme: &inForce{}}
+	src := "digraph { rankdir=LR; parse -> check -> emit; check -> warn }\n"
+	rows := r.drawBlock(src, 90)
+	if rows == nil {
+		t.Fatal("nothing drawn")
+	}
+	if rows[0] != fenceTick || rows[len(rows)-1] != fenceTick {
+		t.Fatalf("not a bare fence:\n%s", strings.Join(rows, "\n"))
+	}
+	for _, r := range rows[1 : len(rows)-1] {
+		if n := grid.Cells(grid.StripSGR(r)); n > 90 {
+			t.Errorf("row is %d cells in 90 columns: %q", n, r)
+		}
+		if strings.Contains(r, "digraph") {
+			t.Errorf("the source reached the reader: %q", r)
+		}
+	}
+	if !strings.Contains(strings.Join(rows, "\n"), "▶") {
+		t.Error("no arrowhead: the fence was replaced by something that is not the drawing")
+	}
+}
+
+// A fence that will not fit says why, and the reader keeps the source in
+// the same fence — one fence in, one fence out is what the oracle holds
+// the wire to, so the notice may not become a second block.
+func TestDrawModeNoticeKeepsTheSourceInOneFence(t *testing.T) {
+	r := run{rung: rungCells, theme: &inForce{}}
+	// a label wider than the window: no orientation can save it
+	src := "digraph { rankdir=LR; alpha -> \"a label far wider than thirty columns of window\" }\n"
+	rows := r.drawBlock(src, 30)
+	if rows == nil {
+		t.Fatal("a too-narrow window produced nothing, not even a reason")
+	}
+	joined := strings.Join(rows, "\n")
+	if strings.Count(joined, fenceTick+"\n") != 1 || !strings.HasSuffix(joined, fenceTick) {
+		t.Fatalf("notice and source are not one fence:\n%s", joined)
+	}
+	if !strings.Contains(joined, "no diagram") || !strings.Contains(joined, "alpha ->") {
+		t.Fatalf("notice without its source, or source without its notice:\n%s", joined)
 	}
 }
