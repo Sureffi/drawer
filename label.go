@@ -1,4 +1,4 @@
-// pixellabel.go — an edge label sits on its line, and the line stops for it.
+// label.go — an edge label sits on its line, and the line stops for it.
 //
 // graphviz places an edge label beside the midpoint of its edge, and the
 // picture reads as a caption near a line. The glyph rungs put the label on

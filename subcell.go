@@ -562,3 +562,13 @@ func drawSubcell(src string, width int, octants bool) []string {
 	}
 	return renderInk(jg, cols, rows, octants)
 }
+
+// hasSubcellInk reports a braille or octant stroke in a row.
+func hasSubcellInk(s string) bool {
+	for _, r := range s {
+		if (r > 0x2800 && r <= 0x28FF) || (r >= 0x1CD00 && r <= 0x1CDE5) || (r >= 0x1CEA0 && r <= 0x1CEAF) {
+			return true
+		}
+	}
+	return false
+}

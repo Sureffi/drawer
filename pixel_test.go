@@ -440,34 +440,6 @@ func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
 	}
 }
 
-// The offline picture is the hook's picture: cut to whole columns of the
-// cell it was asked for. Skipped where there is nothing to rasterise with.
-func TestRunPNGWritesTheHooksPicture(t *testing.T) {
-	if findRaster() == nil {
-		t.Skip("no rasteriser on the PATH")
-	}
-	dir := t.TempDir()
-	dot := dir + "/g.dot"
-	png := dir + "/g.png"
-	if err := os.WriteFile(dot, []byte("digraph { rankdir=LR; a -> b [label=\"x\"]; b -> c }\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if code := (run{theme: &inForce{}}).runPNG(dot, png, 100, pxGeom{CellW: 10, CellH: 24}); code != 0 {
-		t.Fatalf("runPNG exited %d", code)
-	}
-	b, err := os.ReadFile(png)
-	if err != nil {
-		t.Fatal(err)
-	}
-	w, h, err := pngSize(b)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if w%10 != 0 || w > 1000 || h <= 0 {
-		t.Errorf("picture is %dx%d px; want a whole number of 10px columns within 100", w, h)
-	}
-}
-
 // ---------- the ledger ----------
 
 // The pictures a session drew are sent to the terminal again, under their

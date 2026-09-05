@@ -99,7 +99,7 @@ func (r run) runHook() int {
 	r.sess = in.SessionID
 	width := hookWidth(r.probe())
 	// The first delta of a message is the first thing the hook hears after
-	// a theme switch; pixelledger.go says why, and what is repainted.
+	// a theme switch; ledger.go says why, and what is repainted.
 	if in.Index == 0 && r.pickRung() == rungPixels {
 		r.repaintPictures(parentTTYOut(), probeRaster())
 	}

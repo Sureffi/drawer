@@ -21,7 +21,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"errors"
 	"os"
 	"os/exec"
@@ -276,23 +275,6 @@ func svgSize(svg []byte) (float64, float64, error) {
 	w, h := atof(string(m[1])), atof(string(m[2]))
 	if w <= 0 || h <= 0 {
 		return 0, 0, errors.New("svg size is not a size")
-	}
-	return w, h, nil
-}
-
-var pngMagic = []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}
-
-// pngSize reads the dimensions out of the IHDR chunk, which is the first
-// chunk of every PNG and holds them in its first eight bytes. Decoding the
-// whole image to learn two numbers would cost the pixels twice.
-func pngSize(png []byte) (int, int, error) {
-	if len(png) < 24 || !bytes.Equal(png[:8], pngMagic) || string(png[12:16]) != "IHDR" {
-		return 0, 0, errors.New("not a png")
-	}
-	w := int(binary.BigEndian.Uint32(png[16:20]))
-	h := int(binary.BigEndian.Uint32(png[20:24]))
-	if w <= 0 || h <= 0 {
-		return 0, 0, errors.New("png has no size")
 	}
 	return w, h, nil
 }

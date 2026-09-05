@@ -1,4 +1,4 @@
-// pixelledger.go — the pictures a session has drawn, painted again.
+// ledger.go — the pictures a session has drawn, painted again.
 //
 // A theme switch in Claude Code redraws the transcript in the new colours,
 // and the pictures in it stay as they were: they are kitty's, held under
@@ -23,23 +23,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
-
-	"github.com/goccy/go-graphviz/cgraph"
 )
-
-// picture is one drawn picture: enough to draw it again at the same cut.
-// The orientation is part of the cut — empty as written, top-down where
-// the hook flipped it to fit the width — because the rows on screen are
-// the rows that layout gave, and a repaint has to lay it out the same way.
-type picture struct {
-	Src     string         `json:"src"`
-	Cols    int            `json:"cols"`
-	Rows    int            `json:"rows"`
-	Geom    pxGeom         `json:"geom"`
-	Rankdir cgraph.RankDir `json:"rankdir,omitempty"`
-}
 
 type ledger struct {
 	Theme    string    `json:"theme"`
@@ -52,11 +37,6 @@ const ledgerMax = 40
 
 func ledgerPath(session string) string {
 	return filepath.Join(stateDir(), "pictures", safeName(session)+".json")
-}
-
-// themeSig names a theme, for the ledger to compare.
-func themeSig(th *theme) string {
-	return strconv.FormatUint(uint64(fnv1a32(th.Source)), 16)
 }
 
 // recordPicture writes a picture into its session's ledger, once, and

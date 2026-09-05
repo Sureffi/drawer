@@ -1,20 +1,12 @@
-// pixelhook.go — real pixels from inside the hook.
+// pixelcut.go — the picture goes round Claude Code, not through it.
 //
-// A program that owns the terminal's output can stream a picture's bytes
-// through what it writes. A hook has no such stream: what it returns is text, and
-// CC's display wire strips a graphics escape out of that text without a
-// word — measured, the transmission simply was not there on the other
-// side. The placeholder cells, on the other hand, ride through untouched:
-// U+10EEEE with its diacritics and a 256-colour foreground came out byte
-// for byte and counted as one column each.
-//
-// So the picture goes round CC rather than through it. The hook writes
-// the PNG to a temp file and hands the terminal one short escape naming
-// that file, straight down the parent's own tty via /proc. kitty reads the
-// file, deletes it, and holds the image under the id the cells will name.
-// One write of a hundred-odd bytes is atomic on a tty, so the bytes cannot
-// land inside a frame CC is mid-way through writing — which is the hazard
-// pushing fifty kilobytes down the same wire would have had.
+// The hook writes the PNG to a temp file and hands the terminal one short
+// escape naming that file, straight down the parent's own tty via /proc.
+// kitty reads the file, deletes it, and holds the image under the id the
+// cells will name. One write of a hundred-odd bytes is atomic on a tty, so
+// the bytes cannot land inside a frame CC is mid-way through writing —
+// which is the hazard pushing fifty kilobytes down the same wire would
+// have had.
 //
 // Where any of that cannot happen — no kitty, no cell size in pixels, no
 // rasteriser, a tty that is not there — the answer is nil and the rung
@@ -36,22 +28,16 @@ import (
 	"github.com/goccy/go-graphviz/cgraph"
 )
 
-// drawPixels is the pixels rung: the rows that show a picture, or nil.
-func (r run) drawPixels(src string, width int) []string {
-	ras := probeRaster()
-	if ras == nil || !r.geom.ok() {
-		return nil
-	}
-	png, p, err := pixelCut(r.theme.get(), ras, src, width, r.geom)
-	if err != nil {
-		return nil
-	}
-	id := hookImageID(p.Src, p.Cols, p.Rows)
-	if !transmitFile(parentTTYOut(), png, id, p.Cols, p.Rows) {
-		return nil
-	}
-	r.recordPicture(p)
-	return placeholderRows(id, p.Cols, p.Rows)
+// picture is one drawn picture: enough to draw it again at the same cut.
+// The orientation is part of the cut — empty as written, top-down where
+// the hook flipped it to fit the width — because the rows on screen are
+// the rows that layout gave, and a repaint has to lay it out the same way.
+type picture struct {
+	Src     string         `json:"src"`
+	Cols    int            `json:"cols"`
+	Rows    int            `json:"rows"`
+	Geom    pxGeom         `json:"geom"`
+	Rankdir cgraph.RankDir `json:"rankdir,omitempty"`
 }
 
 // pixelCut is the picture for a block of cells: the cut — its columns up
@@ -160,6 +146,11 @@ func hookImageID(src string, cols, rows int) uint32 {
 	lo := 1 + h%255
 	hi := (h >> 8) & 0xff
 	return hi<<24 | lo
+}
+
+// themeSig names a theme, for the ledger to compare.
+func themeSig(th *theme) string {
+	return strconv.FormatUint(uint64(fnv1a32(th.Source)), 16)
 }
 
 // transmitFile hands the terminal the picture through a temp file it will
