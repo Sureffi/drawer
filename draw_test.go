@@ -3,11 +3,15 @@
 package drawer
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/goccy/go-graphviz"
+	"github.com/goccy/go-graphviz/cgraph"
 )
 
 // Draw hands CC a bare fence. Every row inside it fits the width it was
@@ -462,6 +466,72 @@ func TestThemeFileYieldsToTheModel(t *testing.T) {
 
 // ---------- edge labels on their lines ----------
 
+// rewritten parses a source and puts its edge labels on their edges, for a
+// look at the graph itself. The caller closes both.
+func rewritten(t *testing.T, src string) (*graphviz.Graphviz, *cgraph.Graph) {
+	t.Helper()
+	graphvizMu.Lock()
+	defer graphvizMu.Unlock()
+	g, err := graphviz.New(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	graph, err := graphviz.ParseBytes([]byte(src))
+	if err != nil || graph == nil {
+		t.Fatal("no graph:", err)
+	}
+	inlineEdgeLabels(graph, currentTheme(), 0, true)
+	return g, graph
+}
+
+// edgeAttr is one attribute of the edge between two named nodes, or "no
+// such edge".
+func edgeAttr(graph *cgraph.Graph, tail, head, attr string) string {
+	for n, _ := graph.FirstNode(); n != nil; n, _ = graph.NextNode(n) {
+		for e, _ := graph.FirstOut(n); e != nil; e, _ = graph.NextOut(e) {
+			if t, h := ends(e); t == tail && h == head {
+				return e.GetStr(attr)
+			}
+		}
+	}
+	return "no such edge"
+}
+
+// A labelled graph is spaced as dot spaces one: the ranksep in force is
+// halved — the model's, else dot's half inch — and every plain edge's
+// minlen is doubled, so it spans a full rank gap and not the half a label
+// node's rank left it. The halves of a labelled edge keep the model's
+// minlen, the label at their midpoint. A graph with no labels is not
+// touched.
+func TestPixelLabelsSpaceAsDotDoes(t *testing.T) {
+	g, graph := rewritten(t, "digraph { ranksep=\"1 equally\"; a -> b [label=x, minlen=3]; b -> c; c -> d [minlen=3] }")
+	defer g.Close()
+	defer graph.Close()
+	if rs := graph.GetStr("ranksep"); rs != "0.5 equally" {
+		t.Errorf("ranksep is %q, want the model's halved", rs)
+	}
+	for _, c := range []struct{ tail, head, want string }{
+		{"b", "c", "2"}, {"c", "d", "6"},
+		{"a", labelNodePrefix + "0", "3"}, {labelNodePrefix + "0", "b", "3"},
+	} {
+		if got := edgeAttr(graph, c.tail, c.head, "minlen"); got != c.want {
+			t.Errorf("%s -> %s: minlen %q, want %q", c.tail, c.head, got, c.want)
+		}
+	}
+	g2, bare := rewritten(t, "digraph { a -> b [label=x]; b -> c }")
+	defer g2.Close()
+	defer bare.Close()
+	if rs := bare.GetStr("ranksep"); rs != "0.25" {
+		t.Errorf("ranksep is %q with none declared, want dot's half inch halved", rs)
+	}
+	g3, plain := rewritten(t, "digraph { ranksep=1; a -> b; b -> c }")
+	defer g3.Close()
+	defer plain.Close()
+	if rs, ml := plain.GetStr("ranksep"), edgeAttr(plain, "a", "b", "minlen"); rs != "1" || ml != "" {
+		t.Errorf("an unlabelled graph was respaced: ranksep %q, minlen %q", rs, ml)
+	}
+}
+
 // A labelled edge is drawn as two edges through a node carrying the label,
 // each half in the edge's own paint, and a `dir=both` edge keeps a head at
 // each end: the back arrow on the first half, the forward on the second.
@@ -569,7 +639,9 @@ func TestPixelLabelOnABackEdgeSitsBetweenItsEnds(t *testing.T) {
 }
 
 // Inlining labels doubles the ranks, so ranksep is halved as dot does for
-// its own label nodes; the model's ranksep wins, then the theme's.
+// its own label nodes — whichever is in force: the model's, else the
+// theme's, else dot's half inch. A model writing dot's default draws the
+// same chain as one writing nothing, and a theme's inch is a half.
 func TestPixelLabelsHalveRanksepAsDotDoes(t *testing.T) {
 	height := func(src string) float64 {
 		svg, err := renderThemedSVG(src, 0)
@@ -582,14 +654,16 @@ func TestPixelLabelsHalveRanksepAsDotDoes(t *testing.T) {
 		}
 		return h
 	}
-	halved := height(`digraph { a -> b [label="x"] }`)
-	full := height(`digraph { ranksep=0.5; a -> b [label="x"] }`)
-	if !(halved < full) {
-		t.Errorf("a labelled chain is %vpt with ranksep left alone and %vpt at dot's default; the halving did not happen", halved, full)
+	bare := height(`digraph { a -> b [label="x"] }`)
+	if dflt := height(`digraph { ranksep=0.5; a -> b [label="x"] }`); dflt != bare {
+		t.Errorf("a labelled chain is %vpt with dot's default written and %vpt with none; the model's ranksep was not halved", dflt, bare)
+	}
+	if model := height(`digraph { ranksep=1; a -> b [label="x"] }`); !(model > bare) {
+		t.Errorf("the model's ranksep was overridden: %vpt at 1, %vpt at the default", model, bare)
 	}
 	withTheme(t, `graph [ranksep=1]`)
-	if themed := height(`digraph { a -> b [label="x"] }`); !(themed > full) {
-		t.Errorf("the theme's ranksep was overridden: %vpt themed, %vpt at 0.5", themed, full)
+	if themed := height(`digraph { a -> b [label="x"] }`); !(themed > bare) {
+		t.Errorf("the theme's ranksep was overridden: %vpt themed, %vpt at the default", themed, bare)
 	}
 }
 

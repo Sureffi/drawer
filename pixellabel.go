@@ -57,24 +57,43 @@ func isDigraph(src string) bool {
 // size the labels will be set at, which fixes the air around them.
 func inlineEdgeLabels(graph *cgraph.Graph, th *Theme, fontPt float64, directed bool) {
 	// Collect first: rewriting the out-lists while walking them is undefined.
-	var todo []*cgraph.Edge
+	var todo, plain []*cgraph.Edge
 	for n, _ := graph.FirstNode(); n != nil; n, _ = graph.NextNode(n) {
 		for e, _ := graph.FirstOut(n); e != nil; e, _ = graph.NextOut(e) {
 			if t, h := ends(e); e.GetStr("label") != "" && t != h {
 				todo = append(todo, e)
+			} else {
+				plain = append(plain, e)
 			}
 		}
 	}
 	if len(todo) == 0 {
 		return
 	}
-	// dot halves ranksep when it doubles the ranks for its own label nodes;
-	// ours are real nodes on real ranks, so the same move is made here, or
-	// a labelled chain stands a third taller than dot would have drawn it —
-	// measured, 18 rows against 24.5 on four nodes. The model's ranksep
-	// wins, then the theme's.
-	if graph.GetStr("ranksep") == "" && th.Graph["ranksep"] == "" {
-		graph.SafeSet("ranksep", "0.25", "")
+	// dot's own spacing for a labelled graph, made here because our label
+	// nodes are real nodes on real ranks: it halves whatever ranksep is in
+	// force and doubles every edge's minlen, so a labelled edge spans two
+	// ranks with its label on the middle one and a plain edge still spans
+	// a full rank gap. Without the halving a labelled chain stands a third
+	// taller than dot would draw it — measured, 18 rows against 24.5 on
+	// four nodes; without the doubling a plain edge between neighbours is a
+	// tick, half the line dot gives it. The model's ranksep is the one
+	// halved, else the theme's, else dot's half inch; a labelled edge's
+	// halves keep the model's minlen, which is the label at its midpoint.
+	ranksep := graph.GetStr("ranksep")
+	if ranksep == "" {
+		ranksep = th.Graph["ranksep"]
+	}
+	if ranksep == "" {
+		ranksep = "0.5"
+	}
+	graph.SafeSet("ranksep", halved(ranksep), "")
+	for _, e := range plain {
+		minlen := 1
+		if v, err := strconv.Atoi(e.GetStr("minlen")); err == nil {
+			minlen = v
+		}
+		e.SafeSet("minlen", strconv.Itoa(2*minlen), "")
 	}
 	back := backEdges(graph)
 	// Every edge attribute the source declared, by name, so the copy is the
@@ -173,6 +192,22 @@ func inlineEdgeLabels(graph *cgraph.Graph, th *Theme, fontPt float64, directed b
 		}
 		graph.DeleteEdge(e)
 	}
+}
+
+// halved is a ranksep at half its length, the "equally" it may carry kept:
+// "1" is "0.5", "0.5 equally" is "0.25 equally". Anything that does not
+// start with a number is returned as it came.
+func halved(ranksep string) string {
+	num, rest, _ := strings.Cut(ranksep, " ")
+	v, err := strconv.ParseFloat(num, 64)
+	if err != nil {
+		return ranksep
+	}
+	out := strconv.FormatFloat(v/2, 'f', -1, 64)
+	if rest != "" {
+		out += " " + rest
+	}
+	return out
 }
 
 // ends names an edge's tail and head.

@@ -64,7 +64,8 @@ Where it left an attribute unset, the theme applies. An edge label sits on
 its line and the line stops a glyph short of it on either side, as in the
 glyph rungs: the graph is rewritten before layout so the label is a node on
 the edge, which is what dot does inside itself for a labelled edge anyway,
-down to halving `ranksep` for the doubled ranks.
+down to halving `ranksep` for the doubled ranks and doubling every other
+edge's `minlen`, so a plain edge still spans a full rank gap.
 
 ## the theme
 
