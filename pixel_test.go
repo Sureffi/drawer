@@ -1,7 +1,7 @@
 // pixel_test.go — laws for the pixels rung: the placeholders, the cut, the
 // theme on the picture, the labels on their lines, and the ledger.
 
-package drawer
+package main
 
 import (
 	"context"
@@ -186,9 +186,7 @@ func TestPixelBackgroundIsTheTerminalsUnlessSet(t *testing.T) {
 // look at the graph itself. The caller closes both.
 func rewritten(t *testing.T, src string) (*graphviz.Graphviz, *cgraph.Graph) {
 	t.Helper()
-	th := currentTheme() // before the lock: parsing a fresh theme takes it
-	graphvizMu.Lock()
-	defer graphvizMu.Unlock()
+	th := currentTheme()
 	g, err := graphviz.New(context.Background())
 	if err != nil {
 		t.Fatal(err)

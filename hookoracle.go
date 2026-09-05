@@ -1,4 +1,4 @@
-package drawer
+package main
 
 // The oracle for the hook wire. Not a golden file: the laws below are
 // checked against the input the fixture carries, so a fixture cannot bless
@@ -12,12 +12,11 @@ package drawer
 //     a sentence that merely mentions a fence.
 //  2. A fence is replaced or returned, never eaten. Each fence in the
 //     input maps in order to exactly one fence in the output, and that
-//     output is either the same bytes or the mode's block for the same
+//     output is either the same bytes or the drawn block for the same
 //     source.
-//  3. The block is well formed. What that means is the mode's to say —
-//     Draw wants a bare fence that fits its width with a drawing in it;
-//     a reserve wants its caption, its source and its pad rows — so the
-//     mode carries the check beside the emit.
+//  3. The block is well formed: a bare fence that fits its width with a
+//     drawing in it, or the notice that says why not with the source
+//     under it. checkDrawn is that law.
 
 import (
 	"bufio"
@@ -28,12 +27,11 @@ import (
 	"strings"
 )
 
-// RunDeltas replays a recorded delta stream through the transducer in the
-// given mode and checks what a reader would have seen against the text CC
-// handed us.
+// RunDeltas replays a recorded delta stream through the transducer and
+// checks what a reader would have seen against the text CC handed us.
 //
 //	drawer -deltas fixtures/deltas-split-a.jsonl -size 100x40
-func RunDeltas(path string, w, rows int, m Mode) int {
+func RunDeltas(path string, w int) int {
 	f, err := os.Open(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "-deltas:", err)
@@ -41,7 +39,7 @@ func RunDeltas(path string, w, rows int, m Mode) int {
 	}
 	defer f.Close()
 
-	emit := func(src string, indent int) []string { return m.Emit(src, w-indent, rows) }
+	emit := func(src string, indent int) []string { return drawBlock(src, w-indent) }
 	var in, shown strings.Builder
 	var st State
 	// A recording is in the order the hook processes wrote it, which is the
@@ -111,7 +109,7 @@ func RunDeltas(path string, w, rows int, m Mode) int {
 			continue // returned untouched: the honest failure
 		}
 		f, _ := openerOf(strings.SplitN(sf, "\n", 2)[0])
-		if err := m.Check(of, fenceBody(sf, f), w, rows); err != nil {
+		if err := checkDrawn(of, fenceBody(sf, f), w); err != nil {
 			fmt.Fprintf(os.Stderr, "-deltas: %s: fence %d: %v\n", path, i+1, err)
 			return 1
 		}
@@ -154,11 +152,10 @@ func splitFences(text string) ([]string, string) {
 	return fences, prose.String()
 }
 
-// checkDrawn is law 3 for Draw: the fence is bare, every row fits the
-// width it was drawn for, and something was actually drawn — a stroke, a
-// placeholder, or the notice that says why not, with the source under it.
-// Rows are not a ceiling here; a drawing scrolls.
-func checkDrawn(block, src string, w, _ int) error {
+// checkDrawn is law 3: the fence is bare, every row fits the width it was
+// drawn for, and something was actually drawn — a stroke, a placeholder,
+// or the notice that says why not, with the source under it.
+func checkDrawn(block, src string, w int) error {
 	lines := strings.Split(block, "\n")
 	if len(lines) < 3 || strings.TrimSpace(lines[0]) != FenceTick ||
 		strings.TrimSpace(lines[len(lines)-1]) != FenceTick {

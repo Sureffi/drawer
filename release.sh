@@ -44,7 +44,7 @@ for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
 	os=${t%/*}
 	arch=${t#*/}
 	CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags='-s -w' \
-		-o "dist/drawer-$os-$arch" ./cmd/drawer
+		-o "dist/drawer-$os-$arch" .
 	echo "built drawer-$os-$arch $(du -h "dist/drawer-$os-$arch" | cut -f1)"
 done
 (cd dist && for f in drawer-*; do echo "$(sha256 "$f")  $f"; done >checksums.txt)

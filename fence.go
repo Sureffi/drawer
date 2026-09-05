@@ -22,7 +22,7 @@
 // the promise is not kept the text is simply gone, so the give-back at the
 // end of Stream is the load-bearing half of this file, not the drawing.
 
-package drawer
+package main
 
 import (
 	"regexp"
@@ -76,8 +76,7 @@ func (f opener) unlabelled() bool { return f.Info == "" }
 
 // State is the transducer's half-finished work between two deltas: what
 // has arrived and not been decided on, and the fence being captured. The
-// hook keeps one per message id in a file; a caller that owns its own
-// process keeps it wherever it likes.
+// hook keeps one per message id in a file.
 type State struct {
 	// Buf is raw delta text that has arrived and not yet been decided on:
 	// an incomplete last line, which cannot be classified until its
@@ -95,10 +94,9 @@ type State struct {
 	Foreign bool `json:"foreign"`
 	// Fence is the opener of the fence being held or streamed.
 	Fence opener `json:"fence"`
-	// A fence reserved before its closing ``` arrived leaves that marker
+	// A fence drawn before its closing ``` arrived leaves that marker
 	// still in the stream, one delta behind. Nothing else knows it is
-	// owed, so it is carried — the category of things kept precisely
-	// because no screen can derive them.
+	// owed, so it is carried.
 	PendingClose bool `json:"pending_close"`
 	// Next is the index of the delta expected next: the turn.
 	Next int `json:"next"`
@@ -160,7 +158,8 @@ func firstText(body string) string {
 // is the product: given one complete fence source and the cells its fence
 // is indented by, it answers the rows that replace the fence, or nil to
 // leave it exactly as it arrived; the rows come back standing in that
-// indent. The drawer passes Draw; an embedding program passes its own.
+// indent. The hook passes drawBlock at the terminal's width; the oracle
+// and the laws pass their own.
 //
 // The one law it must not break: **everything it emits is a substring of
 // what it was handed.** An earlier version rebuilt lines with strings.Join
@@ -181,7 +180,7 @@ func Stream(delta string, final bool, st *State, emit func(src string, indent in
 		if st.PendingClose {
 			s, e := closer()
 			if s == 0 {
-				// The region replaced the whole fence, closer included, so
+				// The drawing replaced the whole fence, closer included, so
 				// the closer's own line ending is what decides whether the
 				// text after it starts on a new row.
 				if strings.HasSuffix(st.Buf[:e], "\n") {

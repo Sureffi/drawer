@@ -1,6 +1,6 @@
 // subcell_test.go — laws for the braille and octant rung.
 
-package drawer
+package main
 
 import (
 	"strings"

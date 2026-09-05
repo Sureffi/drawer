@@ -16,7 +16,7 @@
 // if it does not fit, the source shows unchanged. A failure is visible,
 // never silent.
 
-package drawer
+package main
 
 import (
 	"bytes"
@@ -26,7 +26,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/mattn/go-runewidth"
 
@@ -34,26 +33,15 @@ import (
 	"github.com/goccy/go-graphviz/cgraph"
 )
 
-// The border with graphviz. It is not our library and it does not share our
-// threading model: constructing a context registers render plugins into
-// package-level maps, so two concurrent graphviz.New calls are a `fatal
-// error: concurrent map writes` — the process dies, unrecoverably, and
-// takes the session with it. The hook is one process per delta and never
-// overlaps itself; a program embedding the package may well call in from
-// two goroutines.
-//
-// door is the only way through this border. A layout measures ~1ms;
-// serialising them costs nothing worth having.
-var graphvizMu sync.Mutex
-
-// door takes the lock, opens graphviz, parses the source and hands the
-// graph to fn, closing everything after it. A source with no graph in it
-// parses to (nil, nil): graphviz reports nothing wrong because nothing was
-// asked of it. Every caller dereferences the result, so the nil dies here —
-// an empty ```dot fence is one the model opened and closed, not a diagram.
+// door is the one way through to graphviz: it opens a context, parses the
+// source and hands the graph to fn, closing everything after it. A source
+// with no graph in it parses to (nil, nil): graphviz reports nothing wrong
+// because nothing was asked of it. Every caller dereferences the result, so
+// the nil dies here — an empty ```dot fence is one the model opened and
+// closed, not a diagram. graphviz.New registers into package-level maps and
+// two at once are a fatal error; nothing here runs two, the hook being one
+// process per delta. A layout measures about a millisecond.
 func door(src string, fn func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error) error {
-	graphvizMu.Lock()
-	defer graphvizMu.Unlock()
 	ctx := context.Background()
 	g, err := graphviz.New(ctx)
 	if err != nil {
@@ -346,9 +334,9 @@ var glyphs = [16]rune{
 	dirUp | dirRight | dirDown | dirLeft: '┼',
 }
 
-// MaxCombBytes bounds the combining marks a cell keeps: decoration is lost
+// maxCombBytes bounds the combining marks a cell keeps: decoration is lost
 // past it, never a cell without a size.
-const MaxCombBytes = 16
+const maxCombBytes = 16
 
 // shadow is the second cell of a wide glyph. A canvas cell is one column,
 // but a glyph is not: without a marker for the column the glyph already
@@ -357,16 +345,6 @@ const MaxCombBytes = 16
 // drawing that measured right and rendered crooked.
 const shadow rune = -1
 
-// A cell knows what it is, not only what it looks like: an edge stroke,
-// a box wall, label text, an arrowhead. A themer turns that into ink —
-// structure recedes, content stands — without re-reading the drawing.
-const (
-	ClsEdge uint8 = iota + 1
-	ClsBox
-	ClsLabel
-	ClsArrow
-)
-
 type canvas struct {
 	w, h int
 	c    []rune   // glyphs written outright: node borders, labels, arrowheads
@@ -374,13 +352,11 @@ type canvas struct {
 	link []uint8  // line connections, resolved to glyphs at the end
 	held []bool   // spoken for — nothing may be laid over it
 	port []bool   // a border cell an edge legitimately attaches to
-	cls  []uint8  // what each cell is, not what it looks like
 }
 
 func newCanvas(w, h int) *canvas {
 	cv := &canvas{w: w, h: h, c: make([]rune, w*h), comb: make([]string, w*h),
-		link: make([]uint8, w*h), held: make([]bool, w*h), port: make([]bool, w*h),
-		cls: make([]uint8, w*h)}
+		link: make([]uint8, w*h), held: make([]bool, w*h), port: make([]bool, w*h)}
 	for i := range cv.c {
 		cv.c[i] = ' '
 	}
@@ -396,18 +372,18 @@ func (cv *canvas) set(x, y int, r rune) {
 	}
 }
 
-// addComb hangs a zero-width mark on the glyph already in a cell. The
-// screen models a cell as rune-plus-marks for exactly this reason; the
-// canvas did not, and `putStr` dropped every combining mark it was handed
-// — so a decomposed "a"+U+0301 label drew as a bare "accent", correct in
-// width and wrong in every other way. Bounded like the parser's tail is:
-// decoration lost past the bound, never a cell without a size.
+// addComb hangs a zero-width mark on the glyph already in a cell. A cell
+// is a rune plus the marks that follow it; the canvas did not know that,
+// and `putStr` dropped every combining mark it was handed — so a decomposed
+// "a"+U+0301 label drew as a bare "accent", correct in width and wrong in
+// every other way. Bounded: decoration is lost past the bound, never a cell
+// without a size.
 func (cv *canvas) addComb(x, y int, r rune) {
 	if !cv.in(x, y) {
 		return
 	}
 	i := y*cv.w + x
-	if len(cv.comb[i]) < MaxCombBytes {
+	if len(cv.comb[i]) < maxCombBytes {
 		cv.comb[i] += string(r)
 	}
 }
@@ -472,11 +448,7 @@ var borderBits = map[rune]uint8{
 
 func (cv *canvas) connect(x, y int, d uint8) {
 	if cv.in(x, y) {
-		i := y*cv.w + x
-		cv.link[i] |= d
-		if cv.cls[i] == 0 {
-			cv.cls[i] = ClsEdge
-		}
+		cv.link[y*cv.w+x] |= d
 	}
 }
 
@@ -545,17 +517,6 @@ func (cv *canvas) rows() []string {
 	return out
 }
 
-// inks reports every cell's class, row by row, aligned to the canvas
-// columns — a themer reads style from it at the same coordinates it
-// writes glyphs to.
-func (cv *canvas) inks() [][]uint8 {
-	out := make([][]uint8, cv.h)
-	for y := 0; y < cv.h; y++ {
-		out[y] = cv.cls[y*cv.w : (y+1)*cv.w]
-	}
-	return out
-}
-
 // footprint is the cell box a laid-out graph occupies. Reserving and
 // drawing both ask it, of the same layout, so the two can never disagree.
 func footprint(l *dlayout) (w, h int) {
@@ -571,8 +532,7 @@ func footprint(l *dlayout) (w, h int) {
 // and columns simply run out. Only when neither orientation fits does the
 // source show, which is still the whole failure policy.
 //
-// maxRows bounds the answer. A caller that owns a region of a fixed
-// height must not overrun it; one deciding how tall to ask for passes 0.
+// maxRows bounds the answer; 0 is no ceiling.
 //
 // It returns the layout it settled on. Measuring meant laying the graph
 // out, and the drawing that follows needs exactly that layout; running
@@ -594,19 +554,6 @@ func fit(src string, width, maxRows int) (*dlayout, int, bool) {
 		return l, h, true
 	}
 	return nil, 0, false
-}
-
-// Cells draws a source in box-drawing characters: the floor rung, and the
-// whole of what an embedding program needs to draw a graph itself. Rows are
-// the drawing, exactly as tall as the layout chose under maxRows (0 for no
-// ceiling) and blank where a centred drawing has air; ink says what each
-// cell is, in the Cls classes. Nil when no orientation fits.
-func Cells(src string, width, maxRows int) (rows []string, ink [][]uint8) {
-	l, h, ok := fit(src, width, maxRows)
-	if !ok {
-		return nil, nil
-	}
-	return renderDiagramInk(l, width, h)
 }
 
 // nbox is where a node's box is drawn, in cells. drawNode and every edge
@@ -657,25 +604,6 @@ func drawNode(cv *canvas, label string, b nbox) {
 	cv.set(x0+bw-1, y0+1, '│')
 	putStr(cv, x0+1+(bw-2-textCells(label))/2, y0+1, label)
 	cv.hold(x0, y0, bw, 3)
-	for y := y0; y < y0+3; y++ {
-		for x := x0; x < x0+bw; x++ {
-			cv.mark(x, y, ClsBox)
-		}
-	}
-	cv.markRun(x0+1, y0+1, bw-2, ClsLabel)
-}
-
-// mark records what a cell is; markRun a horizontal span of them.
-func (cv *canvas) mark(x, y int, c uint8) {
-	if cv.in(x, y) {
-		cv.cls[y*cv.w+x] = c
-	}
-}
-
-func (cv *canvas) markRun(x, y, n int, c uint8) {
-	for i := 0; i < n; i++ {
-		cv.mark(x+i, y, c)
-	}
 }
 
 func putStr(cv *canvas, x, y int, s string) {
@@ -768,10 +696,7 @@ func vrun(cv *canvas, y0, y1, x int) {
 // asked for source, or because something failed. A window three columns
 // too narrow and a graph with a typo in it looked identical.
 //
-// So the failure gets drawn too. Same region, same paint walk, same
-// derived-every-frame rule — widen the window and the notice is replaced
-// by the diagram it was standing in for, because both are computed from
-// the same source at the same moment.
+// So the failure gets drawn too, over the source, in the same fence.
 
 // noticeChrome is the border and padding a notice spends on itself.
 const noticeChrome = 4

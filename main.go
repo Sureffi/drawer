@@ -20,8 +20,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-
-	"github.com/sureffi/drawer"
 )
 
 func main() {
@@ -34,7 +32,7 @@ func main() {
 	hooktee := flag.String("hooktee", os.Getenv("DRAWER_TEE"), "as -hook: append every payload here, one JSON object per line, a fixture for -deltas (DRAWER_TEE)")
 	dotDump := flag.String("dot", "", "draw a DOT file and print it")
 	deltaDump := flag.String("deltas", "", "replay a recorded MessageDisplay delta stream through the hook; nonzero if it damaged the message")
-	size := flag.String("size", "100x40", "screen size for -dot and -deltas, WxH")
+	size := flag.String("size", "100x40", "screen size for -dot, WxH; -deltas reads the width")
 	pngOut := flag.String("png", "", "with -dot: write the pixels rung's picture here, as the hook would draw it")
 	cell := flag.String("cell", "10x24", "with -png: a terminal cell in pixels, WxH")
 	themePath := flag.String("theme", os.Getenv("DRAWER_THEME"), "a theme file: DOT graph/node/edge defaults for the pixels rung (DRAWER_THEME; default: Claude Code's own theme)")
@@ -45,30 +43,30 @@ func main() {
 	// and the session opens. Everywhere else — -dot, -png, -deltas — a bad
 	// theme is an answer.
 	if *themePath != "" {
-		if err := drawer.LoadTheme(*themePath); err != nil && !*hook && !*contextLine {
+		if err := LoadTheme(*themePath); err != nil && !*hook && !*contextLine {
 			fmt.Fprintln(os.Stderr, "drawer: theme:", err)
 			os.Exit(1)
 		}
 	}
 
-	drawer.Rung = *render
-	w, h := drawer.ParseSize(*size, 100, 40)
+	Rung = *render
+	w, h := ParseSize(*size, 100, 40)
 
 	switch {
 	case *showTheme:
-		fmt.Print(drawer.ThemeSource())
+		fmt.Print(ThemeSource())
 	case *contextLine:
-		fmt.Print(drawer.Context())
+		fmt.Print(Context())
 	case *dotDump != "" && *pngOut != "":
-		cw, ch := drawer.ParseSize(*cell, 10, 24)
-		os.Exit(drawer.RunPNG(*dotDump, *pngOut, w, drawer.PxGeom{CellW: cw, CellH: ch}))
+		cw, ch := ParseSize(*cell, 10, 24)
+		os.Exit(RunPNG(*dotDump, *pngOut, w, PxGeom{CellW: cw, CellH: ch}))
 	case *dotDump != "":
-		os.Exit(drawer.RunDotDump(*dotDump, w, h))
+		os.Exit(RunDotDump(*dotDump, w, h))
 	case *deltaDump != "":
-		os.Exit(drawer.RunDeltas(*deltaDump, w, h, drawer.Draw))
+		os.Exit(RunDeltas(*deltaDump, w))
 	case *hook:
-		drawer.Tee = *hooktee
-		os.Exit(drawer.RunHook(drawer.Draw))
+		Tee = *hooktee
+		os.Exit(RunHook())
 	default:
 		flag.Usage()
 		os.Exit(2)

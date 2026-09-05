@@ -2,7 +2,7 @@
 // pty and no live session, which is deliberate: this feature cost a lot of
 // live calls to debug before they existed.
 
-package drawer
+package main
 
 import (
 	"fmt"

@@ -104,7 +104,7 @@ from_release() {
 
 from_build() {
 	[ -f "$root/go.mod" ] && command -v go >/dev/null 2>&1 || return 1
-	if (cd "$root" && go build -o "$bin.$$" ./cmd/drawer) >&2; then
+	if (cd "$root" && go build -o "$bin.$$" .) >&2; then
 		place "$bin.$$" "built"
 	else
 		rm -f "$bin.$$"

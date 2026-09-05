@@ -24,7 +24,7 @@
 // hook cannot read at run time is Claude Code's theme — the picture draws;
 // `drawer -theme FILE -dot ...` says what is wrong with it.
 
-package drawer
+package main
 
 import (
 	"context"
@@ -35,7 +35,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
@@ -224,22 +223,13 @@ func LoadTheme(path string) error {
 	return nil
 }
 
-var (
-	themeMu sync.Mutex
-	theme   *Theme
-)
+var theme *Theme
 
-func setTheme(t *Theme) {
-	themeMu.Lock()
-	defer themeMu.Unlock()
-	theme = t
-}
+func setTheme(t *Theme) { theme = t }
 
 // currentTheme is the theme in force: what LoadTheme set, else Claude
-// Code's. Not to be called with graphvizMu held — parsing takes it.
+// Code's.
 func currentTheme() *Theme {
-	themeMu.Lock()
-	defer themeMu.Unlock()
 	if theme == nil {
 		th, err := ParseTheme(ClaudeThemeDOT())
 		if err != nil {

@@ -31,7 +31,7 @@ stage() {
 mkdir -p bin
 # A failed build makes every stage below it a lie. Stop rather than report
 # on the last binary that happened to compile.
-stage "build" go build -o bin/drawer ./cmd/drawer || exit 1
+stage "build" go build -o bin/drawer . || exit 1
 stage "vet" go vet ./... || true
 stage "laws (go test -race)" go test -race ./... || true
 

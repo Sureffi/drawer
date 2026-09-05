@@ -17,7 +17,7 @@
 // is not written down, being derived from source and cut; the cell
 // geometry is, because the cells on screen are the size they were.
 
-package drawer
+package main
 
 import (
 	"encoding/json"

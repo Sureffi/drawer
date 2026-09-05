@@ -21,17 +21,11 @@
 // drawing every frame and win that row; this takes the trade so that the
 // graphs work with nothing but `claude` and the plugin.
 
-package drawer
+package main
 
 import (
 	"strings"
 )
-
-// Draw is the drawer's mode: the hook draws, and hands CC the picture.
-var Draw = Mode{
-	Emit:  func(src string, width, _ int) []string { return drawBlock(src, width) },
-	Check: checkDrawn,
-}
 
 // drawBlock turns one fence source into the rows that replace it, or nil
 // to leave the fence exactly as it arrived. A fence that will not draw at
@@ -88,8 +82,8 @@ func fence(rows []string) []string {
 }
 
 // trimBlank drops the blank rows a centred drawing carries above and
-// below itself. In a region they were the reserve; in a fence they are
-// only air.
+// below itself: the layout centres in the rows it was given, and in a
+// fence those rows are only air.
 func trimBlank(rows []string) []string {
 	lo, hi := 0, len(rows)
 	for lo < hi && strings.TrimSpace(rows[lo]) == "" {
@@ -116,7 +110,7 @@ func pickRung() string {
 	}
 	term := hookTerm()
 	kitty := strings.Contains(term, "kitty")
-	if kitty && hookGeom.OK() && ProbeRaster("auto") != nil {
+	if kitty && hookGeom.OK() && ProbeRaster() != nil {
 		return "pixels"
 	}
 	if kitty || strings.Contains(term, "ghostty") {

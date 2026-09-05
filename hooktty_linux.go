@@ -1,6 +1,6 @@
 //go:build !darwin
 
-package drawer
+package main
 
 import (
 	"os"

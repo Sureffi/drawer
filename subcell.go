@@ -22,7 +22,7 @@
 // its box. Graphviz measures the type as Courier at 12 points, which is
 // 7.2 points a character — one cell — and 12 points a line — one row.
 
-package drawer
+package main
 
 import (
 	"bytes"
@@ -351,7 +351,7 @@ func (k *ink) text(op jop, size float64) {
 		if w == 0 {
 			if x-1 >= 0 && x-1 < k.cols {
 				i := row*k.cols + x - 1
-				if len(k.comb[i]) < MaxCombBytes {
+				if len(k.comb[i]) < maxCombBytes {
 					k.comb[i] += string(r)
 				}
 			}

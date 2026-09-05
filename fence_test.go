@@ -1,7 +1,7 @@
 // fence_test.go — laws for the transducer: what the hook wire may and may
 // not do to a reply, and how a delta's process takes its turn.
 
-package drawer
+package main
 
 import (
 	"os"
@@ -24,7 +24,7 @@ func withRender(render string) func() {
 func drawAt(w int) func(string, int) []string {
 	return func(src string, indent int) []string {
 		defer withRender("cells")()
-		return Draw.Emit(src, w-indent, 0)
+		return drawBlock(src, w-indent)
 	}
 }
 

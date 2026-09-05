@@ -20,7 +20,7 @@
 // hard question (which boxes go where so edges can behave), and
 // everything after that answer is derived in cell space, never carried.
 
-package drawer
+package main
 
 import (
 	"container/heap"
@@ -484,7 +484,6 @@ func commitRoute(cv *canvas, ps []ipt, tp, hp port, directed bool) {
 		return
 	}
 	cv.set(hp.x, hp.y, hp.head)
-	cv.mark(hp.x, hp.y, ClsArrow)
 }
 
 // arrowBit is the link bit pointing the way an arrowhead rune points.
@@ -562,7 +561,6 @@ func placeInline(cv *canvas, ps []ipt, label string) bool {
 	}
 	putStr(cv, x0, y, label)
 	cv.hold(x0, y, need, 1)
-	cv.markRun(x0, y, need, ClsLabel)
 	return true
 }
 
@@ -582,7 +580,6 @@ func routeSelfLoop(cv *canvas, b nbox) {
 	vrun(cv, top, b.y0-1, lx)
 	vrun(cv, top, b.y0-1, rx)
 	cv.set(rx, b.y0-1, '▼')
-	cv.mark(rx, b.y0-1, ClsArrow)
 	cv.port[b.y0*cv.w+lx] = true
 	cv.connect(lx, b.y0, dirUp)
 }
@@ -596,19 +593,12 @@ func routeSelfLoop(cv *canvas, b nbox) {
 // will not fit — the caller then leaves the source alone, which is
 // still the whole failure policy: a failure is visible, never silent.
 func renderDiagram(l *dlayout, w, h int) []string {
-	rows, _ := renderDiagramInk(l, w, h)
-	return rows
-}
-
-// renderDiagramInk is renderDiagram plus what each cell is, for a
-// themer to turn into ink.
-func renderDiagramInk(l *dlayout, w, h int) ([]string, [][]uint8) {
 	if w < 12 || h < 3 || l == nil {
-		return nil, nil
+		return nil
 	}
 	nw, nh := footprint(l)
 	if nw <= 0 || nh <= 0 || nw > w || nh > h {
-		return nil, nil // does not fit: the source speaks for itself
+		return nil // does not fit: the source speaks for itself
 	}
 	// left-aligned: a diagram sitting beside the prose that introduced it
 	// reads better than one floating in the middle of the window
@@ -695,7 +685,7 @@ func renderDiagramInk(l *dlayout, w, h int) ([]string, [][]uint8) {
 	for _, e := range floated {
 		drawEdgeLabel(cv, *e, sx, sy)
 	}
-	return cv.rows(), cv.inks()
+	return cv.rows()
 }
 
 // clamp pins v into [lo, hi].

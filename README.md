@@ -265,15 +265,6 @@ checksums file, the plugin zipped with all four inside, the sums pinned
 into the script, the marketplace pointed at the zip, commit, tag, push,
 GitHub release.
 
-## embedding
-
-The package is importable. `Stream` is the fence transducer with the emit
-function as a parameter; `Mode` pairs an emit with the check `-deltas`
-runs on its output; `Cells`, `CutReason`, `DrawNotice` and `Rasterise`
-are the renderer's doors. A program that owns the terminal can book rows
-through `Stream` and paint into them itself, re-derived every frame, which
-is the resize row of the trade above.
-
 ## license
 
 MIT. The embedded `graphviz.wasm` carries graphviz's Eclipse Public

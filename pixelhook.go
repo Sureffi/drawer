@@ -20,7 +20,7 @@
 // rasteriser, a tty that is not there — the answer is nil and the rung
 // below draws. Nothing here is a dependency.
 
-package drawer
+package main
 
 import (
 	"encoding/base64"
@@ -38,7 +38,7 @@ import (
 
 // drawPixels is the pixels rung: the rows that show a picture, or nil.
 func drawPixels(src string, width int) []string {
-	r := ProbeRaster("auto")
+	r := ProbeRaster()
 	if r == nil || !hookGeom.OK() {
 		return nil
 	}

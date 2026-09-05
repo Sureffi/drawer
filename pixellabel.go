@@ -27,7 +27,7 @@
 // stack is a back edge. "Closes a cycle" is not the rule — in a two-cycle
 // that is both edges, and flipping both scrambles the picture.
 
-package drawer
+package main
 
 import (
 	"regexp"

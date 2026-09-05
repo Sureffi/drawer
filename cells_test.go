@@ -5,38 +5,14 @@
 // claims to; the real oracles are the recorded delta streams (-deltas) and
 // the drawings themselves (-dot), and check.sh runs all of it together.
 
-package drawer
+package main
 
 import (
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/mattn/go-runewidth"
 )
-
-// The border with graphviz: one door, and an embedding program's callers
-// are concurrent. Before the door this was a `fatal error: concurrent map
-// writes`, which kills the process outright — run under -race for the
-// sharper read.
-func TestGraphvizBorderIsSerialised(t *testing.T) {
-	src := "digraph { rankdir=LR; A -> B -> C -> D }\n"
-	var wg sync.WaitGroup
-	for i := 0; i < 8; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for k := 0; k < 6; k++ {
-				l, h, ok := fit(src, 90, 0)
-				if !ok || renderDiagram(l, 90, h) == nil {
-					t.Error("layout failed under concurrency")
-					return
-				}
-			}
-		}()
-	}
-	wg.Wait()
-}
 
 // A fence the model opened and closed has no graph in it, and graphviz does
 // not call that an error: ParseBytes answers (nil, nil), because nothing was

@@ -1,7 +1,7 @@
 // theme_test.go — laws for the theme: Claude Code's, resolved as Claude Code
 // resolves it, and a theme file.
 
-package drawer
+package main
 
 import (
 	"os"

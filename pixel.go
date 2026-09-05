@@ -16,14 +16,13 @@
 // any edge stroke past hairline and loses them outright at dpi=192. So the
 // wasm writes SVG and cairo — rsvg-convert, else magick — makes the pixels.
 
-package drawer
+package main
 
 import (
 	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
-	"math"
 	"os"
 	"os/exec"
 	"regexp"
@@ -39,21 +38,17 @@ import (
 // ---------- capability ----------
 
 // Raster is the rasteriser this machine actually has: a name, and the one
-// call it can make. A func rather than a command line because the law worth
-// testing is the failure one — a stub that counts its calls is how "a
-// rasteriser that failed once is not asked again" gets proven without a
-// rasteriser anywhere in the loop.
+// call it can make. A func rather than a command line so a law can stand in
+// a stub and read the zoom it was asked for, with no rasteriser anywhere in
+// the loop.
 type Raster struct {
 	name string
 	run  func(svg []byte, zoom float64) ([]byte, error)
 }
 
 // ProbeRaster answers whether pixels are possible here: the terminal is
-// kitty and a rasteriser exists, and "off" kills it regardless.
-func ProbeRaster(mode string) *Raster {
-	if mode == "off" {
-		return nil
-	}
+// kitty and a rasteriser exists.
+func ProbeRaster() *Raster {
 	if !strings.Contains(os.Getenv("TERM"), "kitty") && os.Getenv("KITTY_WINDOW_ID") == "" {
 		return nil
 	}
@@ -171,7 +166,7 @@ func pxFontPt(cellW int) float64 {
 // force overrides the orientation the source asked for; empty leaves the
 // author's choice alone.
 func renderThemedSVG(src string, fontPt float64, force cgraph.RankDir) ([]byte, error) {
-	th := currentTheme() // before the door: parsing a fresh theme goes through it
+	th := currentTheme()
 	var svg []byte
 	err := door(src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
 		if force != "" {
@@ -314,41 +309,6 @@ func pngSize(png []byte) (int, int, error) {
 	return w, h, nil
 }
 
-// Rasterise turns a source into pixels sized for a rectangle somebody else
-// owns: an embedding program's region, in pixels. Zoom is chosen so the whole
-// picture lands inside it with its aspect kept, which is also what kitty
-// does when it fits an image to placeholder cells — the two agreeing is
-// what keeps the drawing from being squashed on one axis.
-func Rasterise(r *Raster, src string, availPxW, regionPxH int) ([]byte, int, int, error) {
-	if r == nil || availPxW <= 0 || regionPxH <= 0 {
-		return nil, 0, 0, errors.New("no room for pixels")
-	}
-	svg, err := renderThemedSVG(src, 0, "")
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	ptW, ptH, err := svgSize(svg)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	zoom := math.Min(float64(availPxW)/(ptW*pxPerPt), float64(regionPxH)/(ptH*pxPerPt))
-	if !(zoom > 0) || math.IsInf(zoom, 0) {
-		return nil, 0, 0, errors.New("no zoom fits")
-	}
-	if zoom > rasterMaxZoom {
-		zoom = rasterMaxZoom
-	}
-	png, err := r.run(svg, zoom)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	w, h, err := pngSize(png)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	return png, w, h, nil
-}
-
 // ---------- names ----------
 
 // fnv1a32 hashes a cut into a name. Names here are derived, never minted:
@@ -419,11 +379,4 @@ var RowColumnDiacritics = [...]rune{
 	0xFE24, 0xFE25, 0xFE26, 0x10A0F, 0x10A38, 0x1D185, 0x1D186, 0x1D187,
 	0x1D188, 0x1D189, 0x1D1AA, 0x1D1AB, 0x1D1AC, 0x1D1AD, 0x1D242, 0x1D243,
 	0x1D244,
-}
-
-// NewRaster wraps a rasterising call as a capability. It exists so a caller
-// outside the package can stand in a stub for cairo and count what it was
-// asked.
-func NewRaster(name string, run func(svg []byte, zoom float64) ([]byte, error)) *Raster {
-	return &Raster{name: name, run: run}
 }

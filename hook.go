@@ -1,4 +1,4 @@
-package drawer
+package main
 
 // The native way in. CC ships a MessageDisplay hook that hands us the
 // text it is about to draw and takes back a replacement, so a ```dot
@@ -75,29 +75,17 @@ func ioctl(fd uintptr, req uintptr, arg unsafe.Pointer) error {
 // it zero, which reads as no pixels).
 var hookGeom PxGeom
 
-func hookSize() (width, rows int) {
-	cols, lines := 0, 0
+func hookSize() (width int) {
+	cols := 0
 	if f, err := os.Open(parentTTY()); err == nil {
 		var ws winsize
 		if ioctl(f.Fd(), syscall.TIOCGWINSZ, unsafe.Pointer(&ws)) == nil && ws.cols > 0 {
-			cols, lines = int(ws.cols), int(ws.rows)
-			if ws.x > 0 && ws.y > 0 {
-				hookGeom = PxGeom{CellW: int(ws.x) / cols, CellH: int(ws.y) / lines}
+			cols = int(ws.cols)
+			if ws.x > 0 && ws.y > 0 && ws.rows > 0 {
+				hookGeom = PxGeom{CellW: int(ws.x) / cols, CellH: int(ws.y) / int(ws.rows)}
 			}
 		}
 		f.Close()
-	}
-	if lines == 0 {
-		lines = 24
-	}
-	// CC's own chrome at the foot of the window, measured at 100x30: the
-	// hint line, two separators, the input row and two statusline rows,
-	// plus the turn line and its blank while a reply is running. What is
-	// left is the transcript; a mode that must not overrun it gets it
-	// as rows.
-	budget := lines - 8
-	if budget < 4 {
-		budget = 4
 	}
 	if cols == 0 {
 		if v, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && v > 0 {
@@ -110,24 +98,9 @@ func hookSize() (width, rows int) {
 	// CC's own left margin for a message body.
 	const inset = 6
 	if cols > inset {
-		return cols - inset, budget
+		return cols - inset
 	}
-	return cols, budget
-}
-
-// Mode is what is done with a complete fence, and how -deltas judges the
-// result. Draw is the one this binary ships: it emits the drawing itself,
-// correct for the width it was drawn at. A program embedding the package
-// can pass its own — one that books rows for a drawing it will paint
-// itself, say — and the hook wire and its oracle work the same for either.
-//
-// Emit is handed a complete source, the columns the text has, and the
-// transcript's height in rows. Check is -deltas' third rule: given a
-// block that replaced a fence and the source it was for, say what is
-// wrong with it, or nothing.
-type Mode struct {
-	Emit  func(src string, width, rows int) []string
-	Check func(block, src string, width, rows int) error
+	return cols
 }
 
 // Tee is where a live turn is written down, one payload per line, in
@@ -152,9 +125,9 @@ func teePayload(raw []byte) {
 }
 
 // RunHook is the whole of the -hook entry point: one payload in, one
-// replacement out, through the mode it is given. Any failure prints an
-// empty object, which CC reads as "display the original".
-func RunHook(m Mode) int {
+// replacement out, through drawBlock. Any failure prints an empty object,
+// which CC reads as "display the original".
+func RunHook() int {
 	raw, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		fmt.Print("{}")
@@ -167,17 +140,17 @@ func RunHook(m Mode) int {
 		return 0
 	}
 	hookSession = in.SessionID
-	width, rows := hookSize()
+	width := hookSize()
 	// The first delta of a message is the first thing the hook hears after
 	// a theme switch; pixelledger.go says why, and what is repainted.
 	if in.Index == 0 && pickRung() == "pixels" {
-		repaintPictures(hookSession, parentTTYOut(), ProbeRaster("auto"))
+		repaintPictures(hookSession, parentTTYOut(), ProbeRaster())
 	}
 	st, done := takeTurn(in.MessageID, in.Index, turnPatience)
 	defer done()
 	before := st
 	text := Stream(in.Delta, in.Final, &st, func(src string, indent int) []string {
-		return m.Emit(src, width-indent, rows)
+		return drawBlock(src, width-indent)
 	})
 	st.Next = max(st.Next, in.Index+1)
 	saveState(in.MessageID, st, in.Final)
