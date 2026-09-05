@@ -24,6 +24,8 @@ package drawer
 
 import (
 	"encoding/base64"
+	"errors"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -38,36 +40,7 @@ func drawPixels(src string, width int) []string {
 	if r == nil || !hookGeom.OK() {
 		return nil
 	}
-	svg, err := renderThemedSVG(src, pxFontPt(hookGeom.CellW))
-	if err != nil {
-		return nil
-	}
-	ptW, ptH, err := svgSize(svg)
-	if err != nil {
-		return nil
-	}
-	pxW, pxH := ptW*pxPerPt, ptH*pxPerPt
-	cols := int(math.Ceil(pxW / float64(hookGeom.CellW)))
-	if cols > width {
-		cols = width
-	}
-	if cols > len(RowColumnDiacritics) {
-		cols = len(RowColumnDiacritics)
-	}
-	if cols < 4 {
-		return nil
-	}
-	// The picture is cut to exactly the columns it will occupy, so kitty
-	// scales nothing on the axis that has to line up with text.
-	zoom := float64(cols*hookGeom.CellW) / pxW
-	rows := int(math.Ceil(pxH * zoom / float64(hookGeom.CellH)))
-	if rows < 1 || rows > drawMaxRows || rows > len(RowColumnDiacritics) {
-		return nil
-	}
-	if zoom > rasterMaxZoom {
-		zoom = rasterMaxZoom
-	}
-	png, err := r.run(svg, zoom)
+	png, cols, rows, err := pixelCut(r, src, width, hookGeom)
 	if err != nil {
 		return nil
 	}
@@ -76,6 +49,49 @@ func drawPixels(src string, width int) []string {
 		return nil
 	}
 	return placeholderRows(id, cols, rows)
+}
+
+// pixelCut is the picture for a block of cells: the columns it needs up to
+// the width, the rows that follow, and the pixels rasterised for exactly
+// that block. The picture is cut to whole columns so kitty scales nothing
+// on the axis that has to line up with text. An error is a picture that
+// will not fit — too narrow to be anything, or taller than drawMaxRows.
+func pixelCut(r *Raster, src string, width int, geom PxGeom) ([]byte, int, int, error) {
+	if r == nil || !geom.OK() {
+		return nil, 0, 0, errors.New("no rasteriser or no cell size")
+	}
+	svg, err := renderThemedSVG(src, pxFontPt(geom.CellW))
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	ptW, ptH, err := svgSize(svg)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	pxW, pxH := ptW*pxPerPt, ptH*pxPerPt
+	cols := int(math.Ceil(pxW / float64(geom.CellW)))
+	if cols > width {
+		cols = width
+	}
+	if cols > len(RowColumnDiacritics) {
+		cols = len(RowColumnDiacritics)
+	}
+	if cols < 4 {
+		return nil, 0, 0, errors.New("too narrow to draw")
+	}
+	zoom := float64(cols*geom.CellW) / pxW
+	rows := int(math.Ceil(pxH * zoom / float64(geom.CellH)))
+	if rows < 1 || rows > drawMaxRows || rows > len(RowColumnDiacritics) {
+		return nil, 0, 0, fmt.Errorf("%d rows; the ceiling is %d", rows, drawMaxRows)
+	}
+	if zoom > rasterMaxZoom {
+		zoom = rasterMaxZoom
+	}
+	png, err := r.run(svg, zoom)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	return png, cols, rows, nil
 }
 
 // parentTTYOut is the terminal on the parent's stdout, where the picture

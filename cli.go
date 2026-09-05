@@ -60,3 +60,31 @@ func RunDotDump(path string, w, h int) int {
 	}
 	return 0
 }
+
+// RunPNG draws a DOT file the way the hook would for a terminal `width`
+// cells wide with cells of `geom` pixels, and writes the picture to a file:
+// a theme, or a graph, looked at without a session. Nonzero when there is
+// no picture, with the reason on stderr.
+func RunPNG(dotPath, pngPath string, width int, geom PxGeom) int {
+	src, err := os.ReadFile(dotPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "drawer:", err)
+		return 1
+	}
+	r := FindRaster()
+	if r == nil {
+		fmt.Fprintln(os.Stderr, "drawer: no rasteriser on the PATH (rsvg-convert or magick)")
+		return 1
+	}
+	png, cols, rows, err := pixelCut(r, string(src), width, geom)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "drawer:", err)
+		return 1
+	}
+	if err := os.WriteFile(pngPath, png, 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, "drawer:", err)
+		return 1
+	}
+	fmt.Printf("%s: %d×%d cells\n", pngPath, cols, rows)
+	return 0
+}

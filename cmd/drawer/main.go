@@ -12,6 +12,7 @@
 //	drawer -uninstall          # take it out again
 //	drawer -hook               # what CC runs: payload on stdin, JSON out
 //	drawer -dot FILE -size WxH # draw a file offline, at a size
+//	drawer -dot FILE -png OUT  # the pixels rung's picture, to a file
 //	drawer -deltas FILE        # replay a recorded turn; nonzero if damaged
 package main
 
@@ -37,6 +38,8 @@ func main() {
 	dotDump := flag.String("dot", "", "draw a DOT file and print it")
 	deltaDump := flag.String("deltas", "", "replay a recorded MessageDisplay delta stream through the hook; nonzero if it damaged the message")
 	size := flag.String("size", "100x40", "screen size for -dot and -deltas, WxH")
+	pngOut := flag.String("png", "", "with -dot: write the pixels rung's picture here, as the hook would draw it")
+	cell := flag.String("cell", "10x24", "with -png: a terminal cell in pixels, WxH")
 	themePath := flag.String("theme", "", "a theme file: DOT graph/node/edge defaults for the pixels rung (built-in: tokyonight)")
 	flag.Parse()
 
@@ -58,6 +61,9 @@ func main() {
 			fmt.Fprintln(os.Stderr, "drawer:", err)
 			os.Exit(1)
 		}
+	case *dotDump != "" && *pngOut != "":
+		cw, ch := drawer.ParseSize(*cell, 10, 24)
+		os.Exit(drawer.RunPNG(*dotDump, *pngOut, w, drawer.PxGeom{CellW: cw, CellH: ch}))
 	case *dotDump != "":
 		os.Exit(drawer.RunDotDump(*dotDump, w, h))
 	case *deltaDump != "":

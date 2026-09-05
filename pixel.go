@@ -57,6 +57,12 @@ func ProbeRaster(mode string) *Raster {
 	if !strings.Contains(os.Getenv("TERM"), "kitty") && os.Getenv("KITTY_WINDOW_ID") == "" {
 		return nil
 	}
+	return FindRaster()
+}
+
+// FindRaster is the rasteriser on the PATH, whatever the terminal: for a
+// picture that is going to a file rather than a screen.
+func FindRaster() *Raster {
 	if p, err := exec.LookPath("rsvg-convert"); err == nil {
 		return &Raster{name: "rsvg-convert", run: func(svg []byte, zoom float64) ([]byte, error) {
 			return rasterExec(p, svg, "--zoom", strconv.FormatFloat(zoom, 'f', 4, 64))

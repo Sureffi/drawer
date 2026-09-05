@@ -3,6 +3,7 @@
 package drawer
 
 import (
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -505,3 +506,59 @@ func TestPixelLabelOnABackEdgeSitsBetweenItsEnds(t *testing.T) {
 		t.Errorf("the arrow moved: half at a has %d heads, half at c has %d", strings.Count(first, "<polygon"), strings.Count(second, "<polygon"))
 	}
 }
+
+// Inlining labels doubles the ranks, so ranksep is halved as dot does for
+// its own label nodes; the model's ranksep wins, then the theme's.
+func TestPixelLabelsHalveRanksepAsDotDoes(t *testing.T) {
+	height := func(src string) float64 {
+		svg, err := renderThemedSVG(src, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, h, err := svgSize(svg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return h
+	}
+	halved := height(`digraph { a -> b [label="x"] }`)
+	full := height(`digraph { ranksep=0.5; a -> b [label="x"] }`)
+	if !(halved < full) {
+		t.Errorf("a labelled chain is %vpt with ranksep left alone and %vpt at dot's default; the halving did not happen", halved, full)
+	}
+	withTheme(t, `graph [ranksep=1]`)
+	if themed := height(`digraph { a -> b [label="x"] }`); !(themed > full) {
+		t.Errorf("the theme's ranksep was overridden: %vpt themed, %vpt at 0.5", themed, full)
+	}
+}
+
+// The offline picture is the hook's picture: cut to whole columns of the
+// cell it was asked for. Skipped where there is nothing to rasterise with.
+func TestRunPNGWritesTheHooksPicture(t *testing.T) {
+	if FindRaster() == nil {
+		t.Skip("no rasteriser on the PATH")
+	}
+	dir := t.TempDir()
+	dot := dir + "/g.dot"
+	png := dir + "/g.png"
+	if err := writeFile(dot, "digraph { rankdir=LR; a -> b [label=\"x\"]; b -> c }\n"); err != nil {
+		t.Fatal(err)
+	}
+	if code := RunPNG(dot, png, 100, PxGeom{CellW: 10, CellH: 24}); code != 0 {
+		t.Fatalf("RunPNG exited %d", code)
+	}
+	b, err := readFile(png)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, h, err := pngSize(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w%10 != 0 || w > 1000 || h <= 0 {
+		t.Errorf("picture is %dx%d px; want a whole number of 10px columns within 100", w, h)
+	}
+}
+
+func writeFile(path, text string) error    { return os.WriteFile(path, []byte(text), 0o644) }
+func readFile(path string) ([]byte, error) { return os.ReadFile(path) }

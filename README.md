@@ -63,7 +63,8 @@ defaults apply, so `fillcolor=pink` gets black text as `dot` would give it.
 Where it left an attribute unset, the theme applies. An edge label sits on
 its line and the line stops a glyph short of it on either side, as in the
 glyph rungs: the graph is rewritten before layout so the label is a node on
-the edge, which is what dot does inside itself for a labelled edge anyway.
+the edge, which is what dot does inside itself for a labelled edge anyway,
+down to halving `ranksep` for the doubled ranks.
 
 ## the theme
 
@@ -87,8 +88,9 @@ measured in Courier, so any monospace fits and a proportional face will not.
 is a rule: a node the model filled keeps its own text colour, any other
 gets the theme's fill with `filled` added to its style. A theme the hook
 cannot read is the built-in one, so the picture draws; `-theme FILE -dot`
-says what is wrong with the file. `fixtures/theme.dot` is a second theme,
-the same strokes over nodes the terminal shows through.
+says what is wrong with the file, and `-theme FILE -dot g.dot -png out.png`
+shows what it draws, without a session. `fixtures/theme.dot` is a second
+theme, the same strokes over nodes the terminal shows through.
 
 Octants and braille: everything comes from graphviz's json output — every
 polygon, ellipse, bezier and text anchor it would have painted — so
@@ -124,6 +126,7 @@ wrapper. The drawer takes the trade so that graphs work with nothing but
 ## offline
 
     ./bin/drawer -dot FILE -size WxH -render braille   # draw a file, name the size it needs
+    ./bin/drawer -dot FILE -png OUT [-cell 10x24]      # the pixels rung's picture, to a file
     ./bin/drawer -deltas FILE -render cells            # replay a recorded turn; nonzero if damaged
     ./bin/drawer -hook -hooktee FILE                   # a live session writes its own fixture
 
@@ -139,7 +142,9 @@ fits its width, and a notice must carry the source it is about.
 - The hook's width comes from `/proc/$PPID/fd/0`, Linux only. macOS would
   need the tty via `ps` and an open of the device; unverified.
 - In the glyph rungs, record and HTML labels print their markup and node
-  colours are not painted. The pixels rung draws both.
+  colours are not painted. The pixels rung draws both, but in an HTML label
+  the space between two spans collapses — `<b>bold</b> and` sets as
+  "boldand". That is graphviz's SVG writer.
 - The built-in theme is a dark one. On a light terminal the strokes read
   and the text does not; a light theme is a file away, but the hook cannot
   ask the terminal which it needs — the reply would land in Claude Code's

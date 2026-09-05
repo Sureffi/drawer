@@ -43,6 +43,14 @@ done
 # and must load. There is no offline pixel output, so loading is the check.
 stage "theme: fixtures/theme.dot" ./bin/drawer -theme fixtures/theme.dot -dot fixtures/chain.dot -size 100x14 -render cells || true
 
+# The pixels rung, to a file: the same cut the hook makes. Only where this
+# machine can rasterise; a box without cairo is not wrong, only glyph-bound.
+if command -v rsvg-convert >/dev/null 2>&1 || command -v magick >/dev/null 2>&1; then
+  stage "png: fixtures/chain.dot" ./bin/drawer -dot fixtures/chain.dot -png bin/chain.png -size 100x40 || true
+else
+  say "png: fixtures/chain.dot" "skipped (no rasteriser)"
+fi
+
 # The hook wire: recorded delta streams, replayed. `drawer -hook -hooktee`
 # writes these straight off a live session, so the corpus is not limited to
 # cases somebody thought of.

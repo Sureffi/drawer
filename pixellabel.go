@@ -68,6 +68,14 @@ func inlineEdgeLabels(graph *cgraph.Graph, th *Theme, fontPt float64, directed b
 	if len(todo) == 0 {
 		return
 	}
+	// dot halves ranksep when it doubles the ranks for its own label nodes;
+	// ours are real nodes on real ranks, so the same move is made here, or
+	// a labelled chain stands a third taller than dot would have drawn it —
+	// measured, 18 rows against 24.5 on four nodes. The model's ranksep
+	// wins, then the theme's.
+	if graph.GetStr("ranksep") == "" && th.Graph["ranksep"] == "" {
+		graph.SafeSet("ranksep", "0.25", "")
+	}
 	back := backEdges(graph)
 	// Every edge attribute the source declared, by name, so the copy is the
 	// model's whole edge and not a list somebody thought of.
