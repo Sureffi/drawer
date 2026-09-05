@@ -31,7 +31,7 @@ import (
 // checks what a reader would have seen against the text CC handed us.
 //
 //	drawer -deltas testdata/deltas-split-a.jsonl -size 100x40
-func runDeltas(path string, w int) int {
+func (r run) runDeltas(path string, w int) int {
 	f, err := os.Open(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "-deltas:", err)
@@ -39,7 +39,7 @@ func runDeltas(path string, w int) int {
 	}
 	defer f.Close()
 
-	emit := func(src string, indent int) []string { return drawBlock(src, w-indent) }
+	emit := func(src string, indent int) []string { return r.drawBlock(src, w-indent) }
 	var in, shown strings.Builder
 	var st state
 	// A recording is in the order the hook processes wrote it, which is the

@@ -452,7 +452,7 @@ func TestRunPNGWritesTheHooksPicture(t *testing.T) {
 	if err := os.WriteFile(dot, []byte("digraph { rankdir=LR; a -> b [label=\"x\"]; b -> c }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code := runPNG(dot, png, 100, pxGeom{CellW: 10, CellH: 24}); code != 0 {
+	if code := (run{}).runPNG(dot, png, 100, pxGeom{CellW: 10, CellH: 24}); code != 0 {
 		t.Fatalf("runPNG exited %d", code)
 	}
 	b, err := os.ReadFile(png)
@@ -491,14 +491,15 @@ func TestPixelLedgerRepaintsUnderTheOldIDs(t *testing.T) {
 	geom := pxGeom{CellW: 10, CellH: 24}
 	a := picture{Src: "digraph { a -> b }", Cols: 20, Rows: 3, Geom: geom}
 	b := picture{Src: "digraph { c -> d }", Cols: 20, Rows: 3, Geom: geom}
-	recordPicture("s1", a)
-	recordPicture("s1", b)
-	recordPicture("s1", a)
-	if n := repaintPictures("s1", tty, r); n != 0 {
+	s1 := run{sess: "s1"}
+	s1.recordPicture(a)
+	s1.recordPicture(b)
+	s1.recordPicture(a)
+	if n := s1.repaintPictures(tty, r); n != 0 {
 		t.Errorf("repainted %d pictures under the theme they were drawn in", n)
 	}
 	withTheme(t, `node [color=red]`)
-	if n := repaintPictures("s1", tty, r); n != 2 {
+	if n := s1.repaintPictures(tty, r); n != 2 {
 		t.Fatalf("repainted %d pictures, want 2", n)
 	}
 	out, err := os.ReadFile(tty)
@@ -511,10 +512,10 @@ func TestPixelLedgerRepaintsUnderTheOldIDs(t *testing.T) {
 			t.Errorf("%q was sent %d times under its id, want once", p.Src, n)
 		}
 	}
-	if n := repaintPictures("s1", tty, r); n != 0 {
+	if n := s1.repaintPictures(tty, r); n != 0 {
 		t.Errorf("repainted %d pictures with nothing changed", n)
 	}
-	if n := repaintPictures("s2", tty, r); n != 0 {
+	if n := (run{sess: "s2"}).repaintPictures(tty, r); n != 0 {
 		t.Errorf("repainted %d pictures for a session that drew none", n)
 	}
 }
@@ -539,9 +540,10 @@ func TestPixelLedgerRepaintsAsLaidOut(t *testing.T) {
 		return []byte("png"), nil
 	}}
 	geom := pxGeom{CellW: 10, CellH: 24}
-	recordPicture("s1", picture{Src: "digraph { rankdir=LR; a -> b }", Cols: 12, Rows: 7, Geom: geom, Rankdir: cgraph.TBRank})
+	s1 := run{sess: "s1"}
+	s1.recordPicture(picture{Src: "digraph { rankdir=LR; a -> b }", Cols: 12, Rows: 7, Geom: geom, Rankdir: cgraph.TBRank})
 	withTheme(t, `node [color=red]`)
-	if n := repaintPictures("s1", tty, r); n != 1 {
+	if n := s1.repaintPictures(tty, r); n != 1 {
 		t.Fatalf("repainted %d pictures, want 1", n)
 	}
 	ya, yb := svgTextY(svgGroup(got, "a")), svgTextY(svgGroup(got, "b"))

@@ -444,9 +444,9 @@ func TestATinyRegionKeepsItsSource(t *testing.T) {
 // drawn for, and nothing but the fence comes back: no caption, no source —
 // the reader gets the picture, not the plumbing.
 func TestDrawModeEmitsABareFenceThatFits(t *testing.T) {
-	defer withRender(rungCells)()
+	r := run{rung: rungCells}
 	src := "digraph { rankdir=LR; parse -> check -> emit; check -> warn }\n"
-	rows := drawBlock(src, 90)
+	rows := r.drawBlock(src, 90)
 	if rows == nil {
 		t.Fatal("nothing drawn")
 	}
@@ -470,10 +470,10 @@ func TestDrawModeEmitsABareFenceThatFits(t *testing.T) {
 // the same fence — one fence in, one fence out is what the oracle holds
 // the wire to, so the notice may not become a second block.
 func TestDrawModeNoticeKeepsTheSourceInOneFence(t *testing.T) {
-	defer withRender(rungCells)()
+	r := run{rung: rungCells}
 	// a label wider than the window: no orientation can save it
 	src := "digraph { rankdir=LR; alpha -> \"a label far wider than thirty columns of window\" }\n"
-	rows := drawBlock(src, 30)
+	rows := r.drawBlock(src, 30)
 	if rows == nil {
 		t.Fatal("a too-narrow window produced nothing, not even a reason")
 	}

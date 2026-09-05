@@ -50,11 +50,6 @@ type hookSpecific struct {
 	DisplayContent string `json:"displayContent"`
 }
 
-// hookGeom is what the window said about itself: the pixel size of a cell
-// where the terminal reports one (kitty does; most leave it zero, which
-// reads as no pixels).
-var hookGeom pxGeom
-
 // CC's own left margin for a message body.
 const inset = 6
 
@@ -67,20 +62,18 @@ func hookWidth(cols int) int {
 	return cols
 }
 
-// tee is where a live turn is written down, one payload per line, in
-// exactly the shape -deltas reads. One armed session therefore produces a
-// fixture rather than a log. It is -hooktee on the command line, or
+// teePayload writes a live turn down, one payload per line, in exactly the
+// shape -deltas reads. One armed session therefore produces a fixture
+// rather than a log. Where it writes is -hooktee on the command line, or
 // DRAWER_TEE in the environment: a variable set for claude — the shell's,
 // or settings.json's `env` — reaches a hook (measured on 2.1.261; an
 // earlier measurement said the environment was scrubbed, and on 2.1.257
 // it was not either way that mattered here).
-var tee string
-
-func teePayload(raw []byte) {
-	if tee == "" {
+func (r run) teePayload(raw []byte) {
+	if r.tee == "" {
 		return
 	}
-	f, err := os.OpenFile(tee, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(r.tee, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return
 	}
@@ -91,32 +84,30 @@ func teePayload(raw []byte) {
 // runHook is the whole of the -hook entry point: one payload in, one
 // replacement out, through drawBlock. Any failure prints an empty object,
 // which CC reads as "display the original".
-func runHook() int {
+func (r run) runHook() int {
 	raw, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		fmt.Print("{}")
 		return 0
 	}
-	teePayload(raw)
+	r.teePayload(raw)
 	var in hookIn
 	if err := json.Unmarshal(raw, &in); err != nil {
 		fmt.Print("{}")
 		return 0
 	}
-	hookSession = in.SessionID
-	cols, g := termSize()
-	hookGeom = g
-	width := hookWidth(cols)
+	r.sess = in.SessionID
+	width := hookWidth(r.probe())
 	// The first delta of a message is the first thing the hook hears after
 	// a theme switch; pixelledger.go says why, and what is repainted.
-	if in.Index == 0 && pickRung() == rungPixels {
-		repaintPictures(hookSession, parentTTYOut(), probeRaster())
+	if in.Index == 0 && r.pickRung() == rungPixels {
+		r.repaintPictures(parentTTYOut(), probeRaster())
 	}
 	st, done := takeTurn(in.MessageID, in.Index, turnPatience)
 	defer done()
 	before := st
 	text := stream(in.Delta, in.Final, &st, func(src string, indent int) []string {
-		return drawBlock(src, width-indent)
+		return r.drawBlock(src, width-indent)
 	})
 	st.Next = max(st.Next, in.Index+1)
 	saveState(in.MessageID, st, in.Final)
@@ -139,10 +130,10 @@ func runHook() int {
 // place, and what this terminal's rung can draw, which is what a graph
 // should be written for. Without it a model that has never heard of the
 // hook writes mermaid, or boxes out of hyphens, and neither is a picture.
-func sessionContext() string {
-	_, hookGeom = termSize()
+func (r run) sessionContext() string {
+	r.probe()
 	var can string
-	switch pickRung() {
+	switch r.pickRung() {
 	case rungPixels:
 		can = "as graphviz's own picture, so everything dot draws, draws"
 	case rungOctants, rungBraille:

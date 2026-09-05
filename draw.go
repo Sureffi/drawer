@@ -31,13 +31,13 @@ import (
 // to leave the fence exactly as it arrived. A fence that will not draw at
 // this width still says why: the notice rides above the source, so a typo
 // and a narrow window stop looking alike.
-func drawBlock(src string, width int) []string {
+func (r run) drawBlock(src string, width int) []string {
 	if width <= 0 {
 		width = 100
 	}
-	rung := pickRung()
+	rung := r.pickRung()
 	if rung == rungPixels {
-		if rows := drawPixels(src, width); rows != nil {
+		if rows := r.drawPixels(src, width); rows != nil {
 			return fence(rows)
 		}
 		rung = rungOctants // cairo said no; the glyphs still can
@@ -76,25 +76,29 @@ func fence(rows []string) []string {
 	return out
 }
 
-// wantRung picks the rung: cells, braille, octants, pixels, or auto,
-// which takes the best the terminal in front of us can show.
-var wantRung rung
-
 // pickRung answers which drawing this terminal gets. `auto` reads the
 // terminal: pixels want kitty, a cell size in pixels and a rasteriser;
 // octants want a terminal that draws them itself, which today means kitty
 // or ghostty; everything else gets braille, which every font carries.
-func pickRung() rung {
-	if wantRung != rungAuto {
-		return wantRung
+//
+// raster is a thunk because looking for a rasteriser means walking the
+// PATH: it is asked only where the terminal and the geometry have already
+// said yes. Everything else it needs is what the run already knows, so the
+// judgement can be read — and tested — without a terminal anywhere near it.
+func pickRung(want rung, term string, geom pxGeom, raster func() bool) rung {
+	if want != rungAuto {
+		return want
 	}
-	term := termName()
 	kitty := strings.Contains(term, "kitty")
-	if kitty && hookGeom.ok() && probeRaster() != nil {
+	if kitty && geom.ok() && raster() {
 		return rungPixels
 	}
 	if kitty || strings.Contains(term, "ghostty") {
 		return rungOctants
 	}
 	return rungBraille
+}
+
+func (r run) pickRung() rung {
+	return pickRung(r.rung, r.term, r.geom, func() bool { return probeRaster() != nil })
 }

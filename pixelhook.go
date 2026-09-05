@@ -37,12 +37,12 @@ import (
 )
 
 // drawPixels is the pixels rung: the rows that show a picture, or nil.
-func drawPixels(src string, width int) []string {
-	r := probeRaster()
-	if r == nil || !hookGeom.ok() {
+func (r run) drawPixels(src string, width int) []string {
+	ras := probeRaster()
+	if ras == nil || !r.geom.ok() {
 		return nil
 	}
-	png, p, err := pixelCut(r, src, width, hookGeom)
+	png, p, err := pixelCut(ras, src, width, r.geom)
 	if err != nil {
 		return nil
 	}
@@ -50,7 +50,7 @@ func drawPixels(src string, width int) []string {
 	if !transmitFile(parentTTYOut(), png, id, p.Cols, p.Rows) {
 		return nil
 	}
-	recordPicture(hookSession, p)
+	r.recordPicture(p)
 	return placeholderRows(id, p.Cols, p.Rows)
 }
 

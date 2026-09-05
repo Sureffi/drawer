@@ -49,24 +49,23 @@ func main() {
 		}
 	}
 
-	wantRung = parseRung(*render)
+	r := newRun(parseRung(*render), *hooktee)
 	w, h := parseSize(*size, 100, 40)
 
 	switch {
 	case *showTheme:
 		fmt.Print(themeSource())
 	case *contextLine:
-		fmt.Print(sessionContext())
+		fmt.Print(r.sessionContext())
 	case *dotDump != "" && *pngOut != "":
 		cw, ch := parseSize(*cell, 10, 24)
-		os.Exit(runPNG(*dotDump, *pngOut, w, pxGeom{CellW: cw, CellH: ch}))
+		os.Exit(r.runPNG(*dotDump, *pngOut, w, pxGeom{CellW: cw, CellH: ch}))
 	case *dotDump != "":
-		os.Exit(runDotDump(*dotDump, w, h))
+		os.Exit(r.runDotDump(*dotDump, w, h))
 	case *deltaDump != "":
-		os.Exit(runDeltas(*deltaDump, w))
+		os.Exit(r.runDeltas(*deltaDump, w))
 	case *hook:
-		tee = *hooktee
-		os.Exit(runHook())
+		os.Exit(r.runHook())
 	default:
 		flag.Usage()
 		os.Exit(2)

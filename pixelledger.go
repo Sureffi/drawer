@@ -46,9 +46,6 @@ type ledger struct {
 	Pictures []picture `json:"pictures"`
 }
 
-// hookSession is the session the hook is running in, from its payload.
-var hookSession string
-
 // ledgerMax bounds a session's ledger: the last pictures drawn, which are
 // the ones on or near the screen.
 const ledgerMax = 40
@@ -64,11 +61,11 @@ func themeSig() string {
 
 // recordPicture writes a picture into its session's ledger, once, and
 // marks the ledger with the theme it was drawn in.
-func recordPicture(session string, p picture) {
-	if session == "" {
+func (r run) recordPicture(p picture) {
+	if r.sess == "" {
 		return
 	}
-	path := ledgerPath(session)
+	path := ledgerPath(r.sess)
 	os.MkdirAll(filepath.Dir(path), 0o700)
 	sweepState(filepath.Dir(path), 7*24*time.Hour)
 	var l ledger
@@ -94,11 +91,11 @@ func recordPicture(session string, p picture) {
 // repaintPictures sends every picture in a session's ledger to the terminal
 // again, in the theme in force, when that is not the theme they stand in.
 // How many were sent; none when nothing changed, or nothing was drawn.
-func repaintPictures(session, tty string, r *raster) int {
-	if session == "" || r == nil {
+func (r run) repaintPictures(tty string, ras *raster) int {
+	if r.sess == "" || ras == nil {
 		return 0
 	}
-	path := ledgerPath(session)
+	path := ledgerPath(r.sess)
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return 0
@@ -117,7 +114,7 @@ func repaintPictures(session, tty string, r *raster) int {
 		if err != nil {
 			continue
 		}
-		png, _, err := pixelFit(r, svg, p.Cols, p.Geom)
+		png, _, err := pixelFit(ras, svg, p.Cols, p.Geom)
 		if err != nil {
 			continue
 		}

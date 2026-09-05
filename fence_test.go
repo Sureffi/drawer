@@ -12,19 +12,12 @@ import (
 	"time"
 )
 
-// withRender sets the rung for one test and puts it back.
-func withRender(render rung) func() {
-	r := wantRung
-	wantRung = render
-	return func() { wantRung = r }
-}
-
 // drawAt is Draw's emit bound to a width, in the cells rung: what the
 // transducer laws hand stream.
 func drawAt(w int) func(string, int) []string {
+	r := run{rung: rungCells}
 	return func(src string, indent int) []string {
-		defer withRender(rungCells)()
-		return drawBlock(src, w-indent)
+		return r.drawBlock(src, w-indent)
 	}
 }
 

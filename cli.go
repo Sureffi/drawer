@@ -23,15 +23,15 @@ func parseSize(s string, dw, dh int) (int, int) {
 // session in the way.
 //
 //	drawer -dot graph.dot -size 100x14 -render braille
-func runDotDump(path string, w, h int) int {
+func (r run) runDotDump(path string, w, h int) int {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "-dot:", err)
 		return 1
 	}
 	var rows []string
-	if wantRung == rungBraille || wantRung == rungOctants {
-		rows = drawSubcell(string(b), w, wantRung == rungOctants)
+	if r.rung == rungBraille || r.rung == rungOctants {
+		rows = drawSubcell(string(b), w, r.rung == rungOctants)
 		if rows == nil {
 			fmt.Fprintf(os.Stderr, "-dot: will not fit in %d columns as strokes (source would be left alone)\n", w)
 			return 1
@@ -65,18 +65,18 @@ func runDotDump(path string, w, h int) int {
 // cells wide with cells of `geom` pixels, and writes the picture to a file:
 // a theme, or a graph, looked at without a session. Nonzero when there is
 // no picture, with the reason on stderr.
-func runPNG(dotPath, pngPath string, width int, geom pxGeom) int {
+func (r run) runPNG(dotPath, pngPath string, width int, geom pxGeom) int {
 	src, err := os.ReadFile(dotPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "drawer:", err)
 		return 1
 	}
-	r := findRaster()
-	if r == nil {
+	ras := findRaster()
+	if ras == nil {
 		fmt.Fprintln(os.Stderr, "drawer: no rasteriser on the PATH (rsvg-convert or magick)")
 		return 1
 	}
-	png, p, err := pixelCut(r, string(src), width, geom)
+	png, p, err := pixelCut(ras, string(src), width, geom)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "drawer:", err)
 		return 1
