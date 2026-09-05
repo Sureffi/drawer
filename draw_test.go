@@ -208,10 +208,10 @@ func withRender(render string) func() {
 
 // drawAt is Draw's emit bound to a width, in the cells rung: what the
 // transducer laws hand Stream.
-func drawAt(w int) func(string) []string {
-	return func(src string) []string {
+func drawAt(w int) func(string, int) []string {
+	return func(src string, indent int) []string {
 		defer withRender("cells")()
-		return Draw.Emit(src, w, 0)
+		return Draw.Emit(src, w-indent, 0)
 	}
 }
 

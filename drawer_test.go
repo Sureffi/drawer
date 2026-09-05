@@ -245,6 +245,124 @@ func TestFenceDrawsAcrossEitherSplit(t *testing.T) {
 	}
 }
 
+// A fence is what markdown says one is, and a shorter run inside a longer
+// one is content. A ```dot quoted inside a four-backtick fence used to be
+// read as an opener and drawn; it is text, and every byte of it comes back.
+// Seven bytes at a time, so the boundaries land inside the markers too.
+func TestAQuotedFenceIsText(t *testing.T) {
+	in := "Write it like this:\n\n````\n```dot\ndigraph { a -> b }\n```\n````\n\nand it draws.\n"
+	var st State
+	var b strings.Builder
+	for i := 0; i < len(in); i += 7 {
+		end := min(i+7, len(in))
+		b.WriteString(Stream(in[i:end], end == len(in), &st, drawAt(100)))
+	}
+	if got := b.String(); got != in {
+		t.Errorf("a quoted fence was touched:\n in: %q\nout: %q", in, got)
+	}
+	if st.InFence || st.Foreign || st.PendingClose || st.Buf != "" {
+		t.Errorf("state left behind: %+v", st)
+	}
+}
+
+// A fence indented under a list item is a fence, and the drawing stands
+// in its indent: every row of the block carries it, and the drawing was
+// made for the width the indent leaves. The prose around it is untouched.
+func TestAFenceUnderAListItemDraws(t *testing.T) {
+	in := "- the flow:\n\n  ```dot\n  digraph { rankdir=LR; a -> b }\n  ```\n\n- done\n"
+	var st State
+	gotIndent := -1
+	out := Stream(in, true, &st, func(src string, indent int) []string {
+		gotIndent = indent
+		return drawAt(100)(src, indent)
+	})
+	if !strings.HasPrefix(out, "- the flow:\n\n") || !strings.HasSuffix(out, "\n\n- done\n") {
+		t.Fatalf("prose around the fence damaged:\n%q", out)
+	}
+	if gotIndent != 2 {
+		t.Errorf("the drawing was asked for at indent %d, want 2", gotIndent)
+	}
+	block := strings.TrimSuffix(strings.TrimPrefix(out, "- the flow:\n\n"), "\n\n- done\n")
+	rows := strings.Split(block, "\n")
+	if len(rows) < 3 || strings.TrimSpace(rows[0]) != FenceTick || strings.TrimSpace(rows[len(rows)-1]) != FenceTick {
+		t.Fatalf("the fence was not replaced by a bare drawn one:\n%q", block)
+	}
+	if !strings.Contains(block, "▶") {
+		t.Fatalf("nothing drawn:\n%s", block)
+	}
+	for _, r := range rows {
+		if !strings.HasPrefix(r, "  ") {
+			t.Errorf("a row left the list item's indent: %q", r)
+		}
+	}
+}
+
+// What is drawn: a fence labelled dot or graphviz, whatever is in it, and
+// an unlabelled fence whose first line opens a graph. What is left alone,
+// byte for byte: a fence labelled anything else, an unlabelled one with
+// anything else in it, and mermaid, whose `graph LR` opens no brace.
+func TestOnlyGraphsAreDrawn(t *testing.T) {
+	cases := []struct {
+		name, in string
+		drawn    bool
+	}{
+		{"dot", "```dot\ndigraph { a -> b }\n```\n", true},
+		{"graphviz", "```graphviz\ndigraph { a -> b }\n```\n", true},
+		{"dot with a title", "```dot title=\"flow\"\ndigraph { a -> b }\n```\n", true},
+		{"tildes", "~~~dot\ndigraph { a -> b }\n~~~\n", true},
+		{"four ticks", "````dot\ndigraph { a -> b }\n````\n", true},
+		{"unlabelled digraph", "```\ndigraph G {\n  a -> b\n}\n```\n", true},
+		{"unlabelled strict graph", "```\nstrict graph { a -- b }\n```\n", true},
+		{"python", "```python\nprint('hi')\n```\n", false},
+		{"python quoting a marker", "```python\n```dot\nprint('hi')\n```\n", false},
+		{"unlabelled prose", "```\nsome text\n```\n", false},
+		{"unlabelled empty", "```\n```\n", false},
+		{"mermaid", "```mermaid\ngraph LR\n  A --> B\n```\n", false},
+		{"unlabelled mermaid", "```\ngraph LR\n  A --> B\n```\n", false},
+		{"inline code", "```dot``` is the marker\n", false},
+	}
+	for _, c := range cases {
+		var st State
+		out := Stream(c.in, true, &st, drawAt(100))
+		if st.InFence || st.Foreign || st.PendingClose || st.Buf != "" {
+			t.Errorf("%s: state left behind: %+v", c.name, st)
+		}
+		if c.drawn && !strings.Contains(out, "╭") {
+			t.Errorf("%s: not drawn:\n%q", c.name, out)
+		}
+		if !c.drawn && out != c.in {
+			t.Errorf("%s: touched:\n in: %q\nout: %q", c.name, c.in, out)
+		}
+	}
+}
+
+// A fence that is not ours streams as it arrives. Holding it to its close
+// would take a page of code off the screen for the length of the reply,
+// on no promise at all; an unlabelled fence is held only as far as its
+// first line, which is where the decision lives.
+func TestAForeignFenceIsNotHeld(t *testing.T) {
+	var st State
+	if got := Stream("```python\nx = 1\n", false, &st, drawAt(100)); got != "```python\nx = 1\n" {
+		t.Errorf("a labelled fence was held: %q", got)
+	}
+	if got := Stream("y = 2\n```\nafter\n", true, &st, drawAt(100)); got != "y = 2\n```\nafter\n" {
+		t.Errorf("the rest of it was touched: %q", got)
+	}
+	st = State{}
+	if got := Stream("```\n", false, &st, drawAt(100)); got != "" {
+		t.Errorf("an unlabelled fence was let go before its first line: %q", got)
+	}
+	if got := Stream("some text\n", false, &st, drawAt(100)); got != "```\nsome text\n" {
+		t.Errorf("an unlabelled fence with prose in it was held past its first line: %q", got)
+	}
+	if got := Stream("```\n", true, &st, drawAt(100)); got != "```\n" {
+		t.Errorf("its closer was touched: %q", got)
+	}
+	if st.InFence || st.Foreign || st.PendingClose || st.Buf != "" {
+		t.Errorf("state left behind: %+v", st)
+	}
+}
+
 // Suppressing a delta is taking content off the screen against a promise
 // to put something better back. A source that never draws must come back
 // whole rather than vanish — the worst acceptable outcome is a visible

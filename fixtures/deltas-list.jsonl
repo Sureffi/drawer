@@ -1,0 +1,2 @@
+{"delta": "- the flow:\n\n  ```dot\n  digraph { rankdir=LR; parse -> grid -> paint }\n", "final": false, "message_id": "deltas-list.jsonl", "index": 0}
+{"delta": "  ```\n\n- then the glass.\n", "final": true, "message_id": "deltas-list.jsonl", "index": 1}

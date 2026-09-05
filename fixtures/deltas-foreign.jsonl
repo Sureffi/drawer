@@ -1,0 +1,2 @@
+{"delta": "```python\nprint('```dot is not an opener here')\n```\n\n```graphviz\n", "final": false, "message_id": "deltas-foreign.jsonl", "index": 0}
+{"delta": "digraph { rankdir=LR; x -> y }\n```", "final": true, "message_id": "deltas-foreign.jsonl", "index": 1}

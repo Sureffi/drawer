@@ -28,17 +28,71 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
 )
 
-// A fence marker only counts at the start of its own line with nothing
-// after it. Prose that mentions one is prose — sessions about this code
-// are mostly that, and a scan for the substring swallowed the sentence it
-// appeared in.
-const FenceOpen = "```dot"
+// A fence is what markdown says one is: a run of three or more backticks
+// or tildes at the start of its own line, indented or not, with an info
+// string after it, closed by a run of the same character at least as long
+// with nothing else on the line. A shorter run inside is content, so a
+// ```dot quoted in a four-backtick fence is text and never an opener. A
+// marker only counts at the start of its line: prose that mentions one is
+// prose — sessions about this code are mostly that, and a scan for the
+// substring swallowed the sentence it appeared in.
+//
+// Every fence is tracked and only a graph's is drawn. A fence labelled
+// `dot` or `graphviz` is a graph's, whatever is in it — the label is the
+// model's word, and a graph that will not draw gets told why. An
+// unlabelled fence is a graph's when its first line opens one, `digraph {`
+// or `graph {`, and prose otherwise. A fence labelled anything else is
+// streamed through as it arrives, and so is everything inside it, its
+// closer the only thing watched for.
 const FenceTick = "```"
+
+// opener is a fence's opening line as read: the whitespace before the run,
+// the run itself, and the first word of what followed it. The run says
+// what closes the fence; the indent is what the drawing stands in.
+type opener struct {
+	Indent string `json:"indent"`
+	Run    string `json:"run"`
+	Info   string `json:"info"`
+}
+
+var fenceRe = regexp.MustCompile("^([ \t]*)(`{3,}|~{3,})(.*)$")
+
+// graphStart is a DOT graph's first line, as a model writes one: the
+// keyword, a name if any, and the brace. Mermaid's `graph LR` has no
+// brace, and is left to be what it is.
+var graphStart = regexp.MustCompile(`(?i)^\s*(strict\s+)?(di)?graph\b[^{]*\{`)
+
+// openerOf reads a line as a fence opener. A backtick run followed by
+// text with a backtick in it is inline code, not a fence.
+func openerOf(line string) (opener, bool) {
+	m := fenceRe.FindStringSubmatch(strings.TrimRight(line, " \t\r"))
+	if m == nil || (m[2][0] == '`' && strings.Contains(m[3], "`")) {
+		return opener{}, false
+	}
+	info := ""
+	if f := strings.Fields(m[3]); len(f) > 0 {
+		info = strings.ToLower(f[0])
+	}
+	return opener{Indent: m[1], Run: m[2], Info: info}, true
+}
+
+// closes says whether a line ends this fence: a run of its character, at
+// least as long, and nothing else.
+func (f opener) closes(line string) bool {
+	t := strings.TrimSpace(line)
+	return len(t) >= len(f.Run) && strings.Trim(t, f.Run[:1]) == ""
+}
+
+// labelled says the fence was declared a graph's; unlabelled, that its
+// first line will have to say.
+func (f opener) labelled() bool   { return f.Info == "dot" || f.Info == "graphviz" }
+func (f opener) unlabelled() bool { return f.Info == "" }
 
 // stateDir is where the hook keeps what one process leaves for the next.
 func stateDir() string {
@@ -146,8 +200,17 @@ type State struct {
 	// newline shows up, because it might still grow into a fence marker.
 	Buf string `json:"buf"`
 	// Held is the fence being captured, raw, from its opening marker.
-	Held    string `json:"held"`
-	InFence bool   `json:"in_fence"`
+	Held string `json:"held"`
+	// InFence is a fence being held: a graph's, or one not yet decided.
+	InFence bool `json:"in_fence"`
+	// Ours says the held fence is a graph's — by its label, or by its
+	// first line. Until it is, the fence is held only as far as that line.
+	Ours bool `json:"ours"`
+	// Foreign is a fence that is not ours: its text streams as it
+	// arrives, and only its closer is watched for.
+	Foreign bool `json:"foreign"`
+	// Fence is the opener of the fence being held or streamed.
+	Fence opener `json:"fence"`
 	// A fence reserved before its closing ``` arrived leaves that marker
 	// still in the stream, one delta behind. Nothing else knows it is
 	// owed, so it is carried — the category of things kept precisely
@@ -166,21 +229,21 @@ func completeLines(s string) int {
 	return 0
 }
 
-// markerLine finds the first whole line in s that is exactly marker and
-// returns its bounds, the end being past its newline. An unterminated last
-// line matches only at the end of a message: until then it may still be
+// findLine finds the first whole line in s that match accepts and returns
+// its bounds, the end being past its newline. An unterminated last line is
+// offered only at the end of a message: until then it may still be
 // growing, and the closing ``` of a reply routinely arrives with no
 // newline after it.
-func markerLine(s, marker string, atEnd bool) (start, end int) {
+func findLine(s string, atEnd bool, match func(line string) bool) (start, end int) {
 	for p := 0; p < len(s); {
 		q := strings.IndexByte(s[p:], '\n')
 		if q < 0 {
-			if atEnd && strings.TrimRight(s[p:], " \t\r") == marker {
+			if atEnd && match(s[p:]) {
 				return p, len(s)
 			}
 			return -1, -1
 		}
-		if strings.TrimRight(s[p:p+q], " \t\r") == marker {
+		if match(s[p : p+q]) {
 			return p, p + q + 1
 		}
 		p += q + 1
@@ -188,11 +251,32 @@ func markerLine(s, marker string, atEnd bool) (start, end int) {
 	return -1, -1
 }
 
+// openerLine is findLine for any fence opener, and the fence it read.
+func openerLine(s string, atEnd bool) (start, end int, f opener) {
+	start, end = findLine(s, atEnd, func(line string) bool {
+		var ok bool
+		f, ok = openerOf(line)
+		return ok
+	})
+	return start, end, f
+}
+
+// firstText is the first line of a body with anything on it, trimmed.
+func firstText(body string) string {
+	for _, l := range strings.Split(body, "\n") {
+		if t := strings.TrimSpace(l); t != "" {
+			return t
+		}
+	}
+	return ""
+}
+
 // Stream is the transducer. It takes one delta and the state left by the
 // delta before it, and returns what should be displayed in its place. emit
-// is the product: given one complete fence source it answers the rows that
-// replace the fence, or nil to leave it exactly as it arrived. The drawer
-// passes Draw; an embedding program passes its own.
+// is the product: given one complete fence source and the cells its fence
+// is indented by, it answers the rows that replace the fence, or nil to
+// leave it exactly as it arrived; the rows come back standing in that
+// indent. The drawer passes Draw; an embedding program passes its own.
 //
 // The one law it must not break: **everything it emits is a substring of
 // what it was handed.** An earlier version rebuilt lines with strings.Join
@@ -204,13 +288,14 @@ func markerLine(s, marker string, atEnd bool) (start, end int) {
 // Held text leaves in exactly two ways: as what emit made of it, or as the
 // bytes it arrived as. There is no third exit, which is what keeps a suppressed
 // delta from becoming a lost one.
-func Stream(delta string, final bool, st *State, emit func(src string) []string) string {
+func Stream(delta string, final bool, st *State, emit func(src string, indent int) []string) string {
 	var out strings.Builder
 	st.Buf += delta
+	closer := func() (int, int) { return findLine(st.Buf, final, st.Fence.closes) }
 
 	for {
 		if st.PendingClose {
-			s, e := markerLine(st.Buf, FenceTick, final)
+			s, e := closer()
 			if s == 0 {
 				// The region replaced the whole fence, closer included, so
 				// the closer's own line ending is what decides whether the
@@ -229,10 +314,35 @@ func Stream(delta string, final bool, st *State, emit func(src string) []string)
 			continue
 		}
 
+		if st.Foreign {
+			// Not ours: every whole line goes out as it came, and the
+			// closer takes the fence with it.
+			if s, e := closer(); s >= 0 {
+				out.WriteString(st.Buf[:e])
+				st.Buf = st.Buf[e:]
+				st.Foreign = false
+				continue
+			}
+			n := completeLines(st.Buf)
+			if final {
+				n = len(st.Buf)
+			}
+			out.WriteString(st.Buf[:n])
+			st.Buf = st.Buf[n:]
+			break
+		}
+
 		if !st.InFence {
-			if s, e := markerLine(st.Buf, FenceOpen, final); s >= 0 {
+			if s, e, f := openerLine(st.Buf, final); s >= 0 {
 				out.WriteString(st.Buf[:s])
-				st.InFence, st.Held = true, st.Buf[s:e]
+				st.Fence = f
+				switch {
+				case f.labelled() || f.unlabelled():
+					st.InFence, st.Ours, st.Held = true, f.labelled(), st.Buf[s:e]
+				default:
+					out.WriteString(st.Buf[s:e])
+					st.Foreign = true
+				}
 				st.Buf = st.Buf[e:]
 				continue
 			}
@@ -245,12 +355,41 @@ func Stream(delta string, final bool, st *State, emit func(src string) []string)
 			break
 		}
 
-		// inside a fence
-		if s, e := markerLine(st.Buf, FenceTick, final); s >= 0 {
+		// inside a held fence
+		if !st.Ours {
+			// Unlabelled: held only as far as its first line, which says
+			// whether there is a graph in it, and never past its closer.
+			// Until that line is whole there is nothing to decide on.
+			n := completeLines(st.Buf)
+			if final {
+				n = len(st.Buf)
+			}
+			closed := false
+			if s, _ := closer(); s >= 0 && s <= n {
+				n, closed = s, true
+			}
+			st.Held += st.Buf[:n]
+			st.Buf = st.Buf[n:]
+			first := firstText(fenceBody(st.Held, st.Fence))
+			switch {
+			case first != "" && graphStart.MatchString(first):
+				st.Ours = true
+				continue
+			case first != "" || closed || final:
+				// Prose, or nothing at all: not ours. What was held goes
+				// out as it came, and the rest streams to the closer.
+				out.WriteString(st.Held)
+				st.InFence, st.Held = false, ""
+				st.Foreign = true
+				continue
+			}
+			break
+		}
+		if s, e := closer(); s >= 0 {
 			st.Held += st.Buf[:e]
 			st.Buf = st.Buf[e:]
-			out.WriteString(replaceFence(st.Held, emit))
-			st.InFence, st.Held = false, ""
+			out.WriteString(replaceFence(st.Held, st.Fence, emit))
+			st.InFence, st.Ours, st.Held = false, false, ""
 			continue
 		}
 		st.Held += st.Buf
@@ -262,10 +401,10 @@ func Stream(delta string, final bool, st *State, emit func(src string) []string)
 		// makes a notice safe — a fence cut mid-graph does not lay out, so
 		// the transducer keeps holding instead of answering "finished?"
 		// with "yes, and here is why it is broken" on the first delta.
-		if src := fenceBody(st.Held); complete(src) {
-			if rows := emit(src); rows != nil {
+		if src := fenceBody(st.Held, st.Fence); complete(src) {
+			if rows := emitIn(st.Fence, src, emit); rows != nil {
 				out.WriteString(strings.Join(rows, "\n"))
-				st.InFence, st.Held = false, ""
+				st.InFence, st.Ours, st.Held = false, false, ""
 				st.PendingClose = true
 				continue
 			}
@@ -275,7 +414,7 @@ func Stream(delta string, final bool, st *State, emit func(src string) []string)
 			// a visible DOT fence is the worst acceptable outcome, and
 			// silence is not on the list.
 			out.WriteString(st.Held)
-			st.InFence, st.Held = false, ""
+			st.InFence, st.Ours, st.Held = false, false, ""
 		}
 		break
 	}
@@ -291,10 +430,21 @@ func complete(src string) bool {
 	return err == nil && l != nil
 }
 
+// emitIn is emit for a fence: the rows for its source at the width its
+// indent leaves, each standing in that indent, so a drawing under a list
+// item stays under it.
+func emitIn(f opener, src string, emit func(string, int) []string) []string {
+	rows := emit(src, textCells(f.Indent))
+	for i := range rows {
+		rows[i] = f.Indent + rows[i]
+	}
+	return rows
+}
+
 // replaceFence turns one closed fence into what emit makes of it, or hands
 // back the exact bytes it was given.
-func replaceFence(held string, emit func(string) []string) string {
-	rows := emit(fenceBody(held))
+func replaceFence(held string, f opener, emit func(string, int) []string) string {
+	rows := emitIn(f, fenceBody(held, f), emit)
 	if rows == nil {
 		return held
 	}
@@ -305,14 +455,18 @@ func replaceFence(held string, emit func(string) []string) string {
 	return block
 }
 
-// fenceBody strips the opening marker and any closing one from held text.
-func fenceBody(held string) string {
+// fenceBody is the source inside a held fence: the opener's line and the
+// closer's, where it has arrived, taken off, and the opener's indent taken
+// off every line that carries it, so a graph written under a list item
+// reads as the model meant it.
+func fenceBody(held string, f opener) string {
 	lines := strings.Split(strings.TrimSuffix(held, "\n"), "\n")
-	if len(lines) > 0 && strings.TrimRight(lines[0], " \t") == FenceOpen {
-		lines = lines[1:]
-	}
-	if n := len(lines); n > 0 && strings.TrimRight(lines[n-1], " \t") == FenceTick {
+	lines = lines[1:] // the opener, by construction
+	if n := len(lines); n > 0 && f.closes(lines[n-1]) {
 		lines = lines[:n-1]
+	}
+	for i, l := range lines {
+		lines[i] = strings.TrimPrefix(l, f.Indent)
 	}
 	return strings.Join(lines, "\n")
 }

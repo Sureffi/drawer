@@ -41,7 +41,7 @@ func RunDeltas(path string, w, rows int, m Mode) int {
 	}
 	defer f.Close()
 
-	emit := func(src string) []string { return m.Emit(src, w, rows) }
+	emit := func(src string, indent int) []string { return m.Emit(src, w-indent, rows) }
 	var in, shown strings.Builder
 	var st State
 	// A recording is in the order the hook processes wrote it, which is the
@@ -110,7 +110,8 @@ func RunDeltas(path string, w, rows int, m Mode) int {
 		if sf == of {
 			continue // returned untouched: the honest failure
 		}
-		if err := m.Check(of, fenceBody(sf), w, rows); err != nil {
+		f, _ := openerOf(strings.SplitN(sf, "\n", 2)[0])
+		if err := m.Check(of, fenceBody(sf, f), w, rows); err != nil {
 			fmt.Fprintf(os.Stderr, "-deltas: %s: fence %d: %v\n", path, i+1, err)
 			return 1
 		}
@@ -121,25 +122,24 @@ func RunDeltas(path string, w, rows int, m Mode) int {
 	return 0
 }
 
-// splitFences pulls every ``` block out of text and returns them in order
-// alongside the text that remains, each block replaced by one NUL so the
-// prose comparison stays positional.
+// splitFences pulls every fence out of text — as the transducer reads
+// one, whatever it is labelled, so a fence quoted inside another is the
+// content it is — and returns them in order alongside the text that
+// remains, each block replaced by one NUL so the prose comparison stays
+// positional.
 func splitFences(text string) ([]string, string) {
 	var fences []string
 	var prose strings.Builder
 	lines := strings.Split(text, "\n")
 	for i := 0; i < len(lines); i++ {
-		t := strings.TrimRight(lines[i], " \t")
-		if t != FenceOpen && t != FenceTick {
-			prose.WriteString(lines[i])
-			prose.WriteString("\n")
-			continue
-		}
+		f, ok := openerOf(lines[i])
 		end := -1
-		for j := i + 1; j < len(lines); j++ {
-			if strings.TrimRight(lines[j], " \t") == FenceTick {
-				end = j
-				break
+		if ok {
+			for j := i + 1; j < len(lines); j++ {
+				if f.closes(lines[j]) {
+					end = j
+					break
+				}
 			}
 		}
 		if end < 0 {
@@ -160,8 +160,8 @@ func splitFences(text string) ([]string, string) {
 // Rows are not a ceiling here; a drawing scrolls.
 func checkDrawn(block, src string, w, _ int) error {
 	lines := strings.Split(block, "\n")
-	if len(lines) < 3 || strings.TrimRight(lines[0], " \t") != FenceTick ||
-		strings.TrimRight(lines[len(lines)-1], " \t") != FenceTick {
+	if len(lines) < 3 || strings.TrimSpace(lines[0]) != FenceTick ||
+		strings.TrimSpace(lines[len(lines)-1]) != FenceTick {
 		return fmt.Errorf("drawn block is not a bare fence")
 	}
 	body := lines[1 : len(lines)-1]

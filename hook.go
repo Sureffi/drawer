@@ -180,8 +180,8 @@ func RunHook(m Mode) int {
 	st, done := takeTurn(in.MessageID, in.Index, turnPatience)
 	defer done()
 	before := st
-	text := Stream(in.Delta, in.Final, &st, func(src string) []string {
-		return m.Emit(src, width, rows)
+	text := Stream(in.Delta, in.Final, &st, func(src string, indent int) []string {
+		return m.Emit(src, width-indent, rows)
 	})
 	st.Next = max(st.Next, in.Index+1)
 	saveState(in.MessageID, st, in.Final)

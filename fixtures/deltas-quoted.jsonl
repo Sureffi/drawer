@@ -1,0 +1,2 @@
+{"delta": "To get a drawing, write:\n\n````\n```dot\n", "final": false, "message_id": "deltas-quoted.jsonl", "index": 0}
+{"delta": "digraph { a -> b }\n```\n````\n\nand it draws.\n", "final": true, "message_id": "deltas-quoted.jsonl", "index": 1}

@@ -38,6 +38,19 @@ Layout is graphviz, compiled to WebAssembly and carried inside the binary
 (`goccy/go-graphviz` through `wazero`). There is no `dot` to install. A
 layout costs about a millisecond; the process spawn costs about twenty.
 
+## what counts as a fence
+
+A fence as markdown has it: three or more backticks or tildes at the start
+of a line, indented or not, closed by a run of the same character at least
+as long. Every fence is tracked and only a graph's is drawn. A fence
+labelled `dot` or `graphviz` is a graph's whatever is in it, and one that
+will not draw is told why over its source. An unlabelled fence is a
+graph's when its first line opens one, `digraph {` or `graph {`, and prose
+otherwise. A fence labelled anything else streams through as it arrives,
+and so does everything inside it, so a ```dot quoted in a four-backtick
+fence is the text it is. A fence under a list item draws in its indent, at
+the width the indent leaves.
+
 ## the rungs
 
 Best first, each failing open to the one below, chosen by `-render` or by
@@ -166,9 +179,9 @@ fits its width, and a notice must carry the source it is about.
 
 ## known wrong
 
-- A fence indented under a list item does not draw; a ```dot quoted inside
-  an outer four-backtick fence does. Both come from reading fence markers at
-  column zero and they move together.
+- A fence under a list item is drawn at the window's width less its
+  indent. What Claude Code actually gives a code block inside a list item
+  is not measured; if it is less, the drawing wraps there.
 - The hook's width comes from `/proc/$PPID/fd/0`, Linux only. macOS would
   need the tty via `ps` and an open of the device; unverified.
 - In the glyph rungs, record and HTML labels print their markup and node
