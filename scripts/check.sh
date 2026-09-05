@@ -28,40 +28,50 @@ stage() {
   fi
 }
 
-# The layers, and what each of them may import. A cycle is the compiler's
-# to catch; a sideways edge — a rung importing a rung, notice importing
-# cells — compiles fine and is the thing this asserts. drawer is the top
-# and may import any of them.
+# The layers, and what each of them may import — every package this module
+# has, the binary's included, in what it imports for the build and for its
+# laws alike: a law reaching sideways is the same edge as any other. A cycle
+# is the compiler's to catch; a sideways edge — a rung importing a rung,
+# notice importing cells — compiles fine and is the thing this asserts.
+# drawer is the top and may import any of them.
 layers_table() {
   cat <<'TABLE'
-  grid     (nothing internal)
-  term     (nothing internal)
-  layout   grid
-  theme    layout
-  fence    grid layout
-  notice   grid layout
-  cells    grid layout
-  subcell  grid layout
-  pixel    grid term layout theme
-  drawer   grid term layout theme fence notice cells subcell pixel
+  grid       (nothing internal)
+  term       (nothing internal)
+  layout     grid
+  theme      layout
+  fence      grid layout
+  notice     grid layout
+  cells      grid layout
+  subcell    grid layout
+  pixel      grid term layout theme
+  drawer     grid term layout theme fence notice cells subcell pixel
+  cmd/drawer drawer
 TABLE
 }
 layers() {
-  bad=$(go list -f '{{.ImportPath}} {{join .Imports " "}}' ./internal/... | while read -r p rest; do
-    pkg=${p#github.com/sureffi/drawer/internal/}
+  # The listing is taken first and on its own. A package that will not load
+  # makes go list answer nothing, and nothing reads as no sideways edges —
+  # the stage passing on a tree it never saw.
+  list=$(go list -f '{{.ImportPath}} {{join .Imports " "}} {{join .TestImports " "}} {{join .XTestImports " "}}' \
+    ./cmd/... ./internal/...) || return 1
+  bad=$(printf '%s\n' "$list" | while read -r p rest; do
+    pkg=${p#github.com/sureffi/drawer/}
+    pkg=${pkg#internal/}
     allowed=$(layers_table | awk -v k="$pkg" '$1 == k { $1 = ""; print }')
     for i in $rest; do
       case $i in
-      github.com/sureffi/drawer/internal/*) ;;
+      github.com/sureffi/drawer/*) ;;
       *) continue ;;
       esac
-      d=${i#github.com/sureffi/drawer/internal/}
+      d=${i#github.com/sureffi/drawer/}
+      d=${d#internal/}
       case " $allowed " in
       *" $d "*) ;;
       *) echo "$pkg -> $d is not a layer $pkg may import" ;;
       esac
     done
-  done)
+  done | sort -u)
   [ -z "$bad" ] || { printf '%s\n\nthe layers, and what each may import:\n' "$bad"; layers_table; return 1; }
 }
 

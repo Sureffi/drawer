@@ -244,8 +244,11 @@ reinstalled. A checkout loaded with `--plugin-dir` beside an installed
 plugin is two hooks on every delta sharing the state files, and a fence
 split across deltas comes out doubled.
 
-`scripts/check.sh` is every oracle in one command: the build, vet, the laws
-under `-race`, every rung on a fixture, the theme files, the plugin's
+`scripts/check.sh` is every oracle in one command: the build, vet, a vet
+cross-compiled for macOS so the build-tagged files nobody here runs still
+compile on every push, the internal import graph held to a table written
+into the script so a sideways edge fails as loudly as a cycle would, the
+laws under `-race`, every rung on a fixture, the theme files, the plugin's
 manifests and wrapper, and the recorded delta streams replayed. Offline:
 
     ./bin/drawer -dot FILE -size WxH -render braille   # draw a file, name the size it needs
