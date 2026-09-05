@@ -1,0 +1,26 @@
+digraph architecture {
+    rankdir=LR;
+    node [shape=box, style=rounded, fontname="Helvetica"];
+
+    client [label="Client", shape=oval];
+    lb [label="Load Balancer"];
+
+    subgraph cluster_asg {
+        label="Autoscaling Group";
+        style=dashed;
+        api1 [label="API Server 1"];
+        api2 [label="API Server 2"];
+    }
+
+    redis [label="Redis\n(cache)", shape=cylinder];
+    postgres [label="Postgres", shape=cylinder];
+
+    client -> lb [label="HTTPS"];
+    lb -> api1;
+    lb -> api2;
+
+    api1 -> redis;
+    api2 -> redis;
+    api1 -> postgres;
+    api2 -> postgres;
+}
