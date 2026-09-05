@@ -10,15 +10,15 @@ import (
 	"testing"
 )
 
-// withTheme makes a theme the theme for one test.
-func withTheme(t *testing.T, src string) {
-	old := currentTheme()
+// mustTheme is the theme a law draws in: the declarations it names, read
+// back. Claude Code's own is mustTheme(t, claudeThemeDOT()).
+func mustTheme(t *testing.T, src string) *theme {
+	t.Helper()
 	th, err := parseTheme(src)
 	if err != nil {
 		t.Fatal(err)
 	}
-	setTheme(th)
-	t.Cleanup(func() { setTheme(old) })
+	return th
 }
 
 // A theme is DOT declarations, and Claude Code's theme is one: with no
@@ -54,7 +54,6 @@ func TestThemeIsDOTDeclarations(t *testing.T) {
 func TestThemeFollowsClaudeCodesTheme(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Cleanup(func() { setTheme(nil) })
 	if err := os.MkdirAll(filepath.Join(home, ".claude", "themes"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -72,8 +71,10 @@ func TestThemeFollowsClaudeCodesTheme(t *testing.T) {
 	// what the picture is drawn in: node fill, stroke, text; edge label.
 	drawn := func() string {
 		t.Helper()
-		setTheme(nil)
-		th := currentTheme()
+		th, err := claudeTheme()
+		if err != nil {
+			t.Fatal(err)
+		}
 		return th.Node["fillcolor"] + " " + th.Node["color"] + " " + th.Node["fontcolor"] + " " + th.Edge["fontcolor"]
 	}
 	dark := "#373737 #d77757 #ffffff #4eba65"
@@ -108,9 +109,9 @@ func TestThemeFollowsClaudeCodesTheme(t *testing.T) {
 // colour the edges', its fontname the face the SVG is set in — and what it
 // does not declare is graphviz's default, not the built-in theme's.
 func TestThemeFileReachesThePicture(t *testing.T) {
-	withTheme(t, `node [fillcolor="#7aa2f71f", fontname="JetBrains Mono"]
-	              edge [color=red]`)
-	svg, err := renderThemedSVG("digraph { a -> b }", 0, "")
+	th := mustTheme(t, `node [fillcolor="#7aa2f71f", fontname="JetBrains Mono"]
+	                    edge [color=red]`)
+	svg, err := renderThemedSVG(th, "digraph { a -> b }", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,8 +134,8 @@ func TestThemeFileReachesThePicture(t *testing.T) {
 // The model's paint still wins over a theme file, as it does over the
 // built-in one.
 func TestThemeFileYieldsToTheModel(t *testing.T) {
-	withTheme(t, `node [fillcolor="#000000", color="#111111"]`)
-	svg, err := renderThemedSVG("digraph { a [color=red]; a -> b }", 0, "")
+	th := mustTheme(t, `node [fillcolor="#000000", color="#111111"]`)
+	svg, err := renderThemedSVG(th, "digraph { a [color=red]; a -> b }", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}

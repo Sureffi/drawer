@@ -15,7 +15,7 @@ import (
 // drawAt is Draw's emit bound to a width, in the cells rung: what the
 // transducer laws hand stream.
 func drawAt(w int) func(string, int) []string {
-	r := run{rung: rungCells}
+	r := run{rung: rungCells, theme: &inForce{}}
 	return func(src string, indent int) []string {
 		return r.drawBlock(src, w-indent)
 	}

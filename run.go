@@ -21,14 +21,16 @@ type run struct {
 	term string // TERM, for the auto rung
 	sess string // Claude Code's session id: the ledger's key
 	tee  string // -hooktee / DRAWER_TEE
+
+	theme *inForce // the theme, derived when the first picture asks
 }
 
 // newRun is the run main hands down. TERM is read here and not at probe
 // time, because it is available on every door and the window is not: a
 // -deltas replay never asks the window how big it is, and it still gets to
 // know what terminal it is replaying for.
-func newRun(r rung, tee string) run {
-	return run{rung: r, term: termName(), tee: tee}
+func newRun(r rung, tee string, th *theme) run {
+	return run{rung: r, term: termName(), tee: tee, theme: &inForce{th: th}}
 }
 
 // probe asks the window how big it is. The columns come back; the cell's

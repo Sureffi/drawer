@@ -159,10 +159,6 @@ type theme struct {
 	Source            string
 }
 
-// themeSource is the theme in force as DOT: the file loadTheme read, else
-// Claude Code's theme as claudeThemeDOT writes it.
-func themeSource() string { return currentTheme().Source }
-
 // face is the font the picture is set in: the theme's fontname, from
 // whichever kind declares one, or the terminal's generic monospace.
 func (t *theme) face() string {
@@ -208,34 +204,15 @@ func parseTheme(src string) (*theme, error) {
 	return th, nil
 }
 
-// loadTheme makes a theme file the theme, or says what is wrong with it and
-// changes nothing.
-func loadTheme(path string) error {
+// loadTheme reads a theme file, or says what is wrong with it.
+func loadTheme(path string) (*theme, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	th, err := parseTheme(string(src))
-	if err != nil {
-		return err
-	}
-	setTheme(th)
-	return nil
+	return parseTheme(string(src))
 }
 
-var loaded *theme
-
-func setTheme(t *theme) { loaded = t }
-
-// currentTheme is the theme in force: what loadTheme set, else Claude
-// Code's.
-func currentTheme() *theme {
-	if loaded == nil {
-		th, err := parseTheme(claudeThemeDOT())
-		if err != nil {
-			panic("drawer: the derived theme does not parse: " + err.Error())
-		}
-		loaded = th
-	}
-	return loaded
-}
+// claudeTheme is Claude Code's own theme, derived from its settings and
+// read back as a theme.
+func claudeTheme() (*theme, error) { return parseTheme(claudeThemeDOT()) }

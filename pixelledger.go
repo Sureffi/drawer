@@ -54,9 +54,9 @@ func ledgerPath(session string) string {
 	return filepath.Join(stateDir(), "pictures", safeName(session)+".json")
 }
 
-// themeSig names the theme in force, for the ledger to compare.
-func themeSig() string {
-	return strconv.FormatUint(uint64(fnv1a32(currentTheme().Source)), 16)
+// themeSig names a theme, for the ledger to compare.
+func themeSig(th *theme) string {
+	return strconv.FormatUint(uint64(fnv1a32(th.Source)), 16)
 }
 
 // recordPicture writes a picture into its session's ledger, once, and
@@ -82,7 +82,7 @@ func (r run) recordPicture(p picture) {
 	if len(l.Pictures) > ledgerMax {
 		l.Pictures = l.Pictures[len(l.Pictures)-ledgerMax:]
 	}
-	l.Theme = themeSig()
+	l.Theme = themeSig(r.theme.get())
 	if b, err := json.Marshal(l); err == nil {
 		os.WriteFile(path, b, 0o600)
 	}
@@ -104,13 +104,13 @@ func (r run) repaintPictures(tty string, ras *raster) int {
 	if json.Unmarshal(b, &l) != nil || len(l.Pictures) == 0 {
 		return 0
 	}
-	sig := themeSig()
+	sig := themeSig(r.theme.get())
 	if l.Theme == sig {
 		return 0
 	}
 	n := 0
 	for _, p := range l.Pictures {
-		svg, err := renderThemedSVG(p.Src, pxFontPt(p.Geom.CellW), p.Rankdir)
+		svg, err := renderThemedSVG(r.theme.get(), p.Src, pxFontPt(p.Geom.CellW), p.Rankdir)
 		if err != nil {
 			continue
 		}

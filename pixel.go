@@ -154,8 +154,7 @@ func pxFontPt(cellW int) float64 {
 //
 // force overrides the orientation the source asked for; empty leaves the
 // author's choice alone.
-func renderThemedSVG(src string, fontPt float64, force cgraph.RankDir) ([]byte, error) {
-	th := currentTheme()
+func renderThemedSVG(th *theme, src string, fontPt float64, force cgraph.RankDir) ([]byte, error) {
 	var svg []byte
 	err := door(src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
 		if force != "" {

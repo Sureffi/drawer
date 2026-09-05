@@ -42,7 +42,7 @@ func (r run) drawPixels(src string, width int) []string {
 	if ras == nil || !r.geom.ok() {
 		return nil
 	}
-	png, p, err := pixelCut(ras, src, width, r.geom)
+	png, p, err := pixelCut(r.theme.get(), ras, src, width, r.geom)
 	if err != nil {
 		return nil
 	}
@@ -69,7 +69,7 @@ func (r run) drawPixels(src string, width int) []string {
 // rows; top-down it keeps 0.97 in 56. An error is a picture that will
 // not fit either way — too narrow to be anything, or taller than
 // drawMaxRows.
-func pixelCut(r *raster, src string, width int, geom pxGeom) ([]byte, picture, error) {
+func pixelCut(th *theme, r *raster, src string, width int, geom pxGeom) ([]byte, picture, error) {
 	if r == nil || !geom.ok() {
 		return nil, picture{}, errors.New("no rasteriser or no cell size")
 	}
@@ -81,7 +81,7 @@ func pixelCut(r *raster, src string, width int, geom pxGeom) ([]byte, picture, e
 	rd := cgraph.RankDir("")
 	var last error
 	for _, try := range orientations(src) {
-		s, err := renderThemedSVG(src, pxFontPt(geom.CellW), try)
+		s, err := renderThemedSVG(th, src, pxFontPt(geom.CellW), try)
 		if err != nil {
 			return nil, picture{}, err
 		}

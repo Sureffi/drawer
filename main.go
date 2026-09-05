@@ -42,19 +42,22 @@ func main() {
 	// A theme the hook cannot read is the built-in one: the picture draws,
 	// and the session opens. Everywhere else — -dot, -png, -deltas — a bad
 	// theme is an answer.
+	var th *theme
 	if *themePath != "" {
-		if err := loadTheme(*themePath); err != nil && !*hook && !*contextLine {
+		loaded, err := loadTheme(*themePath)
+		if err != nil && !*hook && !*contextLine {
 			fmt.Fprintln(os.Stderr, "drawer: theme:", err)
 			os.Exit(1)
 		}
+		th = loaded // nil where it would not read: Claude Code's, as before
 	}
 
-	r := newRun(parseRung(*render), *hooktee)
+	r := newRun(parseRung(*render), *hooktee, th)
 	w, h := parseSize(*size, 100, 40)
 
 	switch {
 	case *showTheme:
-		fmt.Print(themeSource())
+		fmt.Print(r.theme.get().Source)
 	case *contextLine:
 		fmt.Print(r.sessionContext())
 	case *dotDump != "" && *pngOut != "":

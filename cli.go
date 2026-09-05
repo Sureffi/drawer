@@ -76,7 +76,7 @@ func (r run) runPNG(dotPath, pngPath string, width int, geom pxGeom) int {
 		fmt.Fprintln(os.Stderr, "drawer: no rasteriser on the PATH (rsvg-convert or magick)")
 		return 1
 	}
-	png, p, err := pixelCut(ras, string(src), width, geom)
+	png, p, err := pixelCut(r.theme.get(), ras, string(src), width, geom)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "drawer:", err)
 		return 1
