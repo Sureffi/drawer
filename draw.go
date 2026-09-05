@@ -36,14 +36,14 @@ func drawBlock(src string, width int) []string {
 		width = 100
 	}
 	rung := pickRung()
-	if rung == "pixels" {
+	if rung == rungPixels {
 		if rows := drawPixels(src, width); rows != nil {
 			return fence(rows)
 		}
-		rung = "octants" // cairo said no; the glyphs still can
+		rung = rungOctants // cairo said no; the glyphs still can
 	}
-	if rung == "octants" || rung == "braille" {
-		if rows := drawSubcell(src, width, rung == "octants"); rows != nil {
+	if rung == rungOctants || rung == rungBraille {
+		if rows := drawSubcell(src, width, rung == rungOctants); rows != nil {
 			return fence(rows)
 		}
 	}
@@ -78,24 +78,23 @@ func fence(rows []string) []string {
 
 // wantRung picks the rung: cells, braille, octants, pixels, or auto,
 // which takes the best the terminal in front of us can show.
-var wantRung = "auto"
+var wantRung rung
 
 // pickRung answers which drawing this terminal gets. `auto` reads the
 // terminal: pixels want kitty, a cell size in pixels and a rasteriser;
 // octants want a terminal that draws them itself, which today means kitty
 // or ghostty; everything else gets braille, which every font carries.
-func pickRung() string {
-	switch wantRung {
-	case "cells", "braille", "octants", "pixels":
+func pickRung() rung {
+	if wantRung != rungAuto {
 		return wantRung
 	}
 	term := termName()
 	kitty := strings.Contains(term, "kitty")
 	if kitty && hookGeom.ok() && probeRaster() != nil {
-		return "pixels"
+		return rungPixels
 	}
 	if kitty || strings.Contains(term, "ghostty") {
-		return "octants"
+		return rungOctants
 	}
-	return "braille"
+	return rungBraille
 }

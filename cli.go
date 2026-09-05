@@ -30,8 +30,8 @@ func runDotDump(path string, w, h int) int {
 		return 1
 	}
 	var rows []string
-	if wantRung == "braille" || wantRung == "octants" {
-		rows = drawSubcell(string(b), w, wantRung == "octants")
+	if wantRung == rungBraille || wantRung == rungOctants {
+		rows = drawSubcell(string(b), w, wantRung == rungOctants)
 		if rows == nil {
 			fmt.Fprintf(os.Stderr, "-dot: will not fit in %d columns as strokes (source would be left alone)\n", w)
 			return 1

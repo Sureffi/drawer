@@ -13,7 +13,7 @@ import (
 )
 
 // withRender sets the rung for one test and puts it back.
-func withRender(render string) func() {
+func withRender(render rung) func() {
 	r := wantRung
 	wantRung = render
 	return func() { wantRung = r }
@@ -23,7 +23,7 @@ func withRender(render string) func() {
 // transducer laws hand stream.
 func drawAt(w int) func(string, int) []string {
 	return func(src string, indent int) []string {
-		defer withRender("cells")()
+		defer withRender(rungCells)()
 		return drawBlock(src, w-indent)
 	}
 }

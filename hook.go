@@ -109,7 +109,7 @@ func runHook() int {
 	width := hookWidth(cols)
 	// The first delta of a message is the first thing the hook hears after
 	// a theme switch; pixelledger.go says why, and what is repainted.
-	if in.Index == 0 && pickRung() == "pixels" {
+	if in.Index == 0 && pickRung() == rungPixels {
 		repaintPictures(hookSession, parentTTYOut(), probeRaster())
 	}
 	st, done := takeTurn(in.MessageID, in.Index, turnPatience)
@@ -143,9 +143,9 @@ func sessionContext() string {
 	_, hookGeom = termSize()
 	var can string
 	switch pickRung() {
-	case "pixels":
+	case rungPixels:
 		can = "as graphviz's own picture, so everything dot draws, draws"
-	case "octants", "braille":
+	case rungOctants, rungBraille:
 		can = "in strokes: clusters, node shapes, multi-line labels and dashed edges draw; record and HTML labels print their markup, and node colours are not painted"
 	default:
 		can = "in box-drawing characters: boxes with one-line labels and routed edges; clusters and node shapes do not draw"

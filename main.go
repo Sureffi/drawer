@@ -49,7 +49,7 @@ func main() {
 		}
 	}
 
-	wantRung = *render
+	wantRung = parseRung(*render)
 	w, h := parseSize(*size, 100, 40)
 
 	switch {
