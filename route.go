@@ -32,10 +32,10 @@ import (
 // centres projects graphviz's placement into cells once. Every decision
 // after this line is made in cell space.
 func centres(l *dlayout, sx, sy func(float64) int) ([]int, []int) {
-	cx := make([]int, len(l.nodes))
-	cy := make([]int, len(l.nodes))
-	for i, n := range l.nodes {
-		cx[i], cy[i] = sx(n.x), sy(n.y)
+	cx := make([]int, len(l.Nodes))
+	cy := make([]int, len(l.Nodes))
+	for i, n := range l.Nodes {
+		cx[i], cy[i] = sx(n.X), sy(n.Y)
 	}
 	return cx, cy
 }
@@ -72,16 +72,16 @@ func straighten(l *dlayout, cx, cy []int, byName map[string]int, horiz bool) {
 	for i := range parent {
 		parent[i] = -1
 	}
-	for _, e := range l.edges {
-		a, aok := byName[e.tail]
-		b, bok := byName[e.head]
+	for _, e := range l.Edges {
+		a, aok := byName[e.Tail]
+		b, bok := byName[e.Head]
 		if !aok || !bok || a == b {
 			continue
 		}
 		indeg[b]++
 		parent[b] = a
 	}
-	bw := func(i int) int { return textCells(l.nodes[i].label) + 2 }
+	bw := func(i int) int { return textCells(l.Nodes[i].Label) + 2 }
 	order := make([]int, len(cx))
 	for i := range order {
 		order[i] = i
@@ -604,23 +604,23 @@ func renderDiagram(l *dlayout, w, h int) []string {
 	// reads better than one floating in the middle of the window
 	offX, offY := 0, (h-nh)/2
 	sx := func(x float64) int { return offX + int(x*cellsPerInchX) }
-	sy := func(y float64) int { return offY + int((l.h-y)*rowsPerInchY) }
+	sy := func(y float64) int { return offY + int((l.H-y)*rowsPerInchY) }
 
-	byName := make(map[string]int, len(l.nodes))
-	for i, n := range l.nodes {
-		byName[n.name] = i
+	byName := make(map[string]int, len(l.Nodes))
+	for i, n := range l.Nodes {
+		byName[n.Name] = i
 	}
 	cx, cy := centres(l, sx, sy)
-	horiz := l.horiz
+	horiz := l.Horiz
 	snapAxis(cx)
 	snapAxis(cy)
 	straighten(l, cx, cy, byName, horiz)
 
-	boxes := make(map[string]nbox, len(l.nodes))
-	boxList := make([]nbox, 0, len(l.nodes))
-	for i, n := range l.nodes {
-		b := nodeBoxAt(w, h, cx[i], cy[i], n.label)
-		boxes[n.name] = b
+	boxes := make(map[string]nbox, len(l.Nodes))
+	boxList := make([]nbox, 0, len(l.Nodes))
+	for i, n := range l.Nodes {
+		b := nodeBoxAt(w, h, cx[i], cy[i], n.Label)
+		boxes[n.Name] = b
 		boxList = append(boxList, b)
 	}
 
@@ -629,13 +629,13 @@ func renderDiagram(l *dlayout, w, h int) []string {
 
 	// straight edges first: they own the direct lanes, and everything
 	// else bends around what is already true.
-	order := make([]int, len(l.edges))
+	order := make([]int, len(l.Edges))
 	for i := range order {
 		order[i] = i
 	}
 	cost := func(e dedge) (int, int) {
-		a, aok := byName[e.tail]
-		b, bok := byName[e.head]
+		a, aok := byName[e.Tail]
+		b, bok := byName[e.Head]
 		if !aok || !bok {
 			return 2, 1 << 20
 		}
@@ -646,8 +646,8 @@ func renderDiagram(l *dlayout, w, h int) []string {
 		return s, abs(cx[a]-cx[b]) + abs(cy[a]-cy[b])
 	}
 	sort.SliceStable(order, func(a, b int) bool {
-		sa, la := cost(l.edges[order[a]])
-		sb, lb := cost(l.edges[order[b]])
+		sa, la := cost(l.Edges[order[a]])
+		sb, lb := cost(l.Edges[order[b]])
 		if sa != sb {
 			return sa < sb
 		}
@@ -656,15 +656,15 @@ func renderDiagram(l *dlayout, w, h int) []string {
 
 	var floated []*dedge // labels that found no straight run to ride
 	for _, ei := range order {
-		e := &l.edges[ei]
-		if e.tail != "" && e.tail == e.head {
-			if b, ok := boxes[e.tail]; ok {
+		e := &l.Edges[ei]
+		if e.Tail != "" && e.Tail == e.Head {
+			if b, ok := boxes[e.Tail]; ok {
 				routeSelfLoop(cv, b)
 			}
 			continue
 		}
-		tb, tok := boxes[e.tail]
-		hb, hok := boxes[e.head]
+		tb, tok := boxes[e.Tail]
+		hb, hok := boxes[e.Head]
 		if !tok || !hok {
 			continue
 		}
@@ -674,13 +674,13 @@ func renderDiagram(l *dlayout, w, h int) []string {
 		if ps == nil {
 			ps = elbow(tp, hp)
 		}
-		commitRoute(cv, ps, tp, hp, l.directed)
-		if e.label != "" && !placeInline(cv, ps, e.label) {
+		commitRoute(cv, ps, tp, hp, l.Directed)
+		if e.Label != "" && !placeInline(cv, ps, e.Label) {
 			floated = append(floated, e)
 		}
 	}
-	for _, n := range l.nodes {
-		drawNode(cv, n.label, boxes[n.name])
+	for _, n := range l.Nodes {
+		drawNode(cv, n.Label, boxes[n.Name])
 	}
 	for _, e := range floated {
 		drawEdgeLabel(cv, *e, sx, sy)

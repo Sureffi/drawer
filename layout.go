@@ -66,32 +66,32 @@ func labelOf(n *cgraph.Node) string {
 }
 
 type dnode struct {
-	name  string
-	x, y  float64
-	label string
+	Name  string
+	X, Y  float64
+	Label string
 }
 
 type dedge struct {
-	tail, head string
-	pts        [][2]float64
-	label      string
-	lx         float64
-	ly         float64
+	Tail, Head string
+	Pts        [][2]float64
+	Label      string
+	LX         float64
+	LY         float64
 }
 
 type dlayout struct {
-	w, h  float64
-	nodes []dnode
-	edges []dedge
+	W, H  float64
+	Nodes []dnode
+	Edges []dedge
 	// horiz is the axis the ranks run along, read from the rankdir the
 	// layout was made with. It used to be re-derived from where the nodes
 	// landed, and a top-down tree wider than it was tall read as
 	// left-right — then `straighten` pulled children onto their parent's
 	// row and the hierarchy collapsed. The answer was upstream all along.
-	horiz bool
+	Horiz bool
 	// directed says whether the edges carry heads. A `graph { a -- b }`
 	// used to draw arrows nobody wrote.
-	directed bool
+	Directed bool
 }
 
 // Cells per inch. graphviz thinks in inches sized for 14pt type; a
@@ -127,8 +127,8 @@ func layoutDOT(src string, force cgraph.RankDir) (*dlayout, error) {
 			return err
 		}
 		l = parsePlain(buf.String())
-		l.horiz = rd == cgraph.LRRank || rd == cgraph.RLRank
-		l.directed = directedRe.MatchString(src)
+		l.Horiz = rd == cgraph.LRRank || rd == cgraph.RLRank
+		l.Directed = directedRe.MatchString(src)
 		return nil
 	})
 	return l, err
@@ -209,7 +209,7 @@ func parsePlain(s string) *dlayout {
 		switch f[0] {
 		case "graph":
 			if len(f) >= 4 {
-				l.w, l.h = atof(f[2]), atof(f[3])
+				l.W, l.H = atof(f[2]), atof(f[3])
 			}
 		case "node":
 			if len(f) >= 7 {
@@ -217,8 +217,8 @@ func parsePlain(s string) *dlayout {
 				// inches. A node box here is sized from its label in cells,
 				// not from what graphviz thought it would be, so they are
 				// read past rather than stored.
-				l.nodes = append(l.nodes, dnode{
-					name: f[1], x: atof(f[2]), y: atof(f[3]), label: f[6],
+				l.Nodes = append(l.Nodes, dnode{
+					Name: f[1], X: atof(f[2]), Y: atof(f[3]), Label: f[6],
 				})
 			}
 		case "edge":
@@ -226,10 +226,10 @@ func parsePlain(s string) *dlayout {
 				continue
 			}
 			n, _ := strconv.Atoi(f[3])
-			e := dedge{tail: f[1], head: f[2]}
+			e := dedge{Tail: f[1], Head: f[2]}
 			i := 4
 			for k := 0; k < n && i+1 < len(f); k++ {
-				e.pts = append(e.pts, [2]float64{atof(f[i]), atof(f[i+1])})
+				e.Pts = append(e.Pts, [2]float64{atof(f[i]), atof(f[i+1])})
 				i += 2
 			}
 			// What trails the points is `style color`, or `label lx ly
@@ -239,9 +239,9 @@ func parsePlain(s string) *dlayout {
 			// drawn — and graphviz had already answered the question by
 			// how many fields it wrote.
 			if len(f)-i >= 5 {
-				e.label, e.lx, e.ly = f[i], atof(f[i+1]), atof(f[i+2])
+				e.Label, e.LX, e.LY = f[i], atof(f[i+1]), atof(f[i+2])
 			}
-			l.edges = append(l.edges, e)
+			l.Edges = append(l.Edges, e)
 		}
 	}
 	return l
@@ -288,10 +288,10 @@ func splitPlain(line string) []string {
 // footprint is the cell box a laid-out graph occupies. Reserving and
 // drawing both ask it, of the same layout, so the two can never disagree.
 func footprint(l *dlayout) (w, h int) {
-	if l == nil || len(l.nodes) == 0 || l.w <= 0 || l.h <= 0 {
+	if l == nil || len(l.Nodes) == 0 || l.W <= 0 || l.H <= 0 {
 		return 0, 0
 	}
-	return int(l.w*cellsPerInchX) + 2, int(l.h*rowsPerInchY) + 1
+	return int(l.W*cellsPerInchX) + 2, int(l.H*rowsPerInchY) + 1
 }
 
 // fit chooses how to draw a graph in the space that actually exists. A

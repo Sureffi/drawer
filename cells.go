@@ -298,15 +298,15 @@ type ipt struct{ x, y int }
 // that cannot be placed cleanly is dropped rather than allowed to
 // damage the drawing it annotates.
 func drawEdgeLabel(cv *canvas, e dedge, sx, sy func(float64) int) {
-	if e.label == "" {
+	if e.Label == "" {
 		return
 	}
-	n := textCells(e.label)
-	x0, y0 := sx(e.lx)-n/2, sy(e.ly)
+	n := textCells(e.Label)
+	x0, y0 := sx(e.LX)-n/2, sy(e.LY)
 	for _, dy := range []int{0, -1, 1, -2, 2} {
 		for _, dx := range []int{0, 1, -1, 2, -2, 3, -3, 4, -4} {
 			if cv.free(x0+dx, y0+dy, n) {
-				putStr(cv, x0+dx, y0+dy, e.label)
+				putStr(cv, x0+dx, y0+dy, e.Label)
 				return
 			}
 		}

@@ -35,22 +35,22 @@ func (r run) drawBlock(src string, width int) []string {
 	if width <= 0 {
 		width = 100
 	}
-	rung := r.pickRung()
-	if rung == rungPixels {
+	pick := r.pickRung()
+	if pick == rungPixels {
 		if rows := r.drawPixels(src, width); rows != nil {
-			return fence(rows)
+			return bare(rows)
 		}
-		rung = rungOctants // cairo said no; the glyphs still can
+		pick = rungOctants // cairo said no; the glyphs still can
 	}
-	if rung == rungOctants || rung == rungBraille {
-		if rows := drawSubcell(src, width, rung == rungOctants); rows != nil {
-			return fence(rows)
+	if pick == rungOctants || pick == rungBraille {
+		if rows := drawSubcell(src, width, pick == rungOctants); rows != nil {
+			return bare(rows)
 		}
 	}
 	l, h, ok := fit(src, width, 0)
 	if ok && h <= drawMaxRows {
 		if rows := renderDiagram(l, width, h); rows != nil {
-			return fence(trimBlank(rows))
+			return bare(trimBlank(rows))
 		}
 	}
 	// Nothing drew. Say why, and leave the source readable under the
@@ -58,17 +58,17 @@ func (r run) drawBlock(src string, width int) []string {
 	// oracle holds the wire to, and a reader gets both the reason and the
 	// DOT it was about.
 	reason := cutReason(src, width, drawMaxRows)
-	notice := drawNotice(reason, width, 8)
-	if notice == nil {
+	box := drawNotice(reason, width, 8)
+	if box == nil {
 		return nil
 	}
-	rows := append(notice, "")
+	rows := append(box, "")
 	rows = append(rows, strings.Split(strings.TrimSuffix(src, "\n"), "\n")...)
-	return fence(rows)
+	return bare(rows)
 }
 
-// fence wraps rows in a bare fence: verbatim, monospace, no caption.
-func fence(rows []string) []string {
+// bare wraps rows in a bare fence: verbatim, monospace, no caption.
+func bare(rows []string) []string {
 	out := make([]string, 0, len(rows)+2)
 	out = append(out, fenceTick)
 	out = append(out, rows...)
@@ -85,15 +85,15 @@ func fence(rows []string) []string {
 // PATH: it is asked only where the terminal and the geometry have already
 // said yes. Everything else it needs is what the run already knows, so the
 // judgement can be read — and tested — without a terminal anywhere near it.
-func pickRung(want rung, term string, geom pxGeom, raster func() bool) rung {
+func pickRung(want rung, name string, geom pxGeom, raster func() bool) rung {
 	if want != rungAuto {
 		return want
 	}
-	kitty := strings.Contains(term, "kitty")
+	kitty := strings.Contains(name, "kitty")
 	if kitty && geom.ok() && raster() {
 		return rungPixels
 	}
-	if kitty || strings.Contains(term, "ghostty") {
+	if kitty || strings.Contains(name, "ghostty") {
 		return rungOctants
 	}
 	return rungBraille
