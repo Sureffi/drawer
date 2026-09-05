@@ -37,6 +37,7 @@ import (
 	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/mattn/go-runewidth"
 	"github.com/sureffi/drawer/internal/grid"
+	"github.com/sureffi/drawer/internal/layout"
 )
 
 // ---------- graphviz's drawing, as json ----------
@@ -84,37 +85,37 @@ type jgraph struct {
 const (
 	inkFont   = "Courier"
 	inkSize   = 12.0
-	ptPerCell = 72.0 / cellsPerInchX
-	ptPerRow  = 72.0 / rowsPerInchY
+	ptPerCell = 72.0 / layout.CellsPerInchX
+	ptPerRow  = 72.0 / layout.RowsPerInchY
 )
 
 // layoutInk runs graphviz and reads back what it would have drawn.
 func layoutInk(src string, force cgraph.RankDir) (*jgraph, error) {
 	var jg jgraph
-	err := door(src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
+	err := layout.Door(src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
 		rd := force
 		if rd == "" {
-			rd = rankdirOf(src)
+			rd = layout.RankdirOf(src)
 		} else {
 			graph.SetRankDir(rd)
 		}
 		graph.SetFontName(inkFont)
 		graph.SetFontSize(inkSize)
 		for n, _ := graph.FirstNode(); n != nil; n, _ = graph.NextNode(n) {
-			label := labelOf(n)
+			label := layout.LabelOf(n)
 			n.SetLabel(label)
 			n.SetFontName(inkFont)
 			n.SetFontSize(inkSize)
 			// Minimums, not fixed sizes: an ellipse or a diamond needs more
 			// room than a box for the same label, and graphviz knows how much.
-			n.SetWidth(float64(grid.Cells(label)+2) / cellsPerInchX)
-			n.SetHeight(nodeRows / rowsPerInchY)
+			n.SetWidth(float64(grid.Cells(label)+2) / layout.CellsPerInchX)
+			n.SetHeight(layout.NodeRows / layout.RowsPerInchY)
 			for e, _ := graph.FirstOut(n); e != nil; e, _ = graph.NextOut(e) {
 				e.SetFontName(inkFont)
 				e.SetFontSize(inkSize)
 			}
 		}
-		setSeparation(graph, rd)
+		layout.SetSeparation(graph, rd)
 		// A cluster's frame sits eight points off its nodes by default — one
 		// cell, so the frame and a box wall share a cell and read as one thick
 		// stroke. Two cells is air.
@@ -132,7 +133,7 @@ func layoutInk(src string, force cgraph.RankDir) (*jgraph, error) {
 	}
 	// bb is "x0,y0,x1,y1" with the origin at 0,0: the far corner is the size.
 	if f := strings.Split(jg.BB, ","); len(f) == 4 {
-		jg.w, jg.h = atof(f[2]), atof(f[3])
+		jg.w, jg.h = layout.Atof(f[2]), layout.Atof(f[3])
 	}
 	if jg.w <= 0 || jg.h <= 0 {
 		return nil, errors.New("layout has no bounding box")
@@ -145,10 +146,10 @@ func inkFootprint(jg *jgraph) (cols, rows int) {
 	return int(math.Ceil(jg.w/ptPerCell)) + 1, int(math.Ceil(jg.h/ptPerRow)) + 1
 }
 
-// fitInk is fit for this renderer: as written, then top-down, the first
+// fitInk is layout.Fit for this renderer: as written, then top-down, the first
 // that fits the width and the height wins.
 func fitInk(src string, width, maxRows int) (*jgraph, int, int, bool) {
-	for _, rd := range orientations(src) {
+	for _, rd := range layout.Orientations(src) {
 		jg, err := layoutInk(src, rd)
 		if err != nil {
 			continue

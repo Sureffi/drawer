@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/sureffi/drawer/internal/layout"
 	"github.com/sureffi/drawer/internal/term"
 )
 
@@ -39,7 +40,7 @@ func (r run) runDotDump(path string, w, h int) int {
 			return 1
 		}
 	}
-	l, _, ok := fit(string(b), w, 0)
+	l, _, ok := layout.Fit(string(b), w, 0)
 	if ok && rows == nil {
 		rows = renderDiagram(l, w, h)
 	}
@@ -47,9 +48,9 @@ func (r run) runDotDump(path string, w, h int) int {
 		// the layout already worked the answer out; reporting only "will
 		// not fit" makes the caller hand-search for a size the tool knows
 		if l == nil {
-			l, _ = layoutDOT(string(b), "")
+			l, _ = layout.DOT(string(b), "")
 		}
-		if dw, dh := footprint(l); dw > 0 && dh > 0 {
+		if dw, dh := layout.Footprint(l); dw > 0 && dh > 0 {
 			fmt.Fprintf(os.Stderr, "-dot: needs %dx%d, given %dx%d (source would be left alone)\n",
 				dw, dh, w, h)
 		} else {

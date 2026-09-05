@@ -27,6 +27,7 @@ import (
 
 	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/sureffi/drawer/internal/grid"
+	"github.com/sureffi/drawer/internal/layout"
 	"github.com/sureffi/drawer/internal/term"
 )
 
@@ -68,7 +69,7 @@ func pixelCut(th *theme, r *raster, src string, width int, geom term.Geom) ([]by
 	cols, zoom := 0, 0.0
 	rd := cgraph.RankDir("")
 	var last error
-	for _, try := range orientations(src) {
+	for _, try := range layout.Orientations(src) {
 		s, err := renderThemedSVG(th, src, pxFontPt(geom.CellW), try)
 		if err != nil {
 			return nil, picture{}, err

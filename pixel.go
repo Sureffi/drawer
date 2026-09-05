@@ -32,6 +32,7 @@ import (
 
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
+	"github.com/sureffi/drawer/internal/layout"
 )
 
 // ---------- capability ----------
@@ -155,7 +156,7 @@ func pxFontPt(cellW int) float64 {
 // author's choice alone.
 func renderThemedSVG(th *theme, src string, fontPt float64, force cgraph.RankDir) ([]byte, error) {
 	var svg []byte
-	err := door(src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
+	err := layout.Door(src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
 		if force != "" {
 			graph.SetRankDir(force)
 		}
@@ -272,7 +273,7 @@ func svgSize(svg []byte) (float64, float64, error) {
 	if m == nil {
 		return 0, 0, errors.New("svg carries no size")
 	}
-	w, h := atof(string(m[1])), atof(string(m[2]))
+	w, h := layout.Atof(string(m[1])), layout.Atof(string(m[2]))
 	if w <= 0 || h <= 0 {
 		return 0, 0, errors.New("svg size is not a size")
 	}

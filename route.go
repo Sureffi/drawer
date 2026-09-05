@@ -27,13 +27,14 @@ import (
 	"sort"
 
 	"github.com/sureffi/drawer/internal/grid"
+	"github.com/sureffi/drawer/internal/layout"
 )
 
 // ---------- composition ----------
 
 // centres projects graphviz's placement into cells once. Every decision
 // after this line is made in cell space.
-func centres(l *dlayout, sx, sy func(float64) int) ([]int, []int) {
+func centres(l *layout.Plain, sx, sy func(float64) int) ([]int, []int) {
 	cx := make([]int, len(l.Nodes))
 	cy := make([]int, len(l.Nodes))
 	for i, n := range l.Nodes {
@@ -68,7 +69,7 @@ func snapAxis(v []int) {
 // straighten pulls a single-parent node onto its parent's axis, so a
 // chain runs dead straight. Only when nothing collides: the gutter of
 // blank cells between boxes is part of what is being bought.
-func straighten(l *dlayout, cx, cy []int, byName map[string]int, horiz bool) {
+func straighten(l *layout.Plain, cx, cy []int, byName map[string]int, horiz bool) {
 	indeg := make([]int, len(cx))
 	parent := make([]int, len(cx))
 	for i := range parent {
@@ -594,19 +595,19 @@ func routeSelfLoop(cv *canvas, b nbox) {
 // routed natively, labels ride their own strokes. Returns nil if it
 // will not fit — the caller then leaves the source alone, which is
 // still the whole failure policy: a failure is visible, never silent.
-func renderDiagram(l *dlayout, w, h int) []string {
+func renderDiagram(l *layout.Plain, w, h int) []string {
 	if w < 12 || h < 3 || l == nil {
 		return nil
 	}
-	nw, nh := footprint(l)
+	nw, nh := layout.Footprint(l)
 	if nw <= 0 || nh <= 0 || nw > w || nh > h {
 		return nil // does not fit: the source speaks for itself
 	}
 	// left-aligned: a diagram sitting beside the prose that introduced it
 	// reads better than one floating in the middle of the window
 	offX, offY := 0, (h-nh)/2
-	sx := func(x float64) int { return offX + int(x*cellsPerInchX) }
-	sy := func(y float64) int { return offY + int((l.H-y)*rowsPerInchY) }
+	sx := func(x float64) int { return offX + int(x*layout.CellsPerInchX) }
+	sy := func(y float64) int { return offY + int((l.H-y)*layout.RowsPerInchY) }
 
 	byName := make(map[string]int, len(l.Nodes))
 	for i, n := range l.Nodes {
@@ -635,7 +636,7 @@ func renderDiagram(l *dlayout, w, h int) []string {
 	for i := range order {
 		order[i] = i
 	}
-	cost := func(e dedge) (int, int) {
+	cost := func(e layout.Edge) (int, int) {
 		a, aok := byName[e.Tail]
 		b, bok := byName[e.Head]
 		if !aok || !bok {
@@ -656,7 +657,7 @@ func renderDiagram(l *dlayout, w, h int) []string {
 		return la < lb
 	})
 
-	var floated []*dedge // labels that found no straight run to ride
+	var floated []*layout.Edge // labels that found no straight run to ride
 	for _, ei := range order {
 		e := &l.Edges[ei]
 		if e.Tail != "" && e.Tail == e.Head {

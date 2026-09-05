@@ -15,6 +15,7 @@ import (
 
 	"github.com/mattn/go-runewidth"
 	"github.com/sureffi/drawer/internal/grid"
+	"github.com/sureffi/drawer/internal/layout"
 )
 
 // A cell does not know what glyph it is until the drawing is finished.
@@ -298,7 +299,7 @@ type ipt struct{ x, y int }
 // already spoken for are left alone and the label is nudged; a label
 // that cannot be placed cleanly is dropped rather than allowed to
 // damage the drawing it annotates.
-func drawEdgeLabel(cv *canvas, e dedge, sx, sy func(float64) int) {
+func drawEdgeLabel(cv *canvas, e layout.Edge, sx, sy func(float64) int) {
 	if e.Label == "" {
 		return
 	}

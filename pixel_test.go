@@ -16,6 +16,7 @@ import (
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/sureffi/drawer/internal/grid"
+	"github.com/sureffi/drawer/internal/layout"
 	"github.com/sureffi/drawer/internal/term"
 )
 
@@ -75,7 +76,7 @@ func svgTextY(group string) float64 {
 	if m == nil {
 		return 0
 	}
-	return atof(m[1])
+	return layout.Atof(m[1])
 }
 
 // Type is measured in Courier, which the wasm's tables know, and set in

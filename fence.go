@@ -29,6 +29,7 @@ import (
 	"strings"
 
 	"github.com/sureffi/drawer/internal/grid"
+	"github.com/sureffi/drawer/internal/layout"
 )
 
 // opener is a fence's opening line as read: the whitespace before the run,
@@ -285,7 +286,7 @@ func stream(delta string, final bool, st *state, emit func(src string, indent in
 		// with "yes, and here is why it is broken" on the first delta. A
 		// source that is finished and wrong is told apart at the close,
 		// where emit gets it whatever it is.
-		if src := fenceBody(st.Held, st.Fence); complete(src) {
+		if src := fenceBody(st.Held, st.Fence); layout.Complete(src) {
 			if rows := emitIn(st.Fence, src, emit); rows != nil {
 				out.WriteString(strings.Join(rows, "\n"))
 				st.InFence, st.Ours, st.Held = false, false, ""

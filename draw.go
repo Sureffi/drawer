@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/sureffi/drawer/internal/grid"
+	"github.com/sureffi/drawer/internal/layout"
 	"github.com/sureffi/drawer/internal/term"
 )
 
@@ -50,7 +51,7 @@ func (r run) drawBlock(src string, width int) []string {
 			return bare(rows)
 		}
 	}
-	l, h, ok := fit(src, width, 0)
+	l, h, ok := layout.Fit(src, width, 0)
 	if ok && h <= grid.MaxRows {
 		if rows := renderDiagram(l, width, h); rows != nil {
 			return bare(grid.TrimBlank(rows))

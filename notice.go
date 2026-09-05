@@ -16,6 +16,7 @@ import (
 
 	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/sureffi/drawer/internal/grid"
+	"github.com/sureffi/drawer/internal/layout"
 )
 
 // noticeChrome is the border and padding a notice spends on itself.
@@ -93,20 +94,20 @@ func wrapWords(s string, width int) []string {
 //
 // Asked only on the failing path: it lays the graph out again to find out.
 func cutReason(src string, width, region int) string {
-	l, err := layoutDOT(src, "")
+	l, err := layout.DOT(src, "")
 	if err != nil {
 		return "graphviz could not read this: " + firstLine(err.Error())
 	}
 	if l == nil {
 		return "no graph in this fence"
 	}
-	lw, lh := footprint(l) // as written, usually left-right
+	lw, lh := layout.Footprint(l) // as written, usually left-right
 	if lw <= 0 || lh <= 0 {
 		return "nothing to draw"
 	}
 	th := 0
-	if td, err := layoutDOT(src, cgraph.TBRank); err == nil && td != nil {
-		if tw, h := footprint(td); tw > 0 && tw <= width {
+	if td, err := layout.DOT(src, cgraph.TBRank); err == nil && td != nil {
+		if tw, h := layout.Footprint(td); tw > 0 && tw <= width {
 			th = h
 		}
 	}

@@ -38,6 +38,7 @@ import (
 
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
+	"github.com/sureffi/drawer/internal/layout"
 )
 
 // claudePalettes is Claude Code's stock palettes, the six keys the mapping
@@ -182,7 +183,7 @@ const (
 // defaults is the theme.
 func parseTheme(src string) (*theme, error) {
 	th := &theme{Graph: map[string]string{}, Node: map[string]string{}, Edge: map[string]string{}, Source: src}
-	err := door("digraph {\n"+src+"\n}\n", func(_ context.Context, _ *graphviz.Graphviz, graph *cgraph.Graph) error {
+	err := layout.Door("digraph {\n"+src+"\n}\n", func(_ context.Context, _ *graphviz.Graphviz, graph *cgraph.Graph) error {
 		for kind, m := range map[int]map[string]string{agGraph: th.Graph, agNode: th.Node, agEdge: th.Edge} {
 			var sym *cgraph.Symbol
 			for {
