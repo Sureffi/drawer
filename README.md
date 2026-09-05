@@ -3,7 +3,7 @@
 A ```dot fence in Claude Code becomes a drawing, in place, as the reply
 streams. One binary, nothing else running.
 
-    /plugin marketplace add sureffi/drawer      # or a checkout: /plugin marketplace add /path/to/drawer
+    /plugin marketplace add sureffi/drawer
     /plugin install drawer@drawer
 
 Then ask for a graph. The model writes DOT; the reader sees the picture.
@@ -18,92 +18,20 @@ Then ask for a graph. The model writes DOT; the reader sees the picture.
                                              ╰────────────╯└─┘  ╰────────╯
       The cache and database sit downstream of both servers.
 
-That is a live session, sonnet writing, CC 2.1.257, captured off tmux.
-
-## the plugin
+That is a live session, sonnet writing, Claude Code 2.1.257, captured off
+tmux. Linux and macOS, amd64 and arm64, and nothing to install but the
+plugin: graphviz is compiled in.
 
 Two hooks. `SessionStart` puts the binary in place and prints one line
 into the model's context: that a ```dot fence draws in place, and what
-this terminal's rung can draw. `MessageDisplay` draws. The line is what
-the plugin is for — a model that has not heard of the hook writes
-mermaid, or boxes out of hyphens, and neither is a picture — and
-`./bin/drawer -context` prints it.
-
-A plugin runs no install step, so `scripts/drawer` puts the binary in the
-plugin's data directory itself, at the first session, by the first of
-four ways that works: a built checkout's `bin/drawer`, linked, so a
-rebuild is live at the next reply; the binaries the release zip carries,
-one per platform; the release binary downloaded for this platform and
-checked against the sum `release.sh` pinned in the script; or `go build`,
-where Go is on the PATH. A stranger's install is the zip, and needs
-nothing on the machine. A checkout that arrived by git — an organisation
-pushing the plugin to its people can only point at git — downloads the
-same binary the zip would have carried. Until one of the four lands, both
-hooks fail open: a session without the line is a fence that shows its
-source. The script execs the binary rather than running it, because the
-binary reads the terminal's size as its parent's, and its parent has to
-be `claude`. Linux and macOS, amd64 and arm64; the hook wire is Unix
-through and through and Windows does not build.
-
-Three settings, read from the environment, which reaches a hook when set
-for `claude` in `settings.json`'s `env` or in the shell (measured on
-2.1.261): `DRAWER_RENDER` picks a rung, `DRAWER_THEME` names a theme
-file, `DRAWER_TEE` records a fixture.
-
-    { "env": { "DRAWER_THEME": "/home/me/.config/drawer/theme.dot" } }
-
-Developing: install from the checkout, `/plugin marketplace add
-/path/to/drawer` then `/plugin install drawer@drawer`. Claude Code copies
-the tree into its cache but runs the hooks with the checkout as the
-plugin root (measured on 2.1.261: the data directory's link points into
-the checkout), so the checkout's `bin/drawer` is what the next reply
-runs and `./check.sh` rebuilds it. A change to the script or the
-manifests is safest reinstalled. A checkout loaded with `--plugin-dir`
-beside an installed plugin is two hooks on every delta sharing the state
-files, and a fence split across deltas comes out doubled. The same
-doubling is an older `-install`'s entry in `settings.json` beside the
-plugin: `./bin/drawer -uninstall` takes it out, and the line of context
-says so when it finds one.
-
-`./release.sh VERSION` is the release as one command: four binaries, a
-checksums file, the plugin zipped with all four inside, the sums pinned
-into the script, the marketplace pointed at the zip, commit, tag, push,
-GitHub release.
-
-## how it stands there
-
-Claude Code ships a `MessageDisplay` hook: it hands a command each piece of
-an assistant message before laying it out and takes back replacement text.
-The substitution is display-only — the transcript keeps the fence the model
-wrote — and a hook is a fresh process per piece, so the fence is reassembled
-through a small state file keyed by message id, because CC splits a reply
-where it likes and the split is not repeatable. The processes are not one
-after another either: measured, two pieces' processes started eleven
-microseconds apart. So each takes its turn — the state counts the piece it
-expects next, a lock per message serialises the readers, and a process
-ahead of the count waits for the one before it, the draw included.
-
-Layout is graphviz, compiled to WebAssembly and carried inside the binary
-(`goccy/go-graphviz` through `wazero`). There is no `dot` to install. A
-layout costs about a millisecond; the process spawn costs about twenty.
-
-## what counts as a fence
-
-A fence as markdown has it: three or more backticks or tildes at the start
-of a line, indented or not, closed by a run of the same character at least
-as long. Every fence is tracked and only a graph's is drawn. A fence
-labelled `dot` or `graphviz` is a graph's whatever is in it, and one that
-will not draw is told why over its source. An unlabelled fence is a
-graph's when its first line opens one, `digraph {` or `graph {`, and prose
-otherwise. A fence labelled anything else streams through as it arrives,
-and so does everything inside it, so a ```dot quoted in a four-backtick
-fence is the text it is. A fence under a list item draws in its indent, at
-the width the indent leaves.
+this terminal can draw. `MessageDisplay` draws. The line is what the
+plugin is for — a model that has not heard of the hook writes mermaid, or
+boxes out of hyphens, and neither is a picture.
 
 ## the rungs
 
-Best first, each failing open to the one below, chosen by `-render` or by
-`auto`, which reads the terminal:
+Best first, each failing open to the one below, chosen by `DRAWER_RENDER`
+or by `auto`, which reads the terminal:
 
 | rung      | draws                                             | needs                              |
 |-----------|---------------------------------------------------|------------------------------------|
@@ -112,31 +40,76 @@ Best first, each failing open to the one below, chosen by `-render` or by
 | `braille` | the same, dotted                                  | any font — every one has braille   |
 | `cells`   | box-drawing characters, routed edges              | nothing but this binary            |
 
-Pixels: the picture goes round CC rather than through it, because CC's
-display wire strips a graphics escape out of hook text without a word. The
-hook writes a PNG to a temp file and hands the terminal one short escape
-naming it, down the parent's own tty via `/proc`; kitty reads the file,
-deletes it, and shows the image in placeholder cells that ride through CC
-as ordinary text. Linux, a local kitty, and not through tmux. A graph wider
-than the window is laid out top-down as well, as the glyph rungs do, and
-the orientation that keeps more of its type is the picture: as written
-when that fits at the cell's own type, top-down where that fits and as
-written would have to shrink, and where both shrink, the one that shrinks
-less.
+**Pixels.** The picture goes round Claude Code rather than through it,
+because its display wire strips a graphics escape out of hook text without
+a word. The hook writes a PNG to a temp file and hands the terminal one
+short escape naming it, down the parent's own tty; kitty reads the file,
+deletes it, and shows the image in placeholder cells that ride through
+Claude Code as ordinary text. Linux, a local kitty, and not through tmux.
+The picture is drawn in Claude Code's own theme; the next section says how.
 
-The picture is themed on the parsed graph, never in the source text. Type
-is measured in Courier — the one monospace the wasm's built-in metrics know
-exactly — and set in the terminal's face, at the size that puts one glyph
-in one cell, so a label is the terminal's own text and a node reads as text
-that grew a border. What the model painted stays painted: a shape, a
-colour, a fill it asked for is kept, and around its paint graphviz's own
-defaults apply, so `fillcolor=pink` gets black text as `dot` would give it.
-Where it left an attribute unset, the theme applies. An edge label sits on
-its line and the line stops a glyph short of it on either side, as in the
-glyph rungs: the graph is rewritten before layout so the label is a node on
-the edge, which is what dot does inside itself for a labelled edge anyway,
-down to halving `ranksep` for the doubled ranks and doubling every other
-edge's `minlen`, so a plain edge still spans a full rank gap.
+Type is measured in Courier — the one monospace the wasm's built-in metrics
+know exactly — and set in the terminal's face, at the size that puts one
+glyph in one cell, so a label is the terminal's own text and a node reads
+as text that grew a border. An edge label sits on its line and the line
+stops a glyph short of it on either side, as in the glyph rungs: the graph
+is rewritten before layout so the label is a node on the edge, which is
+what dot does inside itself for a labelled edge anyway, down to halving
+`ranksep` for the doubled ranks and doubling every other edge's `minlen`,
+so a plain edge still spans a full rank gap.
+
+**Octants and braille.** Everything comes from graphviz's json output —
+every polygon, ellipse, bezier and text anchor it would have painted — so
+clusters, node shapes, multi-line labels, dashed edges and both heads of a
+`dir=both` edge draw as written. Labels are never rasterised: eight dots
+per cell is enough for a curve and hopeless for a letter, measured on the
+screen, so labels are set as glyphs and the strokes are cleared beneath
+them. The node outline is snapped onto the cells its label landed in.
+Record and HTML labels print their markup, and node colours are not
+painted.
+
+**Cells.** Box-drawing characters, routed orthogonally with a cost search.
+Only boxes, no clusters, one-line labels; the floor. An edge label rides
+its own stroke, and one with nowhere to go is dropped rather than
+misplaced.
+
+**Size.** A graph wider than the window is laid out top-down as well,
+because rows scroll where columns run out. In the glyph rungs the first
+orientation that fits is drawn; past 120 rows the source shows under a
+notice that says why. In pixels the orientation that keeps more of its
+type is the picture: as written when that fits at the cell's own type,
+top-down where that fits and as written would have to shrink, and where
+both shrink, the one that shrinks less — type and all, so past about half
+size it is a picture of a picture. A picture taller than 120 rows either
+way falls to the glyph rungs, and so to the notice. Over about a dozen
+nodes a graph flips top-down and gets tall, which the context line tells
+the model.
+
+## the theme
+
+The pixels rung draws in Claude Code's own theme. That theme is a palette
+of named colours, and six of them are the picture: a node is drawn as the
+user's own message is, `userMessageBackground` for the fill and `text` for
+the label, with `claude` for every stroke; an edge label is in `success`,
+a cluster's outline in `inactive` and its caption in `subtle`. Which theme
+is read the way Claude Code reads it: the `theme` of
+`~/.claude/settings.json`, or of the older `~/.claude.json` where that has
+none, and for `custom:NAME` the `base` and `overrides` of
+`~/.claude/themes/NAME.json`. The four stock palettes are carried in the
+binary, read from Claude Code 2.1.257, and drift when Claude Code changes
+one; the two ansi themes name terminal palette slots a picture cannot use
+and draw with their base's colours.
+
+The hook cannot ask the terminal what ground it stands on — the reply
+would land in Claude Code's input, not the hook's — so `auto` draws dark
+whatever the terminal is, and a custom theme a plugin ships, outside
+`~/.claude/themes`, reads as dark.
+
+The theme is applied to the parsed graph, never to the source text, and
+only where the model left an attribute unset. What the model painted stays
+painted: a shape, a colour, a fill it asked for is kept, and around its
+paint graphviz's own defaults apply, so `fillcolor=pink` gets black text
+as `dot` would give it.
 
 A theme switch reaches the pictures already drawn. The hook keeps a ledger
 per session of every picture's source and cut, and at the first delta of
@@ -144,88 +117,86 @@ the next reply, where the theme in force is not the one they were painted
 in, it lays each out again and sends it under its old id: kitty repaints
 the cells wherever they are, scrollback included, and nothing is printed.
 The next reply rather than the keypress because Claude Code fires no hook
-event in the session whose own settings write it was — every other session
-on the machine gets one, and those keep their old colours anyway.
+event in the session whose own settings write it was.
 
-## the theme
-
-A theme is DOT: the defaults a graph would declare for itself, declared
-once for every graph the hook draws. The theme in force is Claude Code's
-own. Its theme is a palette of named colours, and six of them are the
-picture: a node is drawn as the user's own message is, `userMessageBackground`
-for the fill and `text` for the label, with `claude` for every stroke; an
-edge label is in `success`, a cluster's outline in `inactive` and its
-caption in `subtle`. The four stock palettes are carried in the binary, read
-from Claude Code 2.1.257; the two ansi themes name terminal palette slots
-a picture cannot use and draw with their base's colours. Which theme is
-read the way Claude Code reads it: the `theme` of `~/.claude/settings.json`,
-or of the older `~/.claude.json` where that has none, and for `custom:NAME`
-the `base` and `overrides` of `~/.claude/themes/NAME.json`. Anything the
-hook cannot read is dark, `auto` included — auto is the ground Claude Code
-found by asking the terminal, which a hook cannot ask.
+**A theme file.** A theme is DOT: the defaults a graph would declare for
+itself, declared once for every graph the hook draws.
 
     ./bin/drawer -show-theme
 
-prints the theme in force as DOT, which is where a theme file starts, and
-`fixtures/tokyonight.dot`, `fixtures/tokyonight-day.dot` and
-`fixtures/theme.dot` are three. A theme file is named by `DRAWER_THEME`,
-set for `claude` in `settings.json`:
+prints the theme in force as DOT, which is where a theme file starts;
+`fixtures/tokyonight.dot` and `fixtures/tokyonight-day.dot` are two. A
+theme file is the whole theme, not a patch on Claude Code's: what it leaves
+undeclared is graphviz's default. `graph [...]` is the root and every
+cluster alike. Three attributes are rules rather than values. `fontname`
+names the face the picture is set in; the layout is still measured in
+Courier, so any monospace fits and a proportional face will not.
+`fontsize` yields to the cell when the theme has none. A node's
+`fillcolor` is a rule: a node the model filled keeps its own text colour,
+any other gets the theme's fill with `filled` added to its style. A theme
+the hook cannot read is Claude Code's, so the picture draws; `-theme FILE
+-dot g.dot` says what is wrong with the file, and `-theme FILE -dot g.dot
+-png out.png` shows what it draws, without a session.
 
-    { "env": { "DRAWER_THEME": "/home/me/.config/drawer/theme.dot" } }
+## settings
 
-`graph [...]` is the root and every cluster alike. A theme file is the whole
-theme, not a patch on Claude Code's: what it leaves undeclared is
-graphviz's default. Three attributes are rules rather than values.
-`fontname` names the face the picture is set in; the layout is still
-measured in Courier, so any monospace fits and a proportional face will not.
-`fontsize` yields to the cell when the theme has none. A node's `fillcolor`
-is a rule: a node the model filled keeps its own text colour, any other
-gets the theme's fill with `filled` added to its style. A theme the hook
-cannot read is Claude Code's, so the picture draws; `-theme FILE -dot`
-says what is wrong with the file, and `-theme FILE -dot g.dot -png out.png`
-shows what it draws, without a session.
+Three, read from the environment, which reaches a hook when set for
+`claude` in `settings.json`'s `env` or in the shell (measured on Claude
+Code 2.1.261):
 
-Octants and braille: everything comes from graphviz's json output — every
-polygon, ellipse, bezier and text anchor it would have painted — so
-clusters, node shapes, multi-line labels, dashed edges and both heads of a
-`dir=both` edge draw as written. Labels are never rasterised: eight dots
-per cell is enough for a curve and hopeless for a letter, measured on the
-screen, so labels are set as glyphs and the strokes are cleared beneath them.
-The node outline is snapped onto the cells its label landed in.
+    { "env": { "DRAWER_RENDER": "braille",
+               "DRAWER_THEME":  "/home/me/.config/drawer/theme.dot",
+               "DRAWER_TEE":    "/home/me/drawer-deltas.jsonl" } }
 
-Cells: box-drawing characters, routed orthogonally with a cost search.
-Only boxes, no clusters, one-line labels; the floor.
+`DRAWER_RENDER` picks a rung, `DRAWER_THEME` names a theme file, and
+`DRAWER_TEE` records every payload the hook is handed, as a fixture
+`-deltas` can replay.
 
-## what the display wire keeps (measured, CC 2.1.257)
+## how it stands there
 
-Inside a bare fence CC keeps: leading whitespace, 256-colour and basic SGR,
-bold and dim, every unusual glyph tried (octants, sextants, braille, box
-diagonals), and kitty's placeholder cells with their combining marks,
-counted as one column each. It indents two columns and draws no caption. It
-strips APC graphics escapes. Truecolor foregrounds are remapped to a
-256-colour index, which is why a picture's id rides in one.
+Claude Code ships a `MessageDisplay` hook: it hands a command each piece
+of an assistant message before laying it out and takes back replacement
+text. The substitution is display-only — the transcript keeps the fence
+the model wrote — and a hook is a fresh process per piece, so the fence is
+reassembled through a small state file keyed by message id, because Claude
+Code splits a reply where it likes and the split is not repeatable. The
+processes are not one after another either: measured, two pieces'
+processes started eleven microseconds apart. So each takes its turn — the
+state counts the piece it expects next, a lock per message serialises the
+readers, and a process ahead of the count waits for the one before it, the
+draw included.
 
-## the trade
+Layout is graphviz, compiled to WebAssembly and carried inside the binary
+(`goccy/go-graphviz` through `wazero`). There is no `dot` to install. A
+layout costs about a millisecond; the process spawn costs about twenty.
 
-A hook is never re-run. CC keeps what it was given and re-wraps it on a
-resize without asking again, so a drawing is correct at the width it was
-drawn for, shreds narrower, and comes back when the window does. `--resume`
-shows every fence as source; the hook does not fire for a replayed
-transcript. A terminal wrapper that sees the window could re-derive the
-drawing every frame and make both of those hold, at the price of the
-wrapper. The drawer takes the trade so that graphs work with nothing but
-`claude`.
+**What counts as a fence.** A fence as markdown has it: three or more
+backticks or tildes at the start of a line, indented or not, closed by a
+run of the same character at least as long. Every fence is tracked and
+only a graph's is drawn. A fence labelled `dot` or `graphviz` is a graph's
+whatever is in it, and one that will not draw is told why over its source.
+An unlabelled fence is a graph's when its first line opens one, `digraph {`
+or `graph {`, and prose otherwise. A fence labelled anything else streams
+through as it arrives, and so does everything inside it, so a ```dot
+quoted in a four-backtick fence is the text it is. A fence under a list
+item draws in its indent, at the width the indent leaves.
 
-## offline
+**What the display wire keeps** (measured, Claude Code 2.1.257). Inside a
+bare fence it keeps leading whitespace, 256-colour and basic SGR, bold and
+dim, every unusual glyph tried (octants, sextants, braille, box diagonals),
+and kitty's placeholder cells with their combining marks, counted as one
+column each. It indents two columns and draws no caption. It strips APC
+graphics escapes. Truecolor foregrounds are remapped to a 256-colour
+index, which is why a picture's id rides in one.
 
-    ./bin/drawer -dot FILE -size WxH -render braille   # draw a file, name the size it needs
-    ./bin/drawer -dot FILE -png OUT [-cell 10x24]      # the pixels rung's picture, to a file
-    ./bin/drawer -deltas FILE -render cells            # replay a recorded turn; nonzero if damaged
-    ./bin/drawer -hook -hooktee FILE                   # a live session writes its own fixture (DRAWER_TEE)
-
-`-deltas` is not a golden file: prose outside a fence must come back byte
-for byte, every fence must come back untouched or as one drawn block that
-fits its width, and a notice must carry the source it is about.
+**The trade.** A hook is never re-run. Claude Code keeps what it was given
+and re-wraps it on a resize without asking again, so a drawing is correct
+at the width it was drawn for, shreds narrower, and comes back when the
+window does. `--resume` shows every fence as source; the hook does not
+fire for a replayed transcript. A terminal wrapper that sees the window
+could re-derive the drawing every frame and make both of those hold, at
+the price of the wrapper. The drawer takes the trade so that graphs work
+with nothing but `claude`.
 
 ## known wrong
 
@@ -237,39 +208,71 @@ fits its width, and a notice must carry the source it is about.
   path is written blind — nothing here runs it — and unverified; if it
   is wrong the width falls to `COLUMNS` and then 100, and pixels do not
   reach the terminal.
-- In the glyph rungs, record and HTML labels print their markup and node
-  colours are not painted. The pixels rung draws both, but in an HTML label
-  the space between two spans collapses — `<b>bold</b> and` sets as
-  "boldand". That is graphviz's SVG writer.
-- The theme comes from Claude Code's setting, not the terminal: the hook
-  cannot ask the terminal — the reply would land in Claude Code's input,
-  not the hook's. So `auto` draws dark whatever the terminal is, and a
-  custom theme a plugin ships, outside `~/.claude/themes`, reads as dark.
-  The stock palettes are a copy, and drift when Claude Code changes one.
+- In an HTML label the pixels rung collapses the space between two spans
+  — `<b>bold</b> and` sets as "boldand". That is graphviz's SVG writer.
 - Pictures already drawn repaint at the next reply, not at the switch. A
   theme file that changes the type changes the layout, and a picture that
   no longer fits its old cut is left as it was.
-- Over about twelve nodes the picture flips top-down and gets tall; past 120
-  rows the source shows under a notice, except in pixels, where a picture too
-  wide either way is shrunk into the window instead, type and all, and past
-  about half size it is a picture of a picture.
-- Edge labels that graphviz places on the stroke interrupt it; a label with
-  nowhere to go in the cells rung is dropped rather than misplaced.
 - Installed mid-session and reloaded with `/reload-plugins`, the hooks are
   registered but SessionStart does not fire, so the binary is not put in
   place and the first fence shows its source until a new session.
   Measured on the first install of the release. The hook could copy the
   shipped binary itself when it finds none, one `cp`; it does not yet.
 
+## developing
+
+A plugin runs no install step, so `scripts/drawer` puts the binary in the
+plugin's data directory itself, at the first session, by the first of
+four ways that works: a built checkout's `bin/drawer`, linked, so a
+rebuild is live at the next reply; the binaries the release zip carries,
+one per platform; the release binary downloaded for this platform and
+checked against the sum `release.sh` pinned in the script; or `go build`,
+where Go is on the PATH. A stranger's install is the zip. A checkout that
+arrived by git — an organisation pushing the plugin to its people can only
+point at git — downloads the same binary the zip would have carried. Until
+one of the four lands, both hooks fail open: a session without the line is
+a fence that shows its source. The script execs the binary rather than
+running it, because the binary reads the terminal's size as its parent's,
+and its parent has to be `claude`. The hook wire is Unix through and
+through and Windows does not build.
+
+Install from the checkout: `/plugin marketplace add /path/to/drawer` then
+`/plugin install drawer@drawer`. Claude Code copies the tree into its cache
+but runs the hooks with the checkout as the plugin root (measured on
+2.1.261: the data directory's link points into the checkout), so the
+checkout's `bin/drawer` is what the next reply runs and `./check.sh`
+rebuilds it. A change to the script or the manifests is safest
+reinstalled. A checkout loaded with `--plugin-dir` beside an installed
+plugin is two hooks on every delta sharing the state files, and a fence
+split across deltas comes out doubled.
+
+`./check.sh` is every oracle in one command: the build, vet, the laws
+under `-race`, every rung on a fixture, the theme files, the plugin's
+manifests and wrapper, and the recorded delta streams replayed. Offline:
+
+    ./bin/drawer -dot FILE -size WxH -render braille   # draw a file, name the size it needs
+    ./bin/drawer -dot FILE -png OUT [-cell 10x24]      # the pixels rung's picture, to a file
+    ./bin/drawer -deltas FILE -render cells            # replay a recorded turn; nonzero if damaged
+    ./bin/drawer -context                              # the line the model is handed
+
+`-deltas` is not a golden file: prose outside a fence must come back byte
+for byte, every fence must come back untouched or as one drawn block that
+fits its width, and a notice must carry the source it is about. A live
+session writes its own fixture with `DRAWER_TEE`.
+
+`./release.sh VERSION` is the release as one command: four binaries, a
+checksums file, the plugin zipped with all four inside, the sums pinned
+into the script, the marketplace pointed at the zip, commit, tag, push,
+GitHub release.
+
 ## embedding
 
-The package is importable: `Stream` is the fence transducer with the
-emit function as a parameter, `Mode` pairs an emit with the check `-deltas`
-runs on its output, and `Cells`, `CutReason`, `DrawNotice` and `Rasterise`
-are the renderer's doors. drawer began as one half of a pty compositor for
-Claude Code, and that compositor still runs this hook wire in a mode of its
-own: the hook books rows and the compositor paints into them every frame,
-re-derived, which is the resize row of the table above.
+The package is importable. `Stream` is the fence transducer with the emit
+function as a parameter; `Mode` pairs an emit with the check `-deltas`
+runs on its output; `Cells`, `CutReason`, `DrawNotice` and `Rasterise`
+are the renderer's doors. A program that owns the terminal can book rows
+through `Stream` and paint into them itself, re-derived every frame, which
+is the resize row of the trade above.
 
 ## license
 
