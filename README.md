@@ -266,8 +266,8 @@ binaries, a checksums file, the plugin zipped with all four inside, the
 sums pinned into the script, the marketplace pointed at the zip, commit,
 tag, push, GitHub release.
 
-**The tree.** One binary; ten packages under `internal/`, and every import
-points down this list.
+**The tree.** One binary; eleven packages under `internal/`, and every
+import points down this list.
 
     cmd/drawer/          the binary: os.Exit(drawer.Main(os.Args[1:]))
     internal/drawer      the flags, the hook wire, the ladder of rungs, the ledger
@@ -277,6 +277,7 @@ points down this list.
     internal/cells       the cells rung: a canvas of box-drawing characters, and edges routed on it
     internal/notice      why there is no drawing, drawn
     internal/fence       the transducer: a fence in, a drawing or the same bytes out
+    internal/svgtest     graphviz's SVG as a law reads it; the one package here for the laws
     internal/layout      graphviz: the one door, and the scale from inches to cells
     internal/grid        a row of terminal cells, and what text costs in one
     internal/term        the parent's terminal: how big it is, and where its output goes

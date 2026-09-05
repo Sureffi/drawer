@@ -6,14 +6,13 @@ package drawer
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/goccy/go-graphviz/cgraph"
-	"github.com/sureffi/drawer/internal/layout"
 	"github.com/sureffi/drawer/internal/pixel"
+	"github.com/sureffi/drawer/internal/svgtest"
 	"github.com/sureffi/drawer/internal/term"
 	"github.com/sureffi/drawer/internal/theme"
 )
@@ -27,30 +26,6 @@ func mustTheme(t *testing.T, src string) *theme.Theme {
 		t.Fatal(err)
 	}
 	return th
-}
-
-// svgGroup is the SVG of one titled element: a node, an edge or a cluster.
-func svgGroup(svg []byte, title string) string {
-	s := string(svg)
-	i := strings.Index(s, "<title>"+title+"</title>")
-	if i < 0 {
-		return ""
-	}
-	j := strings.Index(s[i:], "</g>")
-	if j < 0 {
-		return s[i:]
-	}
-	return s[i : i+j]
-}
-
-// svgTextY is the baseline of the first text in a group: where graphviz
-// put the thing, up the page as it goes negative.
-func svgTextY(group string) float64 {
-	m := regexp.MustCompile(`<text [^>]*\by="(-?[0-9.]+)"`).FindStringSubmatch(group)
-	if m == nil {
-		return 0
-	}
-	return layout.Atof(m[1])
 }
 
 // The pictures a session drew are sent to the terminal again, under their
@@ -125,7 +100,7 @@ func TestPixelLedgerRepaintsAsLaidOut(t *testing.T) {
 	if n := s1.repaintPictures(tty, r); n != 1 {
 		t.Fatalf("repainted %d pictures, want 1", n)
 	}
-	ya, yb := svgTextY(svgGroup(got, "a")), svgTextY(svgGroup(got, "b"))
+	ya, yb := svgtest.TextY(svgtest.Group(got, "a")), svgtest.TextY(svgtest.Group(got, "b"))
 	if ya == 0 || yb == 0 {
 		t.Fatalf("missing a node: a=%v b=%v", ya, yb)
 	}

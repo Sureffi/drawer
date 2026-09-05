@@ -6,14 +6,13 @@ package pixel
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/sureffi/drawer/internal/grid"
-	"github.com/sureffi/drawer/internal/layout"
+	"github.com/sureffi/drawer/internal/svgtest"
 	"github.com/sureffi/drawer/internal/term"
 	"github.com/sureffi/drawer/internal/theme"
 )
@@ -53,30 +52,6 @@ func TestPlaceholderRowsNameTheirImageOnEveryCell(t *testing.T) {
 
 // ---------- the pixel theme ----------
 
-// svgGroup is the SVG of one titled element: a node, an edge or a cluster.
-func svgGroup(svg []byte, title string) string {
-	s := string(svg)
-	i := strings.Index(s, "<title>"+title+"</title>")
-	if i < 0 {
-		return ""
-	}
-	j := strings.Index(s[i:], "</g>")
-	if j < 0 {
-		return s[i:]
-	}
-	return s[i : i+j]
-}
-
-// svgTextY is the baseline of the first text in a group: where graphviz
-// put the thing, up the page as it goes negative.
-func svgTextY(group string) float64 {
-	m := regexp.MustCompile(`<text [^>]*\by="(-?[0-9.]+)"`).FindStringSubmatch(group)
-	if m == nil {
-		return 0
-	}
-	return layout.Atof(m[1])
-}
-
 // Type is measured in Courier, which the wasm's tables know, and set in
 // the terminal's face, which fontconfig knows; a label measured in one face
 // and set in another runs out of its box. At a known cell width the size is
@@ -114,21 +89,21 @@ func TestPixelThemeKeepsTheModelsPaint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := svgGroup(svg, "a")
+	a := svgtest.Group(svg, "a")
 	if !strings.Contains(a, `fill="pink"`) || !strings.Contains(a, `stroke="red"`) {
 		t.Errorf("the model's paint was overwritten:\n%s", a)
 	}
 	if strings.Contains(a, th.Node["fontcolor"]) {
 		t.Errorf("theme text on the model's fill:\n%s", a)
 	}
-	if !strings.Contains(svgGroup(svg, "b"), "<ellipse") {
+	if !strings.Contains(svgtest.Group(svg, "b"), "<ellipse") {
 		t.Error("the model asked for an ellipse and got a box")
 	}
-	c := svgGroup(svg, "c")
+	c := svgtest.Group(svg, "c")
 	if strings.Contains(c, "{head|body|tail}") || !strings.Contains(c, ">body<") {
 		t.Errorf("the record printed its markup:\n%s", c)
 	}
-	d := svgGroup(svg, "d")
+	d := svgtest.Group(svg, "d")
 	if !strings.Contains(d, th.Node["fillcolor"]) || !strings.Contains(d, th.Node["fontcolor"]) || !strings.Contains(d, th.Node["color"]) {
 		t.Errorf("an unpainted node did not get the theme:\n%s", d)
 	}
@@ -149,7 +124,7 @@ func TestPixelThemeReachesEveryCluster(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"cluster_a", "cluster_b"} {
-		g := svgGroup(svg, name)
+		g := svgtest.Group(svg, name)
 		if !strings.Contains(g, `stroke="`+th.Graph["color"]+`"`) {
 			t.Errorf("%s outline is not themed:\n%s", name, g)
 		}
@@ -258,11 +233,11 @@ func TestPixelEdgeLabelSitsOnItsLine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if g := svgGroup(svg, "a&#45;&gt;b"); g != "" {
+	if g := svgtest.Group(svg, "a&#45;&gt;b"); g != "" {
 		t.Errorf("the labelled edge is still drawn whole:\n%s", g)
 	}
-	first := svgGroup(svg, "a&#45;&gt;"+labelNodePrefix+"0")
-	second := svgGroup(svg, labelNodePrefix+"0&#45;&gt;b")
+	first := svgtest.Group(svg, "a&#45;&gt;"+labelNodePrefix+"0")
+	second := svgtest.Group(svg, labelNodePrefix+"0&#45;&gt;b")
 	for name, half := range map[string]string{"first": first, "second": second} {
 		if !strings.Contains(half, `stroke="red"`) {
 			t.Errorf("the %s half lost the edge's colour:\n%s", name, half)
@@ -271,7 +246,7 @@ func TestPixelEdgeLabelSitsOnItsLine(t *testing.T) {
 			t.Errorf("the %s half has %d heads, want one:\n%s", name, n, half)
 		}
 	}
-	label := svgGroup(svg, labelNodePrefix+"0")
+	label := svgtest.Group(svg, labelNodePrefix+"0")
 	if !strings.Contains(label, ">x<") || !strings.Contains(label, `fill="`+th.Edge["fontcolor"]+`"`) {
 		t.Errorf("the label is not on the line in the edge label colour:\n%s", label)
 	}
@@ -287,7 +262,7 @@ func TestPixelUndirectedLabelGrowsNoHeads(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, title := range []string{"a&#45;&#45;" + labelNodePrefix + "0", labelNodePrefix + "0&#45;&#45;b"} {
-		half := svgGroup(svg, title)
+		half := svgtest.Group(svg, title)
 		if half == "" {
 			t.Errorf("no half titled %s", title)
 		}
@@ -325,8 +300,8 @@ func TestPixelLabelOnABackEdgeSitsBetweenItsEnds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ya, yc := svgTextY(svgGroup(svg, "a")), svgTextY(svgGroup(svg, "c"))
-	yl := svgTextY(svgGroup(svg, labelNodePrefix+"0"))
+	ya, yc := svgtest.TextY(svgtest.Group(svg, "a")), svgtest.TextY(svgtest.Group(svg, "c"))
+	yl := svgtest.TextY(svgtest.Group(svg, labelNodePrefix+"0"))
 	if ya == 0 || yc == 0 || yl == 0 {
 		t.Fatalf("missing a node: a=%v c=%v label=%v", ya, yc, yl)
 	}
@@ -335,8 +310,8 @@ func TestPixelLabelOnABackEdgeSitsBetweenItsEnds(t *testing.T) {
 	}
 	// The chain runs a -> label -> c, and the head is on the half that
 	// touches a: drawn as a back arrow on that half.
-	first := svgGroup(svg, "a&#45;&gt;"+labelNodePrefix+"0")
-	second := svgGroup(svg, labelNodePrefix+"0&#45;&gt;c")
+	first := svgtest.Group(svg, "a&#45;&gt;"+labelNodePrefix+"0")
+	second := svgtest.Group(svg, labelNodePrefix+"0&#45;&gt;c")
 	if first == "" || second == "" {
 		t.Fatalf("the back edge was not chained the other way round:\n%s", svg)
 	}

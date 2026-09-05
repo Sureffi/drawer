@@ -39,13 +39,14 @@ layers_table() {
   grid       (nothing internal)
   term       (nothing internal)
   layout     grid
+  svgtest    layout
   theme      layout
   fence      grid layout
   notice     grid layout
   cells      grid layout
   subcell    grid layout
-  pixel      grid term layout theme
-  drawer     grid term layout theme fence notice cells subcell pixel
+  pixel      grid term layout theme svgtest
+  drawer     grid term layout theme svgtest fence notice cells subcell pixel
   cmd/drawer drawer
 TABLE
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sureffi/drawer/internal/svgtest"
 	"github.com/sureffi/drawer/internal/theme"
 )
 
@@ -32,14 +33,14 @@ func TestThemeFileReachesThePicture(t *testing.T) {
 		t.Fatal(err)
 	}
 	// graphviz writes an RGBA fill as a colour and an opacity.
-	a := svgGroup(svg, "a")
+	a := svgtest.Group(svg, "a")
 	if !strings.Contains(a, `fill="#7aa2f7" fill-opacity="0.12`) {
 		t.Errorf("the theme's fill did not reach the node:\n%s", a)
 	}
 	if strings.Contains(a, "#d77757") {
 		t.Errorf("Claude Code's stroke leaked through a theme that declares its own:\n%s", a)
 	}
-	if e := svgGroup(svg, "a&#45;&gt;b"); !strings.Contains(e, `stroke="red"`) {
+	if e := svgtest.Group(svg, "a&#45;&gt;b"); !strings.Contains(e, `stroke="red"`) {
 		t.Errorf("the theme's edge colour did not reach the edge:\n%s", e)
 	}
 	if !strings.Contains(string(svg), `font-family="JetBrains Mono"`) || strings.Contains(string(svg), "Courier") {
@@ -55,10 +56,10 @@ func TestThemeFileYieldsToTheModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a := svgGroup(svg, "a"); !strings.Contains(a, `stroke="red"`) {
+	if a := svgtest.Group(svg, "a"); !strings.Contains(a, `stroke="red"`) {
 		t.Errorf("the theme overwrote the model:\n%s", a)
 	}
-	if b := svgGroup(svg, "b"); !strings.Contains(b, `stroke="#111111"`) {
+	if b := svgtest.Group(svg, "b"); !strings.Contains(b, `stroke="#111111"`) {
 		t.Errorf("the theme did not reach an unpainted node:\n%s", b)
 	}
 }
