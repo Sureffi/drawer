@@ -50,6 +50,19 @@ for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
 		-o "dist/drawer-$os-$arch" ./cmd/drawer
 	echo "built drawer-$os-$arch $(du -h "dist/drawer-$os-$arch" | cut -f1)"
 done
+# The version, out of the one binary this box can run. -X names a package
+# path and a variable, and neither the linker nor the build says a word when
+# the name stops matching: every download would then call itself dev and the
+# first reader to ask which one they have gets the wrong answer.
+host="dist/drawer-$(go env GOOS)-$(go env GOARCH)"
+if [ -x "$host" ]; then
+	[ "$("$host" -version)" = "drawer $v" ] ||
+		{ echo "release: the version did not link in" >&2; exit 1; }
+	echo "linked drawer $v"
+else
+	echo "release: no native build here to ask; the version is unchecked" >&2
+fi
+
 (cd dist && for f in drawer-*; do echo "$(sha256 "$f")  $f"; done >checksums.txt)
 
 # The pins, into the wrapper.
