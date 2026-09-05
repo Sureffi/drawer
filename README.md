@@ -202,10 +202,10 @@ with nothing but `claude`.
   indent. What Claude Code actually gives a code block inside a list item
   is not measured; if it is less, the drawing wraps there.
 - The hook's width comes from the parent's tty: `/proc/$PPID/fd/0` on
-  Linux, and on macOS the device `ps` names for the parent. The macOS
-  path is written blind — nothing here runs it — and unverified; if it
-  is wrong the width falls to `COLUMNS` and then 100, and pixels do not
-  reach the terminal.
+  Linux, and on macOS the device `ps` names for the parent. CI runs the
+  whole suite on macOS, but a runner has no terminal, so the macOS path
+  is still unverified where it matters; if it is wrong the width falls to
+  `COLUMNS` and then 100, and pixels do not reach the terminal.
 - In an HTML label the pixels rung collapses the space between two spans
   — `<b>bold</b> and` sets as "boldand". That is graphviz's SVG writer.
 - Pictures already drawn repaint at the next reply, not at the switch. A
@@ -249,7 +249,9 @@ cross-compiled for macOS so the build-tagged files nobody here runs still
 compile on every push, the internal import graph held to a table written
 into the script so a sideways edge fails as loudly as a cycle would, the
 laws under `-race`, every rung on a fixture, the theme files, the plugin's
-manifests and wrapper, and the recorded delta streams replayed. Offline:
+manifests and wrapper, and the recorded delta streams replayed. GitHub runs
+it on Linux and on macOS at every push, which is the only Mac this project
+has. Offline:
 
     ./bin/drawer -dot FILE -size WxH -render braille   # draw a file, name the size it needs
     ./bin/drawer -dot FILE -png OUT [-cell 10x24]      # the pixels rung's picture, to a file
