@@ -295,4 +295,4 @@ GitHub release.
 ## license
 
 MIT. The embedded `graphviz.wasm` carries graphviz's Eclipse Public
-License, and a built binary redistributes it.
+License, and a built binary redistributes it; NOTICE says so.

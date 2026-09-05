@@ -1,0 +1,6 @@
+drawer is MIT licensed; see LICENSE.
+
+A built binary embeds graphviz, compiled to WebAssembly, through
+github.com/goccy/go-graphviz. graphviz is licensed under the Eclipse Public
+License 1.0 (https://graphviz.org/license/); redistributing a built binary
+redistributes it.

@@ -61,7 +61,7 @@ sed -i.bak "s|\"version\": \"[^\"]*\"|\"version\": \"$v\"|" .claude-plugin/plugi
 rm -f .claude-plugin/plugin.json.bak
 
 # The zip: the plugin and nothing else, binaries inside, at the zip's root.
-cp -r hooks LICENSE README.md dist/plugin/
+cp -r hooks LICENSE NOTICE README.md dist/plugin/
 mkdir -p dist/plugin/.claude-plugin
 cp .claude-plugin/plugin.json dist/plugin/.claude-plugin/
 cp scripts/drawer dist/plugin/scripts/
