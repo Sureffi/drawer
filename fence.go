@@ -20,7 +20,7 @@
 // What holding a fence costs, stated plainly: suppressed deltas are content
 // taken off the screen on the promise of putting something better back. If
 // the promise is not kept the text is simply gone, so the give-back at the
-// end of Stream is the load-bearing half of this file, not the drawing.
+// end of stream is the load-bearing half of this file, not the drawing.
 
 package main
 
@@ -29,8 +29,8 @@ import (
 	"strings"
 )
 
-// FenceTick is the bare fence a drawing is handed back in.
-const FenceTick = "```"
+// fenceTick is the bare fence a drawing is handed back in.
+const fenceTick = "```"
 
 // opener is a fence's opening line as read: the whitespace before the run,
 // the run itself, and the first word of what followed it. The run says
@@ -74,10 +74,10 @@ func (f opener) closes(line string) bool {
 func (f opener) labelled() bool   { return f.Info == "dot" || f.Info == "graphviz" }
 func (f opener) unlabelled() bool { return f.Info == "" }
 
-// State is the transducer's half-finished work between two deltas: what
+// state is the transducer's half-finished work between two deltas: what
 // has arrived and not been decided on, and the fence being captured. The
 // hook keeps one per message id in a file.
-type State struct {
+type state struct {
 	// Buf is raw delta text that has arrived and not yet been decided on:
 	// an incomplete last line, which cannot be classified until its
 	// newline shows up, because it might still grow into a fence marker.
@@ -153,7 +153,7 @@ func firstText(body string) string {
 	return ""
 }
 
-// Stream is the transducer. It takes one delta and the state left by the
+// stream is the transducer. It takes one delta and the state left by the
 // delta before it, and returns what should be displayed in its place. emit
 // is the product: given one complete fence source and the cells its fence
 // is indented by, it answers the rows that replace the fence, or nil to
@@ -171,7 +171,7 @@ func firstText(body string) string {
 // Held text leaves in exactly two ways: as what emit made of it, or as the
 // bytes it arrived as. There is no third exit, which is what keeps a suppressed
 // delta from becoming a lost one.
-func Stream(delta string, final bool, st *State, emit func(src string, indent int) []string) string {
+func stream(delta string, final bool, st *state, emit func(src string, indent int) []string) string {
 	var out strings.Builder
 	st.Buf += delta
 	closer := func() (int, int) { return findLine(st.Buf, final, st.Fence.closes) }

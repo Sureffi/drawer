@@ -409,7 +409,7 @@ func TestAFenceThatWillNotDrawSaysWhy(t *testing.T) {
 		{"will not parse", "digraph { a -> ", 90, 8, false},
 	}
 	for _, c := range cases {
-		rows := DrawNotice(CutReason(c.src, c.w, c.region), c.w, c.region)
+		rows := drawNotice(cutReason(c.src, c.w, c.region), c.w, c.region)
 		if rows == nil {
 			t.Fatalf("%s: nothing drawn, and the reader learns nothing", c.name)
 		}
@@ -432,10 +432,10 @@ func TestAFenceThatWillNotDrawSaysWhy(t *testing.T) {
 // A notice too small to read is worse than the source it would cover, so
 // there is a floor below which nothing is drawn at all.
 func TestATinyRegionKeepsItsSource(t *testing.T) {
-	if rows := DrawNotice("needs 44 columns, this window has 12", 12, 6); rows != nil {
+	if rows := drawNotice("needs 44 columns, this window has 12", 12, 6); rows != nil {
 		t.Fatalf("drew a notice into 12 columns: %q", rows)
 	}
-	if rows := DrawNotice("needs 44 columns", 60, 2); rows != nil {
+	if rows := drawNotice("needs 44 columns", 60, 2); rows != nil {
 		t.Fatalf("drew a notice into 2 rows: %q", rows)
 	}
 }
@@ -450,7 +450,7 @@ func TestDrawModeEmitsABareFenceThatFits(t *testing.T) {
 	if rows == nil {
 		t.Fatal("nothing drawn")
 	}
-	if rows[0] != FenceTick || rows[len(rows)-1] != FenceTick {
+	if rows[0] != fenceTick || rows[len(rows)-1] != fenceTick {
 		t.Fatalf("not a bare fence:\n%s", strings.Join(rows, "\n"))
 	}
 	for _, r := range rows[1 : len(rows)-1] {
@@ -478,7 +478,7 @@ func TestDrawModeNoticeKeepsTheSourceInOneFence(t *testing.T) {
 		t.Fatal("a too-narrow window produced nothing, not even a reason")
 	}
 	joined := strings.Join(rows, "\n")
-	if strings.Count(joined, FenceTick+"\n") != 1 || !strings.HasSuffix(joined, FenceTick) {
+	if strings.Count(joined, fenceTick+"\n") != 1 || !strings.HasSuffix(joined, fenceTick) {
 		t.Fatalf("notice and source are not one fence:\n%s", joined)
 	}
 	if !strings.Contains(joined, "no diagram") || !strings.Contains(joined, "alpha ->") {

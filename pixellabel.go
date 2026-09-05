@@ -55,7 +55,7 @@ func isDigraph(src string) bool {
 
 // inlineEdgeLabels puts every edge label on its edge. fontPt is the type
 // size the labels will be set at, which fixes the air around them.
-func inlineEdgeLabels(graph *cgraph.Graph, th *Theme, fontPt float64, directed bool) {
+func inlineEdgeLabels(graph *cgraph.Graph, th *theme, fontPt float64, directed bool) {
 	// Collect first: rewriting the out-lists while walking them is undefined.
 	var todo, plain []*cgraph.Edge
 	for n, _ := graph.FirstNode(); n != nil; n, _ = graph.NextNode(n) {
@@ -239,25 +239,25 @@ func otherEnd(a string, flipped bool) string {
 func backEdges(graph *cgraph.Graph) map[string]bool {
 	back := map[string]bool{}
 	const onStack, done = 1, 2
-	state := map[string]int{}
+	seen := map[string]int{}
 	var visit func(n *cgraph.Node)
 	visit = func(n *cgraph.Node) {
 		name, _ := n.Name()
-		state[name] = onStack
+		seen[name] = onStack
 		for e, _ := graph.FirstOut(n); e != nil; e, _ = graph.NextOut(e) {
 			h, _ := e.Head()
 			hn, _ := h.Name()
-			switch state[hn] {
+			switch seen[hn] {
 			case onStack:
 				back[edgeKey(e)] = true
 			case 0:
 				visit(h)
 			}
 		}
-		state[name] = done
+		seen[name] = done
 	}
 	for n, _ := graph.FirstNode(); n != nil; n, _ = graph.NextNode(n) {
-		if name, _ := n.Name(); state[name] == 0 {
+		if name, _ := n.Name(); seen[name] == 0 {
 			visit(n)
 		}
 	}

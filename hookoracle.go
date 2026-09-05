@@ -27,11 +27,11 @@ import (
 	"strings"
 )
 
-// RunDeltas replays a recorded delta stream through the transducer and
+// runDeltas replays a recorded delta stream through the transducer and
 // checks what a reader would have seen against the text CC handed us.
 //
-//	drawer -deltas fixtures/deltas-split-a.jsonl -size 100x40
-func RunDeltas(path string, w int) int {
+//	drawer -deltas testdata/deltas-split-a.jsonl -size 100x40
+func runDeltas(path string, w int) int {
 	f, err := os.Open(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "-deltas:", err)
@@ -41,10 +41,10 @@ func RunDeltas(path string, w int) int {
 
 	emit := func(src string, indent int) []string { return drawBlock(src, w-indent) }
 	var in, shown strings.Builder
-	var st State
+	var st state
 	// A recording is in the order the hook processes wrote it, which is the
 	// order Claude Code started them and not the order of the deltas —
-	// fixtures/deltas-race.jsonl has the second before the first. The hook
+	// testdata/deltas-race.jsonl has the second before the first. The hook
 	// takes its turn by index, so the transducer sees a message's deltas in
 	// index order, and the replay does the same.
 	var deltas []hookIn
@@ -79,7 +79,7 @@ func RunDeltas(path string, w int) int {
 	})
 	for _, p := range deltas {
 		in.WriteString(p.Delta)
-		shown.WriteString(Stream(p.Delta, p.Final, &st, emit))
+		shown.WriteString(stream(p.Delta, p.Final, &st, emit))
 	}
 	if st.InFence {
 		fmt.Fprintf(os.Stderr, "-deltas: %s: stream ended with a fence still held — "+
@@ -157,8 +157,8 @@ func splitFences(text string) ([]string, string) {
 // or the notice that says why not, with the source under it.
 func checkDrawn(block, src string, w int) error {
 	lines := strings.Split(block, "\n")
-	if len(lines) < 3 || strings.TrimSpace(lines[0]) != FenceTick ||
-		strings.TrimSpace(lines[len(lines)-1]) != FenceTick {
+	if len(lines) < 3 || strings.TrimSpace(lines[0]) != fenceTick ||
+		strings.TrimSpace(lines[len(lines)-1]) != fenceTick {
 		return fmt.Errorf("drawn block is not a bare fence")
 	}
 	body := lines[1 : len(lines)-1]
@@ -168,7 +168,7 @@ func checkDrawn(block, src string, w int) error {
 		if n := textCells(plain); n > w {
 			return fmt.Errorf("row is %d cells in %d columns: %q", n, w, plain)
 		}
-		if strings.ContainsAny(plain, "─│╭╮╰╯▶◀▲▼") || strings.ContainsRune(plain, PlaceholderRune) ||
+		if strings.ContainsAny(plain, "─│╭╮╰╯▶◀▲▼") || strings.ContainsRune(plain, placeholderRune) ||
 			strings.Contains(plain, "no diagram") || hasSubcellInk(plain) {
 			drawn = true
 		}

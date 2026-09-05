@@ -33,16 +33,18 @@ mkdir -p bin
 # on the last binary that happened to compile.
 stage "build" go build -o bin/drawer . || exit 1
 stage "vet" go vet ./... || true
+gofmt_clean() { f=$(gofmt -l .); [ -z "$f" ] || { printf '%s\n' "$f"; return 1; }; }
+stage "gofmt" gofmt_clean || true
 stage "laws (go test -race)" go test -race ./... || true
 
 for r in cells braille octants; do
-  stage "dot: $r" ./bin/drawer -dot fixtures/chain.dot -size 100x14 -render $r || true
+  stage "dot: $r" ./bin/drawer -dot testdata/chain.dot -size 100x14 -render $r || true
 done
 
 # A theme file is read by graphviz's parser; the example themes must load,
 # and the theme in force — Claude Code's, derived — must print as DOT.
-for f in fixtures/tokyonight.dot fixtures/tokyonight-day.dot; do
-  stage "theme: $f" ./bin/drawer -theme $f -dot fixtures/chain.dot -size 100x14 -render cells || true
+for f in themes/tokyonight.dot themes/tokyonight-day.dot; do
+  stage "theme: $f" ./bin/drawer -theme $f -dot testdata/chain.dot -size 100x14 -render cells || true
 done
 stage "show-theme" ./bin/drawer -show-theme || true
 stage "context" ./bin/drawer -context || true
@@ -74,16 +76,16 @@ stage "plugin: hook" hook_draws || true
 # The pixels rung, to a file: the same cut the hook makes. Only where this
 # machine can rasterise; a box without cairo is not wrong, only glyph-bound.
 if command -v rsvg-convert >/dev/null 2>&1 || command -v magick >/dev/null 2>&1; then
-  stage "png: fixtures/chain.dot" ./bin/drawer -dot fixtures/chain.dot -png bin/chain.png -size 100x40 || true
+  stage "png: testdata/chain.dot" ./bin/drawer -dot testdata/chain.dot -png bin/chain.png -size 100x40 || true
 else
-  say "png: fixtures/chain.dot" "skipped (no rasteriser)"
+  say "png: testdata/chain.dot" "skipped (no rasteriser)"
 fi
 
 # The hook wire: recorded delta streams, replayed. `drawer -hook -hooktee`
 # writes these straight off a live session, so the corpus is not limited to
 # cases somebody thought of.
 for r in cells braille; do
-  for f in fixtures/deltas-*.jsonl; do
+  for f in testdata/deltas-*.jsonl; do
     n=$(basename "$f" .jsonl)
     if out=$(./bin/drawer -deltas "$f" -size 100x40 -render $r 2>&1); then
       say "deltas ($r): $n" "$out"

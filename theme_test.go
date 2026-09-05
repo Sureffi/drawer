@@ -13,7 +13,7 @@ import (
 // withTheme makes a theme the theme for one test.
 func withTheme(t *testing.T, src string) {
 	old := currentTheme()
-	th, err := ParseTheme(src)
+	th, err := parseTheme(src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,8 +26,8 @@ func withTheme(t *testing.T, src string) {
 // and what it declares for each kind comes back as the values it wrote.
 func TestThemeIsDOTDeclarations(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	src := ClaudeThemeDOT()
-	th, err := ParseTheme(src)
+	src := claudeThemeDOT()
+	th, err := parseTheme(src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,10 +37,10 @@ func TestThemeIsDOTDeclarations(t *testing.T) {
 	if th.Source != src {
 		t.Error("a theme does not keep the DOT it was read from")
 	}
-	if th.Face() != "monospace" {
-		t.Errorf("face is %q with no fontname declared", th.Face())
+	if th.face() != "monospace" {
+		t.Errorf("face is %q with no fontname declared", th.face())
 	}
-	if _, err := ParseTheme("node ["); err == nil {
+	if _, err := parseTheme("node ["); err == nil {
 		t.Error("an unclosed declaration parsed")
 	}
 }

@@ -38,8 +38,8 @@ import (
 
 // drawPixels is the pixels rung: the rows that show a picture, or nil.
 func drawPixels(src string, width int) []string {
-	r := ProbeRaster()
-	if r == nil || !hookGeom.OK() {
+	r := probeRaster()
+	if r == nil || !hookGeom.ok() {
 		return nil
 	}
 	png, p, err := pixelCut(r, src, width, hookGeom)
@@ -69,12 +69,12 @@ func drawPixels(src string, width int) []string {
 // rows; top-down it keeps 0.97 in 56. An error is a picture that will
 // not fit either way — too narrow to be anything, or taller than
 // drawMaxRows.
-func pixelCut(r *Raster, src string, width int, geom PxGeom) ([]byte, picture, error) {
-	if r == nil || !geom.OK() {
+func pixelCut(r *raster, src string, width int, geom pxGeom) ([]byte, picture, error) {
+	if r == nil || !geom.ok() {
 		return nil, picture{}, errors.New("no rasteriser or no cell size")
 	}
-	if width > len(RowColumnDiacritics) {
-		width = len(RowColumnDiacritics)
+	if width > len(rowColumnDiacritics) {
+		width = len(rowColumnDiacritics)
 	}
 	var svg []byte
 	cols, zoom := 0, 0.0
@@ -116,7 +116,7 @@ func pixelCut(r *Raster, src string, width int, geom PxGeom) ([]byte, picture, e
 // picture's width on exactly `cols` columns, and the rows that follow. An
 // error is a block that will not do — too narrow to be anything, or
 // taller than drawMaxRows.
-func pixelZoom(svg []byte, cols int, geom PxGeom) (float64, int, error) {
+func pixelZoom(svg []byte, cols int, geom pxGeom) (float64, int, error) {
 	if cols < 4 {
 		return 0, 0, errors.New("too narrow to draw")
 	}
@@ -127,7 +127,7 @@ func pixelZoom(svg []byte, cols int, geom PxGeom) (float64, int, error) {
 	pxW, pxH := ptW*pxPerPt, ptH*pxPerPt
 	zoom := float64(cols*geom.CellW) / pxW
 	rows := int(math.Ceil(pxH * zoom / float64(geom.CellH)))
-	if rows < 1 || rows > drawMaxRows || rows > len(RowColumnDiacritics) {
+	if rows < 1 || rows > drawMaxRows || rows > len(rowColumnDiacritics) {
 		return 0, 0, fmt.Errorf("%d rows; the ceiling is %d", rows, drawMaxRows)
 	}
 	if zoom > rasterMaxZoom {
@@ -138,7 +138,7 @@ func pixelZoom(svg []byte, cols int, geom PxGeom) (float64, int, error) {
 
 // pixelFit rasterises a laid-out picture into a block `cols` wide, at the
 // zoom pixelZoom chose: the pixels, and the rows they stand on.
-func pixelFit(r *Raster, svg []byte, cols int, geom PxGeom) ([]byte, int, error) {
+func pixelFit(r *raster, svg []byte, cols int, geom pxGeom) ([]byte, int, error) {
 	zoom, rows, err := pixelZoom(svg, cols, geom)
 	if err != nil {
 		return nil, 0, err
@@ -221,11 +221,11 @@ func placeholderRows(id uint32, cols, rows int) []string {
 		var b strings.Builder
 		b.WriteString("\x1b[38;5;" + strconv.Itoa(int(lo)) + "m")
 		for c := 0; c < cols; c++ {
-			b.WriteRune(PlaceholderRune)
-			b.WriteRune(RowColumnDiacritics[r])
-			b.WriteRune(RowColumnDiacritics[c])
+			b.WriteRune(placeholderRune)
+			b.WriteRune(rowColumnDiacritics[r])
+			b.WriteRune(rowColumnDiacritics[c])
 			if hi > 0 {
-				b.WriteRune(RowColumnDiacritics[hi])
+				b.WriteRune(rowColumnDiacritics[hi])
 			}
 		}
 		b.WriteString("\x1b[39m")

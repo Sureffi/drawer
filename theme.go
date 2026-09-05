@@ -51,12 +51,12 @@ var claudePalettes = map[string]map[string]string{
 	"light-daltonized": {"claude": "#ff9933", "text": "#000000", "subtle": "#afafaf", "inactive": "#666666", "success": "#006699", "userMessageBackground": "#dcdcdc"},
 }
 
-// ClaudeThemeDOT is Claude Code's theme as a theme: its palette on the
+// claudeThemeDOT is Claude Code's theme as a theme: its palette on the
 // picture. A node is drawn as the user's own message is — that background
 // for the fill, the text colour for the label — with claude, the accent,
 // for every stroke; an edge label is in success, a cluster's outline in
 // inactive and its caption in subtle.
-func ClaudeThemeDOT() string {
+func claudeThemeDOT() string {
 	p := claudePalette()
 	return "graph [bgcolor=transparent, pad=0.15, color=\"" + p["inactive"] + "\", fontcolor=\"" + p["subtle"] + "\", style=\"rounded,dashed\", penwidth=1]\n" +
 		"node  [shape=box, style=rounded, fillcolor=\"" + p["userMessageBackground"] + "\", color=\"" + p["claude"] + "\", fontcolor=\"" + p["text"] + "\", penwidth=1.4]\n" +
@@ -152,20 +152,20 @@ func jsonString(path, key string) string {
 	return s
 }
 
-// Theme is a parsed theme: for each kind of object, what it declares, and
+// theme is a parsed theme: for each kind of object, what it declares, and
 // the DOT it was read from.
-type Theme struct {
+type theme struct {
 	Graph, Node, Edge map[string]string
 	Source            string
 }
 
-// ThemeSource is the theme in force as DOT: the file LoadTheme read, else
-// Claude Code's theme as ClaudeThemeDOT writes it.
-func ThemeSource() string { return currentTheme().Source }
+// themeSource is the theme in force as DOT: the file loadTheme read, else
+// Claude Code's theme as claudeThemeDOT writes it.
+func themeSource() string { return currentTheme().Source }
 
-// Face is the font the picture is set in: the theme's fontname, from
+// face is the font the picture is set in: the theme's fontname, from
 // whichever kind declares one, or the terminal's generic monospace.
-func (t *Theme) Face() string {
+func (t *theme) face() string {
 	for _, m := range []map[string]string{t.Node, t.Graph, t.Edge} {
 		if f := m["fontname"]; f != "" {
 			return f
@@ -181,11 +181,11 @@ const (
 	agEdge  = 2
 )
 
-// ParseTheme reads a theme from DOT declarations. The declarations are
+// parseTheme reads a theme from DOT declarations. The declarations are
 // parsed inside a graph of their own, and what that graph declares as its
 // defaults is the theme.
-func ParseTheme(src string) (*Theme, error) {
-	th := &Theme{Graph: map[string]string{}, Node: map[string]string{}, Edge: map[string]string{}, Source: src}
+func parseTheme(src string) (*theme, error) {
+	th := &theme{Graph: map[string]string{}, Node: map[string]string{}, Edge: map[string]string{}, Source: src}
 	err := door("digraph {\n"+src+"\n}\n", func(_ context.Context, _ *graphviz.Graphviz, graph *cgraph.Graph) error {
 		for kind, m := range map[int]map[string]string{agGraph: th.Graph, agNode: th.Node, agEdge: th.Edge} {
 			var sym *cgraph.Symbol
@@ -208,14 +208,14 @@ func ParseTheme(src string) (*Theme, error) {
 	return th, nil
 }
 
-// LoadTheme makes a theme file the theme, or says what is wrong with it and
+// loadTheme makes a theme file the theme, or says what is wrong with it and
 // changes nothing.
-func LoadTheme(path string) error {
+func loadTheme(path string) error {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	th, err := ParseTheme(string(src))
+	th, err := parseTheme(string(src))
 	if err != nil {
 		return err
 	}
@@ -223,19 +223,19 @@ func LoadTheme(path string) error {
 	return nil
 }
 
-var theme *Theme
+var loaded *theme
 
-func setTheme(t *Theme) { theme = t }
+func setTheme(t *theme) { loaded = t }
 
-// currentTheme is the theme in force: what LoadTheme set, else Claude
+// currentTheme is the theme in force: what loadTheme set, else Claude
 // Code's.
-func currentTheme() *Theme {
-	if theme == nil {
-		th, err := ParseTheme(ClaudeThemeDOT())
+func currentTheme() *theme {
+	if loaded == nil {
+		th, err := parseTheme(claudeThemeDOT())
 		if err != nil {
 			panic("drawer: the derived theme does not parse: " + err.Error())
 		}
-		theme = th
+		loaded = th
 	}
-	return theme
+	return loaded
 }

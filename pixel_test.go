@@ -36,11 +36,11 @@ func TestPlaceholderRowsNameTheirImageOnEveryCell(t *testing.T) {
 			t.Fatalf("row %d does not open with a 256-colour foreground: %q", r, row)
 		}
 		plain := stripSGR(row)
-		cells := strings.Count(plain, string(PlaceholderRune))
+		cells := strings.Count(plain, string(placeholderRune))
 		if cells != 12 {
 			t.Fatalf("row %d has %d placeholder cells, want 12", r, cells)
 		}
-		want := string(PlaceholderRune) + string(RowColumnDiacritics[r]) + string(RowColumnDiacritics[0])
+		want := string(placeholderRune) + string(rowColumnDiacritics[r]) + string(rowColumnDiacritics[0])
 		if !strings.HasPrefix(plain, want) {
 			t.Fatalf("row %d does not start with row-then-column marks", r)
 		}
@@ -384,11 +384,11 @@ func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
 	t.Cleanup(func() { setTheme(nil) })
 	setTheme(nil)
 	var zooms []float64
-	r := &Raster{name: "stub", run: func(_ []byte, zoom float64) ([]byte, error) {
+	r := &raster{name: "stub", run: func(_ []byte, zoom float64) ([]byte, error) {
 		zooms = append(zooms, zoom)
 		return []byte("png"), nil
 	}}
-	geom := PxGeom{CellW: 10, CellH: 24}
+	geom := pxGeom{CellW: 10, CellH: 24}
 	chain := func(n int) string {
 		var b strings.Builder
 		b.WriteString("digraph { rankdir=LR; ")
@@ -414,7 +414,7 @@ func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
 	if last() < 1 {
 		t.Errorf("flipped top-down and still squeezed: zoom %v", last())
 	}
-	_, p, err = pixelCut(r, wide, len(RowColumnDiacritics), geom)
+	_, p, err = pixelCut(r, wide, len(rowColumnDiacritics), geom)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -443,7 +443,7 @@ func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
 // The offline picture is the hook's picture: cut to whole columns of the
 // cell it was asked for. Skipped where there is nothing to rasterise with.
 func TestRunPNGWritesTheHooksPicture(t *testing.T) {
-	if FindRaster() == nil {
+	if findRaster() == nil {
 		t.Skip("no rasteriser on the PATH")
 	}
 	dir := t.TempDir()
@@ -452,8 +452,8 @@ func TestRunPNGWritesTheHooksPicture(t *testing.T) {
 	if err := os.WriteFile(dot, []byte("digraph { rankdir=LR; a -> b [label=\"x\"]; b -> c }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code := RunPNG(dot, png, 100, PxGeom{CellW: 10, CellH: 24}); code != 0 {
-		t.Fatalf("RunPNG exited %d", code)
+	if code := runPNG(dot, png, 100, pxGeom{CellW: 10, CellH: 24}); code != 0 {
+		t.Fatalf("runPNG exited %d", code)
 	}
 	b, err := os.ReadFile(png)
 	if err != nil {
@@ -474,7 +474,7 @@ func TestRunPNGWritesTheHooksPicture(t *testing.T) {
 // own ids, when the theme in force is not the one they stand in — each
 // once, however often it was drawn — and not otherwise.
 func TestPixelLedgerRepaintsUnderTheOldIDs(t *testing.T) {
-	r := FindRaster()
+	r := findRaster()
 	if r == nil {
 		t.Skip("no rasteriser on the PATH")
 	}
@@ -488,7 +488,7 @@ func TestPixelLedgerRepaintsUnderTheOldIDs(t *testing.T) {
 	if err := os.WriteFile(tty, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	geom := PxGeom{CellW: 10, CellH: 24}
+	geom := pxGeom{CellW: 10, CellH: 24}
 	a := picture{Src: "digraph { a -> b }", Cols: 20, Rows: 3, Geom: geom}
 	b := picture{Src: "digraph { c -> d }", Cols: 20, Rows: 3, Geom: geom}
 	recordPicture("s1", a)
@@ -534,11 +534,11 @@ func TestPixelLedgerRepaintsAsLaidOut(t *testing.T) {
 		t.Fatal(err)
 	}
 	var got []byte
-	r := &Raster{name: "stub", run: func(svg []byte, _ float64) ([]byte, error) {
+	r := &raster{name: "stub", run: func(svg []byte, _ float64) ([]byte, error) {
 		got = svg
 		return []byte("png"), nil
 	}}
-	geom := PxGeom{CellW: 10, CellH: 24}
+	geom := pxGeom{CellW: 10, CellH: 24}
 	recordPicture("s1", picture{Src: "digraph { rankdir=LR; a -> b }", Cols: 12, Rows: 7, Geom: geom, Rankdir: cgraph.TBRank})
 	withTheme(t, `node [color=red]`)
 	if n := repaintPictures("s1", tty, r); n != 1 {

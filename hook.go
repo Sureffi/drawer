@@ -73,7 +73,7 @@ func ioctl(fd uintptr, req uintptr, arg unsafe.Pointer) error {
 // hookGeom is what the window said about itself: cells, and the pixel
 // size of a cell where the terminal reports one (kitty does; most leave
 // it zero, which reads as no pixels).
-var hookGeom PxGeom
+var hookGeom pxGeom
 
 func hookSize() (width int) {
 	cols := 0
@@ -82,7 +82,7 @@ func hookSize() (width int) {
 		if ioctl(f.Fd(), syscall.TIOCGWINSZ, unsafe.Pointer(&ws)) == nil && ws.cols > 0 {
 			cols = int(ws.cols)
 			if ws.x > 0 && ws.y > 0 && ws.rows > 0 {
-				hookGeom = PxGeom{CellW: int(ws.x) / cols, CellH: int(ws.y) / int(ws.rows)}
+				hookGeom = pxGeom{CellW: int(ws.x) / cols, CellH: int(ws.y) / int(ws.rows)}
 			}
 		}
 		f.Close()
@@ -103,20 +103,20 @@ func hookSize() (width int) {
 	return cols
 }
 
-// Tee is where a live turn is written down, one payload per line, in
+// tee is where a live turn is written down, one payload per line, in
 // exactly the shape -deltas reads. One armed session therefore produces a
 // fixture rather than a log. It is -hooktee on the command line, or
 // DRAWER_TEE in the environment: a variable set for claude — the shell's,
 // or settings.json's `env` — reaches a hook (measured on 2.1.261; an
 // earlier measurement said the environment was scrubbed, and on 2.1.257
 // it was not either way that mattered here).
-var Tee string
+var tee string
 
 func teePayload(raw []byte) {
-	if Tee == "" {
+	if tee == "" {
 		return
 	}
-	f, err := os.OpenFile(Tee, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(tee, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return
 	}
@@ -124,10 +124,10 @@ func teePayload(raw []byte) {
 	f.Close()
 }
 
-// RunHook is the whole of the -hook entry point: one payload in, one
+// runHook is the whole of the -hook entry point: one payload in, one
 // replacement out, through drawBlock. Any failure prints an empty object,
 // which CC reads as "display the original".
-func RunHook() int {
+func runHook() int {
 	raw, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		fmt.Print("{}")
@@ -144,12 +144,12 @@ func RunHook() int {
 	// The first delta of a message is the first thing the hook hears after
 	// a theme switch; pixelledger.go says why, and what is repainted.
 	if in.Index == 0 && pickRung() == "pixels" {
-		repaintPictures(hookSession, parentTTYOut(), ProbeRaster())
+		repaintPictures(hookSession, parentTTYOut(), probeRaster())
 	}
 	st, done := takeTurn(in.MessageID, in.Index, turnPatience)
 	defer done()
 	before := st
-	text := Stream(in.Delta, in.Final, &st, func(src string, indent int) []string {
+	text := stream(in.Delta, in.Final, &st, func(src string, indent int) []string {
 		return drawBlock(src, width-indent)
 	})
 	st.Next = max(st.Next, in.Index+1)
@@ -185,12 +185,12 @@ func hookTerm() string {
 	return ""
 }
 
-// Context is what a model should know at the start of a session, for a
+// sessionContext is what a model should know at the start of a session, for a
 // SessionStart hook to hand it: that a ```dot fence in a reply is drawn in
 // place, and what this terminal's rung can draw, which is what a graph
 // should be written for. Without it a model that has never heard of the
 // hook writes mermaid, or boxes out of hyphens, and neither is a picture.
-func Context() string {
+func sessionContext() string {
 	hookSize()
 	var can string
 	switch pickRung() {

@@ -57,8 +57,8 @@ func drawBlock(src string, width int) []string {
 	// notice, in the same fence: one fence in, one fence out is the law the
 	// oracle holds the wire to, and a reader gets both the reason and the
 	// DOT it was about.
-	reason := CutReason(src, width, drawMaxRows)
-	notice := DrawNotice(reason, width, 8)
+	reason := cutReason(src, width, drawMaxRows)
+	notice := drawNotice(reason, width, 8)
 	if notice == nil {
 		return nil
 	}
@@ -75,9 +75,9 @@ const drawMaxRows = 120
 // fence wraps rows in a bare fence: verbatim, monospace, no caption.
 func fence(rows []string) []string {
 	out := make([]string, 0, len(rows)+2)
-	out = append(out, FenceTick)
+	out = append(out, fenceTick)
 	out = append(out, rows...)
-	out = append(out, FenceTick)
+	out = append(out, fenceTick)
 	return out
 }
 
@@ -95,22 +95,22 @@ func trimBlank(rows []string) []string {
 	return rows[lo:hi]
 }
 
-// Rung picks the rung: cells, braille, octants, pixels, or auto,
+// wantRung picks the rung: cells, braille, octants, pixels, or auto,
 // which takes the best the terminal in front of us can show.
-var Rung = "auto"
+var wantRung = "auto"
 
 // pickRung answers which drawing this terminal gets. `auto` reads the
 // terminal: pixels want kitty, a cell size in pixels and a rasteriser;
 // octants want a terminal that draws them itself, which today means kitty
 // or ghostty; everything else gets braille, which every font carries.
 func pickRung() string {
-	switch Rung {
+	switch wantRung {
 	case "cells", "braille", "octants", "pixels":
-		return Rung
+		return wantRung
 	}
 	term := hookTerm()
 	kitty := strings.Contains(term, "kitty")
-	if kitty && hookGeom.OK() && ProbeRaster() != nil {
+	if kitty && hookGeom.ok() && probeRaster() != nil {
 		return "pixels"
 	}
 	if kitty || strings.Contains(term, "ghostty") {

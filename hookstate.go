@@ -73,8 +73,8 @@ func sweepState(dir string, age time.Duration) {
 	}
 }
 
-func loadState(msgID string) State {
-	var s State
+func loadState(msgID string) state {
+	var s state
 	p := statePath(msgID)
 	sweepState(filepath.Dir(p), 10*time.Minute)
 	b, err := os.ReadFile(p)
@@ -87,7 +87,7 @@ func loadState(msgID string) State {
 
 // saveState keeps the state for the next delta's process, or at the
 // message's final delta takes it away, lock and all.
-func saveState(msgID string, s State, final bool) {
+func saveState(msgID string, s state, final bool) {
 	if final {
 		os.Remove(statePath(msgID))
 		os.Remove(lockPath(msgID))
@@ -108,7 +108,7 @@ const turnPatience = 2 * time.Second
 // state as the process before left it, under the message's lock, which
 // the caller holds through the draw and releases with done. A delta the
 // state has already counted past — a repeat — takes its turn at once.
-func takeTurn(msgID string, index int, patience time.Duration) (State, func()) {
+func takeTurn(msgID string, index int, patience time.Duration) (state, func()) {
 	f, err := os.OpenFile(lockPath(msgID), os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return loadState(msgID), func() {}

@@ -1,0 +1,129 @@
+// notice.go — a drawing that says why there is no drawing.
+//
+// The old answer to a fence that would not draw was to leave the source
+// showing. That is honest and it is readable, and it is also silent about
+// the one thing the reader wants: whether this is source because somebody
+// asked for source, or because something failed. A window three columns
+// too narrow and a graph with a typo in it looked identical.
+//
+// So the failure gets drawn too, over the source, in the same fence.
+
+package main
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/goccy/go-graphviz/cgraph"
+)
+
+// noticeChrome is the border and padding a notice spends on itself.
+const noticeChrome = 4
+
+// drawNotice renders a bordered box carrying reason, sized for a w by h
+// region. Returns nil when there is not enough room to say anything —
+// a notice too small to read is worse than the source it replaced.
+func drawNotice(reason string, w, h int) []string {
+	if h < 3 || w < 24 {
+		return nil
+	}
+	inner := w - noticeChrome
+	if inner > 72 {
+		inner = 72
+	}
+	body := wrapWords(reason, inner)
+	if len(body) > h-2 {
+		body = body[:h-2]
+	}
+	if len(body) == 0 {
+		return nil
+	}
+	width := 0
+	for _, l := range body {
+		if n := textCells(l); n > width {
+			width = n
+		}
+	}
+	const title = " no diagram "
+	if n := textCells(title); width < n {
+		width = n
+	}
+
+	rows := make([]string, 0, len(body)+2)
+	top := "╭" + title + strings.Repeat("─", width-textCells(title)+2) + "╮"
+	rows = append(rows, top)
+	for _, l := range body {
+		rows = append(rows, "│ "+l+strings.Repeat(" ", width-textCells(l))+" │")
+	}
+	rows = append(rows, "╰"+strings.Repeat("─", width+2)+"╯")
+	return rows
+}
+
+// wrapWords breaks a reason at spaces, measured in cells rather than
+// bytes — the reasons carry × and box glyphs.
+func wrapWords(s string, width int) []string {
+	if width < 8 {
+		return nil
+	}
+	var out []string
+	line := ""
+	for _, word := range strings.Fields(s) {
+		switch {
+		case line == "":
+			line = word
+		case textCells(line)+1+textCells(word) <= width:
+			line += " " + word
+		default:
+			out = append(out, line)
+			line = word
+		}
+	}
+	if line != "" {
+		out = append(out, line)
+	}
+	return out
+}
+
+// cutReason works out why a source did not become a drawing in the space
+// it was given, and says it in terms the reader can act on. Width is the
+// only lever they have — rows are bounded by the window and the ladder
+// already spent them — so where widening would work, the notice names the
+// column count that does it rather than the row count that failed.
+//
+// Asked only on the failing path: it lays the graph out again to find out.
+func cutReason(src string, width, region int) string {
+	l, err := layoutDOT(src, "")
+	if err != nil {
+		return "graphviz could not read this: " + firstLine(err.Error())
+	}
+	if l == nil {
+		return "no graph in this fence"
+	}
+	lw, lh := footprint(l) // as written, usually left-right
+	if lw <= 0 || lh <= 0 {
+		return "nothing to draw"
+	}
+	th := 0
+	if td, err := layoutDOT(src, cgraph.TBRank); err == nil && td != nil {
+		if tw, h := footprint(td); tw > 0 && tw <= width {
+			th = h
+		}
+	}
+	switch {
+	case lh <= region && lw > width:
+		return fmt.Sprintf("needs %d columns, this window has %d", lw, width)
+	case th > 0 && lh <= region:
+		return fmt.Sprintf("%d rows top-down; %d columns would draw it sideways in %d",
+			th, lw, lh)
+	case th > 0:
+		return fmt.Sprintf("needs %d rows, this region has %d", th, region)
+	}
+	return fmt.Sprintf("needs %d by %d, this region is %d by %d", lw, lh, width, region)
+}
+
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
+}

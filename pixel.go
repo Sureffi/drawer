@@ -37,29 +37,29 @@ import (
 
 // ---------- capability ----------
 
-// Raster is the rasteriser this machine actually has: a name, and the one
+// raster is the rasteriser this machine actually has: a name, and the one
 // call it can make. A func rather than a command line so a law can stand in
 // a stub and read the zoom it was asked for, with no rasteriser anywhere in
 // the loop.
-type Raster struct {
+type raster struct {
 	name string
 	run  func(svg []byte, zoom float64) ([]byte, error)
 }
 
-// ProbeRaster answers whether pixels are possible here: the terminal is
+// probeRaster answers whether pixels are possible here: the terminal is
 // kitty and a rasteriser exists.
-func ProbeRaster() *Raster {
+func probeRaster() *raster {
 	if !strings.Contains(os.Getenv("TERM"), "kitty") && os.Getenv("KITTY_WINDOW_ID") == "" {
 		return nil
 	}
-	return FindRaster()
+	return findRaster()
 }
 
-// FindRaster is the rasteriser on the PATH, whatever the terminal: for a
+// findRaster is the rasteriser on the PATH, whatever the terminal: for a
 // picture that is going to a file rather than a screen.
-func FindRaster() *Raster {
+func findRaster() *raster {
 	if p, err := exec.LookPath("rsvg-convert"); err == nil {
-		return &Raster{name: "rsvg-convert", run: func(svg []byte, zoom float64) ([]byte, error) {
+		return &raster{name: "rsvg-convert", run: func(svg []byte, zoom float64) ([]byte, error) {
 			return rasterExec(p, svg, "--zoom", strconv.FormatFloat(zoom, 'f', 4, 64))
 		}}
 	}
@@ -67,7 +67,7 @@ func FindRaster() *Raster {
 		// magick has no --zoom: it rasterises SVG at a density, and 96dpi is
 		// the density rsvg renders at unzoomed, so the same number means the
 		// same picture on either.
-		return &Raster{name: "magick", run: func(svg []byte, zoom float64) ([]byte, error) {
+		return &raster{name: "magick", run: func(svg []byte, zoom float64) ([]byte, error) {
 			return rasterExec(p, svg, "-background", "none",
 				"-density", strconv.FormatFloat(96*zoom, 'f', 2, 64), "svg:-", "png:-")
 		}}
@@ -104,14 +104,14 @@ func rasterExec(bin string, svg []byte, args ...string) ([]byte, error) {
 
 // ---------- the terminal's pixel geometry ----------
 
-// PxGeom is how big a cell is in pixels, measured from the terminal itself:
+// pxGeom is how big a cell is in pixels, measured from the terminal itself:
 // TIOCGWINSZ carries the window's pixel size beside its cell size, so the
 // answer is already there and does not have to be asked for with an escape
 // and waited on. Zero means the terminal did not answer — an ordinary thing
 // for a terminal to do — and reads here as no pixels.
-type PxGeom struct{ CellW, CellH int }
+type pxGeom struct{ CellW, CellH int }
 
-func (g PxGeom) OK() bool { return g.CellW > 0 && g.CellH > 0 }
+func (g pxGeom) ok() bool { return g.CellW > 0 && g.CellH > 0 }
 
 // ---------- SVG, themed ----------
 
@@ -258,7 +258,7 @@ func renderThemedSVG(src string, fontPt float64, force cgraph.RankDir) ([]byte, 
 		}
 		// graphviz writes Courier as a family with its generic behind it.
 		svg = bytes.ReplaceAll(buf.Bytes(),
-			[]byte(`font-family="`+pxLayoutFont+`,monospace"`), []byte(`font-family="`+th.Face()+`"`))
+			[]byte(`font-family="`+pxLayoutFont+`,monospace"`), []byte(`font-family="`+th.face()+`"`))
 		return nil
 	})
 	return svg, err
@@ -331,16 +331,16 @@ func fnv1a32(s string) uint32 {
 // tells kitty to draw that image's pixels there — and it is ordinary text
 // to everything else, which is the entire reason a picture can ride through
 // CC's display wire.
-const PlaceholderRune = '\U0010EEEE'
+const placeholderRune = '\U0010EEEE'
 
-// RowColumnDiacritics carries the row and column of a placeholder cell as
+// rowColumnDiacritics carries the row and column of a placeholder cell as
 // combining marks. Not guessed: this is kitty's own rowcolumn-diacritics.txt
 // (297 entries), fetched 2026-08-27 from
 // https://sw.kovidgoyal.net/kitty/graphics-protocol/ — combining class 230
 // characters from Unicode 6.0.0 with no decomposition mappings, so no
 // normalisation anywhere along the wire can fuse one into its base
 // character. Index is the number; the first is U+0305 for 0.
-var RowColumnDiacritics = [...]rune{
+var rowColumnDiacritics = [...]rune{
 	0x0305, 0x030D, 0x030E, 0x0310, 0x0312, 0x033D, 0x033E, 0x033F,
 	0x0346, 0x034A, 0x034B, 0x034C, 0x0350, 0x0351, 0x0352, 0x0357,
 	0x035B, 0x0363, 0x0364, 0x0365, 0x0366, 0x0367, 0x0368, 0x0369,

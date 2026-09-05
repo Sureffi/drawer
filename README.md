@@ -125,7 +125,7 @@ itself, declared once for every graph the hook draws.
     ./bin/drawer -show-theme
 
 prints the theme in force as DOT, which is where a theme file starts;
-`fixtures/tokyonight.dot` and `fixtures/tokyonight-day.dot` are two. A
+`themes/tokyonight.dot` and `themes/tokyonight-day.dot` are two. A
 theme file is the whole theme, not a patch on Claude Code's: what it leaves
 undeclared is graphviz's default. `graph [...]` is the root and every
 cluster alike. Three attributes are rules rather than values. `fontname`
@@ -264,6 +264,34 @@ session writes its own fixture with `DRAWER_TEE`.
 checksums file, the plugin zipped with all four inside, the sums pinned
 into the script, the marketplace pointed at the zip, commit, tag, push,
 GitHub release.
+
+**The tree.** One binary, one package.
+
+    main.go          the flags, and the entry
+    fence.go         the transducer: a fence in, a drawing or the same bytes out
+    hook.go          the MessageDisplay wire: the payload, the width, the context line
+    hookstate.go     what one delta's process leaves for the next
+    hookoracle.go    -deltas: the three laws a replay is held to
+    hooktty_*.go     the parent's terminal, by platform
+    draw.go          the rungs, best first, each failing open to the next
+    layout.go        graphviz: the one door, and the scale from inches to cells
+    cells.go         the cells rung: a canvas of box-drawing characters
+    route.go         the cells rung: edges routed on the grid
+    notice.go        why there is no drawing, drawn
+    subcell.go       the braille and octant rung
+    octants.go       the octant glyphs, by their bits
+    pixel.go         the pixels rung: the rasteriser, the themed SVG, the placeholders
+    pixelhook.go     the pixels rung in the hook: the cut, and the file down the tty
+    pixellabel.go    an edge label on its line, by rewriting the graph
+    pixelledger.go   the pictures a session drew, repainted at a theme switch
+    theme.go         Claude Code's theme, and a theme file
+    cli.go           -dot and -png, offline
+    scripts/drawer   the plugin's two hooks, one script
+    hooks/ .claude-plugin/   the plugin's manifests
+    themes/          two theme files to start from
+    testdata/        a graph, and the recorded delta streams -deltas replays
+    check.sh         every oracle, one command
+    release.sh       the release, one command
 
 ## license
 

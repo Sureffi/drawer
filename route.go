@@ -301,11 +301,11 @@ func inDir(head rune) int {
 type pqItem struct{ st, cost int }
 type pq []pqItem
 
-func (q pq) Len() int            { return len(q) }
-func (q pq) Less(a, b int) bool  { return q[a].cost < q[b].cost }
-func (q pq) Swap(a, b int)       { q[a], q[b] = q[b], q[a] }
-func (q *pq) Push(x interface{}) { *q = append(*q, x.(pqItem)) }
-func (q *pq) Pop() interface{} {
+func (q pq) Len() int           { return len(q) }
+func (q pq) Less(a, b int) bool { return q[a].cost < q[b].cost }
+func (q pq) Swap(a, b int)      { q[a], q[b] = q[b], q[a] }
+func (q *pq) Push(x any)        { *q = append(*q, x.(pqItem)) }
+func (q *pq) Pop() any {
 	old := *q
 	n := len(old)
 	it := old[n-1]

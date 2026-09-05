@@ -37,7 +37,7 @@ type picture struct {
 	Src     string         `json:"src"`
 	Cols    int            `json:"cols"`
 	Rows    int            `json:"rows"`
-	Geom    PxGeom         `json:"geom"`
+	Geom    pxGeom         `json:"geom"`
 	Rankdir cgraph.RankDir `json:"rankdir,omitempty"`
 }
 
@@ -94,7 +94,7 @@ func recordPicture(session string, p picture) {
 // repaintPictures sends every picture in a session's ledger to the terminal
 // again, in the theme in force, when that is not the theme they stand in.
 // How many were sent; none when nothing changed, or nothing was drawn.
-func repaintPictures(session, tty string, r *Raster) int {
+func repaintPictures(session, tty string, r *raster) int {
 	if session == "" || r == nil {
 		return 0
 	}

@@ -43,30 +43,30 @@ func main() {
 	// and the session opens. Everywhere else — -dot, -png, -deltas — a bad
 	// theme is an answer.
 	if *themePath != "" {
-		if err := LoadTheme(*themePath); err != nil && !*hook && !*contextLine {
+		if err := loadTheme(*themePath); err != nil && !*hook && !*contextLine {
 			fmt.Fprintln(os.Stderr, "drawer: theme:", err)
 			os.Exit(1)
 		}
 	}
 
-	Rung = *render
-	w, h := ParseSize(*size, 100, 40)
+	wantRung = *render
+	w, h := parseSize(*size, 100, 40)
 
 	switch {
 	case *showTheme:
-		fmt.Print(ThemeSource())
+		fmt.Print(themeSource())
 	case *contextLine:
-		fmt.Print(Context())
+		fmt.Print(sessionContext())
 	case *dotDump != "" && *pngOut != "":
-		cw, ch := ParseSize(*cell, 10, 24)
-		os.Exit(RunPNG(*dotDump, *pngOut, w, PxGeom{CellW: cw, CellH: ch}))
+		cw, ch := parseSize(*cell, 10, 24)
+		os.Exit(runPNG(*dotDump, *pngOut, w, pxGeom{CellW: cw, CellH: ch}))
 	case *dotDump != "":
-		os.Exit(RunDotDump(*dotDump, w, h))
+		os.Exit(runDotDump(*dotDump, w, h))
 	case *deltaDump != "":
-		os.Exit(RunDeltas(*deltaDump, w))
+		os.Exit(runDeltas(*deltaDump, w))
 	case *hook:
-		Tee = *hooktee
-		os.Exit(RunHook())
+		tee = *hooktee
+		os.Exit(runHook())
 	default:
 		flag.Usage()
 		os.Exit(2)
