@@ -441,7 +441,7 @@ type gaps struct{ flow, cross int }
 // that loses an edge or a label is run again with more room. Every rung
 // costs area and buys lanes, and the first that keeps the whole graph is
 // the answer.
-var ladder = []gaps{{0, 0}, {2, 1}, {4, 2}, {8, 4}}
+var ladder = []gaps{{0, 0}, {1, 1}, {2, 2}, {4, 3}, {8, 5}}
 
 // Draw lays a graph out and draws it into a box `width` cells across and
 // at most `maxRows` deep. Returns nil where the drawing will not fit,
@@ -627,9 +627,9 @@ func attempt(g *layout.Graph, sl slots, extra gaps, width, maxRows int) ([]strin
 // the ladder is paying on top of it, and room in the gap for the widest
 // label that has to ride through it.
 func spacing(g *layout.Graph, sl slots, extra gaps, bs []bound, room []int, wide []int) ([]int, []int) {
-	flow, cross := 3, 4 // top-down: ranks stack in rows, lanes spread in columns
+	flow, cross := 2, 3 // top-down: ranks stack in rows, lanes spread in columns
 	if sl.horiz {
-		flow, cross = 6, 2 // left-right: ranks march in columns, lanes stack in rows
+		flow, cross = 5, 1 // left-right: ranks march in columns, lanes stack in rows
 	}
 	flow += extra.flow
 	cross += extra.cross
@@ -671,10 +671,12 @@ func spacing(g *layout.Graph, sl slots, extra gaps, bs []bound, room []int, wide
 		if !b.ok {
 			continue
 		}
-		beforeX[b.col0] = max(beforeX[b.col0], b.offL())
-		afterX[b.col1] = max(afterX[b.col1], b.offR())
-		beforeY[b.row0] = max(beforeY[b.row0], b.offT())
-		afterY[b.row1] = max(afterY[b.row1], b.offB())
+		// One cell past the frame, so an edge that has to stop outside it
+		// has somewhere to stop that a passing line has not already taken.
+		beforeX[b.col0] = max(beforeX[b.col0], b.offL()+1)
+		afterX[b.col1] = max(afterX[b.col1], b.offR()+1)
+		beforeY[b.row0] = max(beforeY[b.row0], b.offT()+1)
+		afterY[b.row1] = max(afterY[b.row1], b.offB()+1)
 	}
 	fit := func(gap, before, after []int) {
 		for i := range gap {

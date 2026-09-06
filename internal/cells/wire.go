@@ -16,6 +16,8 @@
 package cells
 
 import (
+	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -166,16 +168,29 @@ func routeAll(cv *Canvas, g *layout.Graph, sl slots, boxes, frames []Box, encl [
 			// edge stops outside the frame instead, with a corridor of
 			// blanks kept clear behind it, which is exactly what a reader
 			// walks when it looks for the box an end meant.
-			ok := true
-			tp, ok = reachOut(cv, t, pt, tb, frames, outside(encl[e.Tail], encl[e.Head]), hb.X+hb.W/2, hb.Y+hb.H/2)
-			if ok {
-				hp, ok = reachOut(cv, t, pt, hb, frames, outside(encl[e.Head], encl[e.Tail]), tb.X+tb.W/2, tb.Y+tb.H/2)
-			}
-			if ok {
-				ps = scoutEdge(cv, t, tp, hp, e.Label != "", budget)
+			// Three tries at a pair of ports. A port that the scout can
+			// find no way out of is a port spent: it stays spent, and the
+			// next try takes the next place on the wall. This is the whole
+			// of the repair pass — an edge that will not go one way is
+			// asked to leave by another door rather than dropped.
+			for try := 0; try < 3; try++ {
+				ok := true
+				tp, ok = reachOut(cv, t, pt, tb, frames, outside(encl[e.Tail], encl[e.Head]), hb.X+hb.W/2, hb.Y+hb.H/2)
+				if ok {
+					hp, ok = reachOut(cv, t, pt, hb, frames, outside(encl[e.Head], encl[e.Tail]), tb.X+tb.W/2, tb.Y+tb.H/2)
+				}
+				if !ok {
+					break
+				}
+				if ps = scoutEdge(cv, t, tp, hp, e.Label != "", budget); ps != nil {
+					break
+				}
 			}
 		}
 		if ps == nil {
+			if os.Getenv("DBG") != "" {
+				fmt.Fprintf(os.Stderr, "SHORT %s->%s tp=%v hp=%v\n", g.Nodes[e.Tail].Name, g.Nodes[e.Head].Name, tp, hp)
+			}
 			short++
 			continue
 		}
