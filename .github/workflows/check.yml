@@ -11,15 +11,14 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - run: sudo apt-get update -q && sudo apt-get install -y -q librsvg2-bin
       - run: scripts/check.sh
   # macOS is a platform this plugin ships to and nobody in the fleet runs, so
   # this is the only Mac it will ever be on. The build-tagged files — the
   # parent's tty read off ps, the environment that cannot be read at all —
-  # already compile under the cross-vet; here they run. librsvg is what
-  # unskips the two laws that need a rasteriser and the png stage; without it
-  # check.sh says so and carries on, so a brew that fails is not this job
-  # failing and the step says as much.
+  # already compile under the cross-vet; here they run. Nothing is installed
+  # first on either runner: the binary carries its layout and its type and
+  # paints its own pictures, so a checkout and a Go toolchain are the whole
+  # of what check.sh needs.
   macos:
     runs-on: macos-latest
     steps:
@@ -27,6 +26,4 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - run: brew install librsvg
-        continue-on-error: true
       - run: scripts/check.sh

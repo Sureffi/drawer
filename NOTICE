@@ -4,3 +4,10 @@ A built binary embeds graphviz, compiled to WebAssembly, through
 github.com/goccy/go-graphviz. graphviz is licensed under the Eclipse Public
 License 1.0 (https://graphviz.org/license/); redistributing a built binary
 redistributes it.
+
+A built binary embeds the Go Mono fonts, through
+golang.org/x/image/font/gofont. They were made for the Go project by
+Bigelow & Holmes and are licensed under the Go project's own BSD-style
+licence, whose text is carried with them at
+golang.org/x/image/font/gofont/ttfs/README; redistributing a built binary
+redistributes them.

@@ -312,9 +312,10 @@ func TestHookDeltasTakeTurns(t *testing.T) {
 // is — not slow, stopped — and it is what a hook has to stay quick against,
 // because CC is not painting while this process thinks.
 //
-// The PATH is the stub's own directory and nothing else, so there is no
-// rasteriser to find either: the pixels rung fails open to the strokes, and
-// the strokes are the drawing this law counts.
+// The PATH is the stub's own directory and nothing else, and there is no
+// terminal behind this process to answer with a cell size, so the pixels
+// rung fails open to the strokes — and the strokes are the drawing this law
+// counts.
 func wedgedTmux(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()

@@ -22,15 +22,14 @@ chosen by `auto`, which reads the terminal, or by `DRAWER_RENDER`:
 
 | rung      | draws                                             | needs                              |
 |-----------|---------------------------------------------------|------------------------------------|
-| `pixels`  | graphviz's own picture, in Claude Code's theme, in the transcript | a local kitty on Linux, not through tmux; `rsvg-convert` or `magick` on the box |
+| `pixels`  | graphviz's own picture, in Claude Code's theme, in the transcript | a local kitty on Linux, not through tmux |
 | `octants` | strokes at 2×4 per cell, solid; labels as glyphs  | a terminal that draws Unicode 16 octants itself: kitty, ghostty |
 | `braille` | the same, dotted                                  | any font — every one has braille   |
 | `cells`   | box-drawing characters, routed edges              | nothing but this binary            |
 
-The session above is the first rung, and it is the one rung that wants
-something on the box: the layout comes out as SVG, and `rsvg-convert`,
-else `magick`, makes the pixels of it. Every other rung is the binary
-alone.
+The session above is the first rung, and it wants nothing on the box
+either: graphviz hands back its own drawing operations and the binary
+paints them, in type it carries. Every rung is the binary alone.
 
 Two hooks. `SessionStart` puts the binary in place and prints one line
 into the model's context: that a ```dot fence draws in place, and what
@@ -54,10 +53,10 @@ Code 2.1.261):
 
 `drawer -doctor` says what this terminal gets and why: the version, the
 terminal, the window it found and where that number came from, the cell in
-pixels, whether this is kitty, the rasteriser on the PATH, the rung in
-force and the one asked for, the theme it paints in, the state directory,
-and the file `DRAWER_TEE` is recording to, where it is set — read out of the
-same run a hook is built from. It answers where the other doors would not:
+pixels, whether this is kitty, the rung in force and the one asked for, the
+theme it paints in, the state directory, and the file `DRAWER_TEE` is
+recording to, where it is set — read out of the same run a hook is built
+from. It answers where the other doors would not:
 a `-theme` file that will not read is a line in the report rather than an
 exit.
 
@@ -90,11 +89,14 @@ prints the theme in force as DOT, which is where a theme file starts;
 theme file is the whole theme, not a patch on Claude Code's: what it leaves
 undeclared is graphviz's default. `graph [...]` is the root and every
 cluster alike. Three attributes are rules rather than values. `fontname`
-names the face the picture is set in; the layout is still measured in
-Courier, so any monospace fits and a proportional face will not.
-`fontsize` yields to the cell when the theme has none. A node's
-`fillcolor` is a rule: a node the model filled keeps its own text colour,
-any other gets the theme's fill with `filled` added to its style. A theme
+may name a font file — an absolute path, or a file name found in the
+system font directories — and the picture is then set in that face;
+anything else, and any file that will not parse, leaves it in the Go Mono
+the binary carries. The layout is measured in Courier whatever it says, so
+a monospace file fits and a proportional one will not. `fontsize` yields to
+the cell when the theme has none. A node's `fillcolor` is a rule: a node the
+model filled keeps its own text colour, any other gets the theme's fill with
+`filled` added to its style. A theme
 the hook cannot read is Claude Code's, so the picture draws; `-theme FILE
 -dot g.dot` says what is wrong with the file, and `-theme FILE -dot g.dot
 -png out.png` shows what it draws, without a session.
@@ -144,11 +146,17 @@ deletes it, and shows the image in placeholder cells that ride through
 Claude Code as ordinary text. Linux, a local kitty, and not through tmux.
 The picture is drawn in Claude Code's own theme; which colours, below.
 
+The pixels are the binary's own. graphviz hands back every polygon,
+bezier, ellipse and text anchor it would have painted, and the rung paints
+that list itself, so the picture is graphviz's picture and nothing has to
+be installed for it.
+
 Type is measured in Courier — the one monospace the wasm's built-in metrics
-know exactly — and set in the terminal's face, at the size that puts one
-glyph in one cell, so a label is the terminal's own text and a node reads
-as text that grew a border. An edge label sits on its line and the line
-stops a glyph short of it on either side, as in the glyph rungs: the graph
+know exactly — and set in Go Mono, which the binary carries, at the size
+that puts one glyph in one cell, so a label stands at the terminal's own
+text size and a node reads as text that grew a border. An edge label sits on
+its line and the line stops a glyph short of it on either side, as in the
+glyph rungs: the graph
 is rewritten before layout so the label is a node on the edge, which is
 what dot does inside itself for a labelled edge anyway, down to halving
 `ranksep` for the doubled ranks and doubling every other edge's `minlen`,
@@ -215,8 +223,10 @@ with nothing but `claude`.
   whole suite on macOS, but a runner has no terminal, so the macOS path
   is still unverified where it matters; if it is wrong the width falls to
   `COLUMNS` and then 100, and pixels do not reach the terminal.
-- In an HTML label the pixels rung collapses the space between two spans
-  — `<b>bold</b> and` sets as "boldand". That is graphviz's SVG writer.
+- The pixels rung sets its type in Go Mono, and a script Go Mono has no
+  glyph for draws as nothing at all: `日本` and `☃` come out as empty space
+  in a box graphviz sized for them. The glyph rungs still draw them, being
+  the terminal's own text.
 - Pictures already drawn repaint at the next reply, not at the switch. A
   theme file that changes the type changes the layout, and a picture that
   no longer fits its old cut is left as it was.
@@ -278,19 +288,18 @@ binaries, a checksums file, the plugin zipped with all four inside, the
 sums pinned into the script, the marketplace pointed at the zip, commit,
 tag, push, GitHub release.
 
-**The tree.** One binary; eleven packages under `internal/`, and every
+**The tree.** One binary; ten packages under `internal/`, and every
 import points down this list.
 
     cmd/drawer/          the binary: os.Exit(drawer.Main(os.Args[1:]))
     internal/drawer      the flags, the hook wire, the ladder of rungs, the ledger
-    internal/pixel       the pixels rung: the rasteriser, the themed SVG, the cut, the placeholders
+    internal/pixel       the pixels rung: the themed drawing, the painter, the cut, the placeholders
     internal/theme       Claude Code's theme, and a theme file
     internal/subcell     the braille and octant rung, and the octant glyphs
     internal/cells       the cells rung: a canvas of box-drawing characters, and edges routed on it
     internal/notice      why there is no drawing, drawn
     internal/fence       the transducer: a fence in, a drawing or the same bytes out
-    internal/svgtest     graphviz's SVG as a law reads it; the one package here for the laws
-    internal/layout      graphviz: the one door, and the scale from inches to cells
+    internal/layout      graphviz: the one door, its drawing as data, and the scale from inches to cells
     internal/grid        a row of terminal cells, and what text costs in one
     internal/term        the parent's terminal: how big it is, and where its output goes
     scripts/drawer       the plugin's two hooks, one script
@@ -304,4 +313,5 @@ import points down this list.
 ## license
 
 MIT. The embedded `graphviz.wasm` carries graphviz's Eclipse Public
-License, and a built binary redistributes it; NOTICE says so.
+License, and the embedded Go Mono fonts carry the Go project's own licence;
+a built binary redistributes both. NOTICE says so.
