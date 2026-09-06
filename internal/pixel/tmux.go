@@ -44,6 +44,10 @@ type Tmux struct {
 	asked bool   // whether this process has run `show` yet
 	was   string // what it said
 	err   error  // or why it could not be asked at all
+
+	ownAsked bool   // whether this pane's own value has been read
+	own      string // what the pane itself was set to, nothing inherited
+	ownErr   error
 }
 
 // errNoPane is a tmux this process cannot name a pane in. TMUX_PANE is set
@@ -129,12 +133,18 @@ func (t *Tmux) Passthrough(ctx context.Context) (string, error) {
 // somebody else's tmux and drawer is a guest in it. The change reaches the
 // pane claude is running in and no other, it is never written to a file,
 // the server's own setting is left where it was, and it dies with the pane.
-// An option somebody already set on — on the server, or on this pane — is
-// read as on and nothing is written at all: -A asks for the value in force.
+// The policy, in three sentences. The value in force says whether an escape
+// gets through, and "on" and "all" both say yes — "all" is the more
+// permissive of the two, not the lesser, so a pane already sitting on it is
+// left exactly as it is. Anything else is asked again without -A, which
+// answers with what this pane itself was set to and nothing inherited from
+// the server, and a pane whose own value is "off" is a reader who said no
+// here: drawer leaves it alone and draws in glyphs. Only a pane with no
+// answer of its own is written to, and what it is written is "on".
 //
-// The note is empty where it was already on and there was nothing to do,
-// because a note about nothing is noise — and a second picture in the same
-// process finds it on, because setting it is what this wrote down.
+// The note is empty where it was already through and there was nothing to
+// do, because a note about nothing is noise — and a second picture in the
+// same process finds it on, because setting it is what this wrote down.
 func (t *Tmux) Allow(ctx context.Context) (string, bool) {
 	if t == nil {
 		return "", true
@@ -150,8 +160,18 @@ func (t *Tmux) Allow(ctx context.Context) (string, bool) {
 		return "tmux: allow-passthrough could not be asked about" + pane +
 			": " + reason(was, err), false
 	}
-	if was == "on" {
+	if was == "on" || was == "all" {
 		return "", true
+	}
+	own, err := t.PaneOption(ctx)
+	if err != nil {
+		return "tmux: allow-passthrough is " + quoted(was) + pane +
+			" and this pane's own value could not be read: " + reason(own, err), false
+	}
+	if own == "off" {
+		return "tmux: allow-passthrough is off" + pane +
+			", set there and not inherited from the server: a reader said no in this" +
+			" pane, so drawer leaves it and draws in glyphs", false
 	}
 	if out, err := t.allow(ctx); err != nil {
 		return "tmux: allow-passthrough is " + quoted(was) + pane +
@@ -160,6 +180,31 @@ func (t *Tmux) Allow(ctx context.Context) (string, bool) {
 	t.was, t.err = "on", nil
 	return "tmux: allow-passthrough was " + quoted(was) + "; set on" + pane +
 		" (this pane only, until it closes)", true
+}
+
+// PaneOption is what this pane itself was set to, with nothing inherited
+// from the server: "off" from here is a reader who said no in this pane,
+// and empty is a pane nobody has said anything about either way. -A is
+// deliberately absent — the value in force is the other question, and
+// Passthrough asks it.
+//
+// Asked once and remembered, like the other one, and asked at all only on
+// the path that would otherwise write: a pane already through costs no
+// exec here.
+func (t *Tmux) PaneOption(ctx context.Context) (string, error) {
+	if t == nil {
+		return "", nil
+	}
+	if !t.ownAsked {
+		t.ownAsked = true
+		if t.Pane == "" {
+			t.ownErr = errNoPane
+		} else {
+			out, err := t.run(ctx, "show", "-p", "-t", t.Pane, "-v", "allow-passthrough")
+			t.own, t.ownErr = strings.TrimSpace(out), err
+		}
+	}
+	return t.own, t.ownErr
 }
 
 // paneIn names the pane a note is about, and says so where there is none to

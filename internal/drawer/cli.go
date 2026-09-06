@@ -107,6 +107,11 @@ func runVersion(w io.Writer) int {
 // picture that is missing and a picture that was dropped, which is the one
 // question a reader under tmux actually has. Read only — the doctor asks
 // what is, and the hook is what turns it on.
+//
+// Where the value in force is not already through, the pane's own value is
+// read too, because that is the answer the hook would act on: a pane that
+// set itself off is one drawer will not write to, and a line saying it
+// would is a line that is not true.
 func (r run) muxLine(ctx context.Context) string {
 	if r.mux == nil {
 		return "no"
@@ -126,8 +131,18 @@ func (r run) muxLine(ctx context.Context) string {
 		// be told either, and a picture down this wire is a picture gone.
 		return "yes: " + pane + ", allow-passthrough could not be asked about: " + err.Error() +
 			" — no picture can cross this wire"
-	case was == "on":
-		return "yes: " + pane + ", allow-passthrough on"
+	case was == "on" || was == "all":
+		return "yes: " + pane + ", allow-passthrough " + was
+	}
+	own, err := r.mux.PaneOption(ctx)
+	switch {
+	case err != nil:
+		return "yes: " + pane + ", allow-passthrough " + quotedOpt(was) +
+			", and this pane's own value could not be read: " + err.Error() +
+			" — no picture can cross this wire"
+	case own == "off":
+		return "yes: " + pane + ", allow-passthrough off, set on the pane itself" +
+			": drawer leaves that alone and draws glyphs"
 	default:
 		return "yes: " + pane + ", allow-passthrough " + quotedOpt(was) +
 			": drawer sets it on for this pane, and this pane only, when it draws a picture"

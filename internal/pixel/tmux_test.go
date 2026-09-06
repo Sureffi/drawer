@@ -172,19 +172,29 @@ func TestATmuxHoldingThePipeStillAnswersInTime(t *testing.T) {
 	}
 }
 
-// countingTmux puts a tmux on the PATH that writes down every command it is
-// given and answers `show` with a passthrough nobody set. The file it writes
-// is the count.
-func countingTmux(t *testing.T) string {
+// optionTmux puts a tmux on the PATH that answers the two questions apart:
+// `show -A` with the value in force, and `show` without it with what the
+// pane itself was set to. It writes down which one it was asked, so a law
+// can count the execs as well as read the answers.
+func optionTmux(t *testing.T, inForce, own string) string {
 	t.Helper()
 	dir := t.TempDir()
 	log := filepath.Join(dir, "asked")
-	sh := "#!/bin/sh\nshift 2\necho \"$1\" >>" + log + "\ncase $1 in show) echo off;; esac\nexit 0\n"
+	sh := "#!/bin/sh\nshift 2\nc=$1\ncase \" $* \" in *' -A '*) c=show-A;; esac\n" +
+		"echo \"$c\" >>" + log + "\n" +
+		"case $c in show-A) echo '" + inForce + "';; show) echo '" + own + "';; esac\nexit 0\n"
 	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(sh), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return log
+}
+
+// countingTmux is that tmux with the server off and the pane itself unset:
+// the ordinary pane, the one drawer turns on.
+func countingTmux(t *testing.T) string {
+	t.Helper()
+	return optionTmux(t, "off", "")
 }
 
 // asked is what that tmux was asked to do, in order.
@@ -217,8 +227,8 @@ func TestThePassthroughIsAskedAboutOncePerProcess(t *testing.T) {
 	if note != "" {
 		t.Errorf("the note was written twice: %q", note)
 	}
-	if got := asked(t, log); len(got) != 2 || got[0] != "show" || got[1] != "set" {
-		t.Errorf("tmux was run %v; want one show and the one set that followed it", got)
+	if got := asked(t, log); len(got) != 3 || got[0] != "show-A" || got[1] != "show" || got[2] != "set" {
+		t.Errorf("tmux was run %v; want the two reads and the one set that followed them", got)
 	}
 }
 
@@ -232,7 +242,7 @@ func TestTheDoctorReadsTheSameMemory(t *testing.T) {
 			t.Fatalf("Passthrough: %v", err)
 		}
 	}
-	if got := asked(t, log); len(got) != 1 || got[0] != "show" {
+	if got := asked(t, log); len(got) != 1 || got[0] != "show-A" {
 		t.Errorf("tmux was run %v; want one show", got)
 	}
 }
@@ -261,5 +271,57 @@ func TestAnUnnamedPaneIsNotAPaneToWriteTo(t *testing.T) {
 	// the escape is still wrapped: the passthrough is a shape, not a pane
 	if got := mux.wrap("\x1bX"); got != "\x1bPtmux;\x1b\x1bX\x1b\\" {
 		t.Errorf("wrap needs a pane it does not have: %q", got)
+	}
+}
+
+// "all" is more than "on", not less: tmux forwards any DCS on it, so a pane
+// already sitting there is a pane a picture already crosses. Reading it as
+// "not on" wrote an option nobody needed written, into somebody else's
+// multiplexer, and narrowed what the reader had chosen.
+func TestAllIsAlreadyThrough(t *testing.T) {
+	log := optionTmux(t, "all", "all")
+	mux := &Tmux{Socket: "/nowhere", Pane: "%0"}
+	note, through := mux.Allow(t.Context())
+	if !through || note != "" {
+		t.Errorf("a pane on `all` said %q, through=%v; want nothing to do", note, through)
+	}
+	if got := asked(t, log); len(got) != 1 || got[0] != "show-A" {
+		t.Errorf("tmux was run %v; want the one question in force", got)
+	}
+}
+
+// A pane that says off in its own right is a reader who said no here, and
+// the server's value in force cannot tell them apart: -A answers "off" both
+// for a pane nobody set and for a pane somebody set off. So the pane is
+// asked without -A before anything is written, and an explicit off is left
+// exactly where it is — closed wire, glyphs, and the note says which of the
+// two it was.
+func TestAPaneThatSaidOffIsLeftAlone(t *testing.T) {
+	log := optionTmux(t, "off", "off")
+	mux := &Tmux{Socket: "/nowhere", Pane: "%0"}
+	note, through := mux.Allow(t.Context())
+	if through {
+		t.Errorf("a pane a reader set off was read as a wire a picture can cross")
+	}
+	if !strings.Contains(note, "set there and not inherited") {
+		t.Errorf("the note does not say the pane itself said no: %q", note)
+	}
+	if got := asked(t, log); len(got) != 2 || got[0] != "show-A" || got[1] != "show" {
+		t.Errorf("tmux was run %v; want the value in force and then the pane's own", got)
+	}
+}
+
+// A pane nobody has said anything about is the pane drawer writes to, and
+// the write is the only one it makes: the value in force is off because the
+// server's default is off, and the pane's own answer is empty.
+func TestAPaneNobodySetIsTheOneWritten(t *testing.T) {
+	log := optionTmux(t, "off", "")
+	mux := &Tmux{Socket: "/nowhere", Pane: "%0"}
+	note, through := mux.Allow(t.Context())
+	if !through || !strings.Contains(note, "set on") {
+		t.Errorf("an unset pane said %q, through=%v; want it turned on", note, through)
+	}
+	if got := asked(t, log); len(got) != 3 || got[0] != "show-A" || got[1] != "show" || got[2] != "set" {
+		t.Errorf("tmux was run %v; want both reads and the one write", got)
 	}
 }
