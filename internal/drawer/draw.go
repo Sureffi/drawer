@@ -50,7 +50,7 @@ func (r run) drawBlock(ctx context.Context, src string, width int) []string {
 		if rows := r.drawPixels(ctx, src, width); rows != nil {
 			return bare(rows)
 		}
-		pick = rungOctants // too narrow, too tall, out of time; the glyphs still can
+		pick = rungOctants // too narrow, too tall, out of time, or no way through to the terminal; the glyphs still can
 	}
 	if pick == rungOctants || pick == rungBraille {
 		if rows := subcell.Draw(ctx, src, width, pick == rungOctants); rows != nil {

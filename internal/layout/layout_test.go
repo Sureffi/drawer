@@ -59,3 +59,42 @@ func TestACancelledContextIsAnErrorNotAWait(t *testing.T) {
 		t.Error("a graph nobody could have parsed was called complete")
 	}
 }
+
+// A drawing answers for the things in it by name, and a name it does not
+// carry is nothing rather than the first thing it does carry: the pixels
+// rung walks it by name, the strokes read it the same way, and both would
+// otherwise draw the wrong object without a word. Its size comes off `bb`,
+// which every rung divides by, so a layout with no bounding box is an error
+// and not a zero-sized picture.
+func TestADrawingIsReadByName(t *testing.T) {
+	var d *Drawing
+	err := Door(t.Context(), `digraph { a -> b [label="x"] }`, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
+		var err error
+		d, err = Render(ctx, g, graph)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.W <= 0 || d.H <= 0 {
+		t.Fatalf("the drawing is %vx%v points", d.W, d.H)
+	}
+	if d.Object("a") == nil || d.Object("b") == nil {
+		t.Fatal("a node the source named is not in the drawing")
+	}
+	if o := d.Object("c"); o != nil {
+		t.Errorf("a name the drawing does not carry answered with %q", o.Name)
+	}
+	if d.Between("a", "b") == nil {
+		t.Error("the edge between two named nodes is not in the drawing")
+	}
+	if d.Between("b", "a") != nil {
+		t.Error("an edge that runs the other way was answered with")
+	}
+	if TextY(d.Object("a").LDraw) == 0 {
+		t.Error("a node's label sets no baseline")
+	}
+	if TextY(nil) != 0 {
+		t.Error("a list that sets no type has a baseline anyway")
+	}
+}

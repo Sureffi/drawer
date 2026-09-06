@@ -529,6 +529,37 @@ func TestPixelCanvasIsTheBoxAndItsPad(t *testing.T) {
 	}
 }
 
+// The picture is exactly as many pixels wide as the block is columns of
+// cells, because the cut chose the zoom that made it so. kitty scales an
+// image into the block of cells it is given, and a picture one pixel wider
+// than its columns is a picture scaled on the axis that has to line up with
+// the text around it.
+func TestPixelThePictureIsAWholeNumberOfColumns(t *testing.T) {
+	th := mustTheme(t, theme.ClaudeDOT())
+	geom := term.Geom{CellW: 10, CellH: 24}
+	for _, src := range []string{
+		"digraph { a -> b }",
+		"digraph { rankdir=LR; parse -> check -> emit; check -> warn }",
+		`digraph { a [shape=diamond]; b [shape=circle]; a -> b -> c [label="x"] }`,
+		"digraph { subgraph cluster_c { a -> b } c -> a }",
+	} {
+		d, p, zoom, err := cut(t.Context(), th, src, 40, geom)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if zoom >= maxZoom {
+			t.Fatalf("%q was blown up to the zoom ceiling, where the width is the ceiling's and not the cut's", src)
+		}
+		im, err := paint(t.Context(), d, th.Face(), zoom)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if w := im.Bounds().Dx(); w != p.Cols*geom.CellW {
+			t.Errorf("%q: %d columns of a %dpx cell came out %dpx wide", src, p.Cols, geom.CellW, w)
+		}
+	}
+}
+
 // A cell size nobody can honour is no picture, not a gigabyte of one: the
 // rows and columns of a block are bounded, the cell in pixels is whatever
 // -cell was handed or the terminal answered, and the product is what gets
