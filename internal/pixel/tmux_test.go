@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The gate, in one place. Every terminal in this law was driven on the rig
@@ -123,5 +124,50 @@ func TestAllowSaysSoWhenTheWireIsClosed(t *testing.T) {
 		if !strings.Contains(note, "allow-passthrough") || !strings.Contains(note, "%0") {
 			t.Errorf("%s: the note does not say what happened, or to which pane: %q", c.name, note)
 		}
+	}
+}
+
+// hangingTmux puts a tmux on the PATH that exits at once and leaves a child
+// holding the pipe it inherited. That is the shape of a tmux wrapper — a
+// shell script that starts something and returns — and it is the shape that
+// used to hold this process open long past its own deadline.
+func hangingTmux(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "tmux"),
+		[]byte("#!/bin/sh\nsleep 30 &\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// ahead of the PATH, not instead of it: the stub has to be the tmux
+	// that runs, and it still needs a shell with a sleep in it.
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// A deadline that only kills the process is not a deadline. Wait goes on
+// reading the pipes until the last writer closes them, so a tmux that
+// forked is a tmux this process waits on for as long as the child lives —
+// measured on eefabb0 as 20 s for a 2 s timeout, with the hook path stalled
+// a minute behind it. WaitDelay is what makes the number on the const the
+// number a hook actually pays, and the answer is an error rather than a
+// hang, which is what sends the rung above to the glyphs.
+func TestATmuxHoldingThePipeStillAnswersInTime(t *testing.T) {
+	hangingTmux(t)
+	mux := &Tmux{Socket: "/nowhere", Pane: "%0"}
+	start := time.Now()
+	out, err := mux.run("show", "-p", "-t", "%0", "-A", "-v", "allow-passthrough")
+	if d := time.Since(start); d > tmuxTimeout {
+		t.Errorf("run() came back after %v; the deadline is %v", d, tmuxTimeout)
+	}
+	if err == nil {
+		t.Errorf("a tmux whose pipe never closed answered %q with no error", out)
+	}
+	// and the whole door reads it as the closed wire it is
+	start = time.Now()
+	note, through := mux.Allow()
+	if d := time.Since(start); d > tmuxTimeout {
+		t.Errorf("Allow came back after %v; the deadline is %v", d, tmuxTimeout)
+	}
+	if through || !strings.Contains(note, "allow-passthrough") {
+		t.Errorf("Allow said %q, through=%v; want a wire nobody can post through", note, through)
 	}
 }

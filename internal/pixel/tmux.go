@@ -57,6 +57,15 @@ func (t *Tmux) wrap(esc string) string {
 // holding up CC's own display.
 const tmuxTimeout = 2 * time.Second
 
+// tmuxWaitDelay bounds the wait after that: a deadline kills the process,
+// but Wait goes on reading the pipes until the last writer closes them, and
+// a tmux that forks a child holding the one it inherited never has a last
+// writer. Measured on eefabb0, with such a wrapper on the PATH: a 2 s
+// deadline took 20 s to come back and the hook path stalled a minute. The
+// delay is a quarter of the deadline because it starts only where the
+// command is already over — the answer is late by then whatever it says.
+const tmuxWaitDelay = tmuxTimeout / 4
+
 // Passthrough is whether this pane lets a passthrough through: "on", "off",
 // or whatever else tmux says. -A asks for the value in force rather than
 // the one set on the pane, because an option nobody set on the pane reads
@@ -152,6 +161,8 @@ func (t *Tmux) allow() (string, error) {
 func (t *Tmux) run(args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), tmuxTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "tmux", append([]string{"-S", t.Socket}, args...)...).CombinedOutput()
+	cmd := exec.CommandContext(ctx, "tmux", append([]string{"-S", t.Socket}, args...)...)
+	cmd.WaitDelay = tmuxWaitDelay
+	out, err := cmd.CombinedOutput()
 	return string(out), err
 }

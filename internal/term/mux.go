@@ -85,14 +85,24 @@ func TmuxPane() string { return env("TMUX_PANE") }
 // hook waiting on it is CC not painting.
 const muxTimeout = 2 * time.Second
 
+// muxWaitDelay bounds what is left after the deadline: killing the process
+// does not close the pipe a child of it is still holding, and Wait reads
+// that pipe until somebody does. A tmux wrapper that forks is the usual
+// shape, and measured on eefabb0 it turned this two-second question into a
+// twenty-second one. The delay runs from the command being over, so it
+// costs nothing on a tmux that answers.
+const muxWaitDelay = muxTimeout / 4
+
 // askTmux is the one command this file runs, as a variable so a law can
 // stand a tmux up without one. Read-only: display-message -p prints a
 // format and changes nothing.
 var askTmux = func(socket string, args ...string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), muxTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "tmux",
-		append([]string{"-S", socket}, args...)...).Output()
+	cmd := exec.CommandContext(ctx, "tmux",
+		append([]string{"-S", socket}, args...)...)
+	cmd.WaitDelay = muxWaitDelay
+	out, err := cmd.Output()
 	if err != nil {
 		return ""
 	}

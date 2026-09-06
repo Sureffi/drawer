@@ -5,8 +5,11 @@
 package term
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // stubTmux stands a tmux up that answers one question, and remembers what it
@@ -104,5 +107,33 @@ func TestTmuxSocketIsTheFirstFieldOfTMUX(t *testing.T) {
 	t.Setenv("TMUX", "")
 	if Tmux() {
 		t.Error("TMUX is unset and Tmux() says yes")
+	}
+}
+
+// A tmux that will not let go of the pipe is not a tmux that gets to hold
+// the hook. The stub exits at once and leaves a child on the pipe it
+// inherited — a shell wrapper's shape — and without WaitDelay Wait reads
+// that pipe until the child is done, which measured on eefabb0 as 20 s for
+// a 2 s deadline. The name that comes back is TERM, tmux's own, which names
+// no terminal and lands on the glyph rungs: the safe direction.
+func TestATmuxHoldingThePipeIsNotAnAnswer(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "tmux"),
+		[]byte("#!/bin/sh\nsleep 30 &\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// ahead of the PATH, not instead of it: the stub has to be the tmux
+	// that runs, and it still needs a shell with a sleep in it.
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("TERM", "tmux-256color")
+	t.Setenv("TMUX", "/nowhere,1,0")
+	t.Setenv("TMUX_PANE", "%0")
+	start := time.Now()
+	got := Name()
+	if d := time.Since(start); d > muxTimeout {
+		t.Errorf("Name() came back after %v; the deadline is %v", d, muxTimeout)
+	}
+	if got != "tmux-256color" {
+		t.Errorf("the terminal is %q; a tmux that never answered leaves TERM standing", got)
 	}
 }
