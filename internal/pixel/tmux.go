@@ -203,6 +203,29 @@ func (t *Tmux) Allow(ctx context.Context) (string, bool) {
 		" (this pane only, until it closes)"), true
 }
 
+// Through says whether a picture would cross this wire, changing nothing:
+// the judgement Allow makes, without the write. The doctor asks it so that
+// its rung line names what this wire gets and not what the terminal could
+// show — measured on the rig: a pane that said off drew glyphs while the
+// doctor said pixels, and a reader who greps rung: got the wrong answer.
+// The hook never asks it, because the hook is what writes. A pane with no
+// value of its own answers yes here, which is the hook's own reading: that
+// is the pane it would set on.
+func (t *Tmux) Through(ctx context.Context) bool {
+	if t == nil {
+		return true
+	}
+	was, err := t.Passthrough(ctx)
+	if err != nil {
+		return false
+	}
+	if was == "on" || was == "all" {
+		return true
+	}
+	own, err := t.PaneOption(ctx)
+	return err == nil && own == ""
+}
+
 // note hands back something worth writing down, once. Every failing path
 // used to hand its note back on every call, and a hook that drew a picture
 // and repainted a ledger behind it put four identical lines about the same

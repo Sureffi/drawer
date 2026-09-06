@@ -362,6 +362,54 @@ func TestTheDoctorSaysWhetherAPictureCrossesTmux(t *testing.T) {
 	}
 }
 
+// The rung line says what this wire gets. On a kitty with a cell size and
+// a rasteriser the terminal can show pixels, and where the pane said no the
+// drawing is glyphs: drawBlock falls that way, and the doctor says so on
+// the line a reader greps, not only on the tmux line above it. Skipped
+// where there is nothing to rasterise with, because then it is octants
+// for a reason the wire has nothing to do with.
+func TestTheDoctorsRungIsWhatThisWireGets(t *testing.T) {
+	if pixel.Find() == nil {
+		t.Skip("no rasteriser on the PATH")
+	}
+	for _, c := range []struct {
+		name, force, own, pane, want string
+	}{
+		{"a wire already through", "all", "all", "%0", "rung: pixels (asked: auto)"},
+		{"a pane nobody set, which the hook would set on", "off", "", "%0", "rung: pixels (asked: auto)"},
+		{"a pane that said off", "off", "off", "%0", "rung: octants (asked: auto; pixels, but the tmux wire is closed)"},
+		{"no pane to ask about", "on", "", "", "rung: octants (asked: auto; pixels, but the tmux wire is closed)"},
+	} {
+		log := optionTmux(t, c.force, c.own)
+		t.Setenv("TERM", "xterm-kitty")
+		t.Setenv("TMUX", "/nowhere,1,0")
+		t.Setenv("TMUX_PANE", c.pane)
+		t.Setenv("HOME", t.TempDir())
+		t.Setenv("DRAWER_STATE", t.TempDir())
+		var b strings.Builder
+		r := newRun(t.Context(), rungAuto, "", &inForce{th: &theme.Theme{}})
+		if code := r.runDoctor(t.Context(), &b, func() (int, term.Geom, term.WidthFrom) {
+			return 100, term.Geom{CellW: 10, CellH: 24}, term.FromTTY
+		}); code != 0 {
+			t.Fatalf("%s: -doctor exited %d", c.name, code)
+		}
+		line := ""
+		for _, l := range strings.Split(b.String(), "\n") {
+			if strings.HasPrefix(l, "rung: ") {
+				line = l
+			}
+		}
+		if line != c.want {
+			t.Errorf("%s: the rung line is\n %q\nwant %q", c.name, line, c.want)
+		}
+		for _, ran := range asked(t, log) {
+			if ran == "set" {
+				t.Errorf("%s: -doctor wrote an option into somebody else's tmux", c.name)
+			}
+		}
+	}
+}
+
 // -version and -show-theme need neither the terminal nor the multiplexer:
 // one prints a linker variable and the other prints a theme. Building the
 // run asks tmux which terminal is behind this pane, and that is a fork and

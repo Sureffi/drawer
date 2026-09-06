@@ -203,7 +203,14 @@ func (r run) doctor(ctx context.Context, w io.Writer, cols int, from term.WidthF
 	} else {
 		fmt.Fprintln(w, "rasteriser: none: rsvg-convert or magick on the PATH would enable pixels")
 	}
-	fmt.Fprintf(w, "rung: %s (asked: %s)\n", r.pickRung(), r.rung)
+	// The rung is what will be drawn, not what the terminal could show:
+	// drawBlock falls from pixels to the strokes where the picture cannot
+	// cross the wire, and the doctor falls with it.
+	if pick := r.pickRung(); pick == rungPixels && !r.mux.Through(ctx) {
+		fmt.Fprintf(w, "rung: %s (asked: %s; pixels, but the tmux wire is closed)\n", rungOctants, r.rung)
+	} else {
+		fmt.Fprintf(w, "rung: %s (asked: %s)\n", pick, r.rung)
+	}
 	r.theme.get(ctx) // the answer is in the run afterwards, not in the value
 	switch {
 	case r.theme.file != "" && r.theme.readErr != nil:
