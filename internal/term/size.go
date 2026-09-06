@@ -101,5 +101,11 @@ func Name(ctx context.Context) string {
 			return n
 		}
 	}
-	return env("TERM")
+	// TERM's rule is its own and not env's: a TERM set to nothing names no
+	// terminal, so it is not an answer and the parent is asked. env stops at
+	// a variable somebody set to nothing, which is what TMUX needs.
+	if t := os.Getenv("TERM"); t != "" {
+		return t
+	}
+	return parentEnv("TERM")
 }

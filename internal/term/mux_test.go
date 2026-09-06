@@ -178,3 +178,27 @@ func TestWhatTmuxSaysIsBoundedAndPrintable(t *testing.T) {
 		t.Errorf("the answer was dropped whole rather than cleaned: %q", got)
 	}
 }
+
+// A TERM set to nothing names no terminal, so it falls through to the
+// parent exactly as an absent one does. env's rule is the other one — a
+// variable somebody set to nothing is an answer there — and it is TMUX's,
+// where an empty value means there is no multiplexer and asking claude
+// about it would find the one claude was started under.
+//
+// The two rules were one for a while, and a hook whose TERM had been
+// scrubbed to empty rather than removed lost the terminal it could have
+// read from /proc.
+func TestABlankTERMIsNotAnAnswer(t *testing.T) {
+	parent := parentEnv("TERM")
+	if parent == "" {
+		t.Skip("this process's parent carries no TERM to fall through to")
+	}
+	t.Setenv("TMUX", "")
+	t.Setenv("TERM", "")
+	if got := Name(t.Context()); got != parent {
+		t.Errorf("a blank TERM answered %q; the parent's environment says %q", got, parent)
+	}
+	if got := env("TERM"); got != "" {
+		t.Errorf("env answered %q for a variable set to nothing", got)
+	}
+}

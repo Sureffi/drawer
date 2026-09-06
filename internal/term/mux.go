@@ -60,6 +60,11 @@ import (
 // environment first, then claude's, which is where anything CC scrubbed is
 // still readable. A variable somebody set to nothing is an answer and stops
 // there — only one that is not there at all is asked of the parent.
+//
+// That rule is TMUX's and TMUX_PANE's, which is all this file asks for.
+// TERM's is the other one and lives in Name: a TERM set to nothing names
+// no terminal, so a blank one falls through to the parent as an absent one
+// does.
 func env(key string) string {
 	if v, ok := os.LookupEnv(key); ok {
 		return v
