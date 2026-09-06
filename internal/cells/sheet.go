@@ -30,13 +30,27 @@ const pad = 1
 
 // boxSize is the box a node needs: its label with a cell of air each side,
 // or a record's fields side by side with a divider between them.
+//
+// A field is a label like any other and may have lines of its own, so a
+// record is as tall as its tallest field and each field as wide as its own
+// widest line.
 func boxSize(n layout.GNode) (w, h int) {
 	if n.Record {
-		w = 1
+		w, h = 1, 3
 		for _, f := range n.Label {
-			w += grid.Cells(f) + 2*pad + 1
+			lines := strings.Split(f, "\n")
+			fw := 0
+			for _, l := range lines {
+				if c := grid.Cells(l); c > fw {
+					fw = c
+				}
+			}
+			w += fw + 2*pad + 1
+			if len(lines)+2 > h {
+				h = len(lines) + 2
+			}
 		}
-		return w, 3
+		return w, h
 	}
 	for _, l := range n.Label {
 		if c := grid.Cells(l); c > w {
@@ -374,11 +388,22 @@ func drawNode(cv *Canvas, b Box, n layout.GNode) {
 	// itself and the whole thing reads as one box with fields in it.
 	x := 1
 	for i, f := range n.Label {
-		w := grid.Cells(f) + 2*pad
+		lines := strings.Split(f, "\n")
+		fw := 0
+		for _, l := range lines {
+			if c := grid.Cells(l); c > fw {
+				fw = c
+			}
+		}
+		w := fw + 2*pad
 		if i > 0 {
 			cv.Divider(b, x-1, true)
 		}
-		cv.Text(b.X+x+(w-grid.Cells(f))/2, b.Y+b.H/2, f, b.Ink)
+		y := b.Y + 1 + (b.H-2-len(lines))/2
+		for _, l := range lines {
+			cv.Text(b.X+x+(w-grid.Cells(l))/2, y, l, b.Ink)
+			y++
+		}
 		x += w + 1
 	}
 }

@@ -1080,18 +1080,43 @@ func TestLabelIsNeverMistakenForTheDrawing(t *testing.T) {
 	}
 }
 
-// A multi-line label grows its box rather than losing a line.
+// A multi-line label grows its box rather than losing a line — and a
+// record's field is a label, so its breaks count too. They did not: a
+// field's `\n` and `\l` folded to spaces, so `+ speak()\l+ fetch()\l` came
+// out as one run-on row and the width it cost turned whole drawings
+// sideways to fit.
 func TestMultiLineLabelGrowsItsBox(t *testing.T) {
-	rows := plain(drawn(t, `digraph { rankdir=LR; a [label="one\ntwo\nthree"]; a -> b }`+"\n", 100))
-	for _, w := range []string{"one", "two", "three"} {
-		found := false
-		for _, r := range rows {
-			if walled(r, w) {
-				found = true
+	for _, c := range []struct{ what, src string }{
+		{"a plain label",
+			`digraph { rankdir=LR; a [label="one\ntwo\nthree"]; a -> b }`},
+		{"a record's field",
+			`digraph { rankdir=LR; a [shape=record, label="{x|one\ltwo\lthree\l}"]; a -> b }`},
+	} {
+		rows := plain(drawn(t, c.src+"\n", 100))
+		for _, w := range []string{"one", "two", "three"} {
+			found := false
+			for _, r := range rows {
+				if walled(r, w) {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("%s: line %q is not inside a box of its own:\n%s",
+					c.what, w, strings.Join(rows, "\n"))
 			}
 		}
-		if !found {
-			t.Errorf("label line %q is not inside a box:\n%s", w, strings.Join(rows, "\n"))
+		// One per row, which is what a break is for: three lines on one
+		// row is the fold this law exists to forbid.
+		for _, r := range rows {
+			n := 0
+			for _, w := range []string{"one", "two", "three"} {
+				if strings.Contains(r, w) {
+					n++
+				}
+			}
+			if n > 1 {
+				t.Errorf("%s: %d of the label's lines came out on one row: %q", c.what, n, r)
+			}
 		}
 	}
 }

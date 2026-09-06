@@ -289,6 +289,12 @@ var portRe = regexp.MustCompile(`<[^<>]*>`)
 // rank instead of along it; a box drawing has one strip either way, and
 // the words come out in the order the source wrote them, which is all a
 // reader can get back.
+//
+// A field keeps its own line breaks, as `\n` inside the string: the box law
+// is that a multi-line label grows its box, and a record is a label. Folding
+// them to spaces drew `+ speak() + fetch()` on one row where the source
+// stacked two methods, and the run-on width then flipped a whole schema
+// sideways to make it fit.
 func recordFields(label string) []string {
 	label = portRe.ReplaceAllString(label, " ")
 	var out []string
@@ -300,13 +306,13 @@ func recordFields(label string) []string {
 				i++
 				switch label[i] {
 				case 'n', 'l', 'r':
-					b.WriteByte(' ')
+					b.WriteByte('\n')
 				default:
 					b.WriteByte(label[i])
 				}
 			}
 		case '|':
-			out = append(out, strings.Join(strings.Fields(b.String()), " "))
+			out = append(out, recordField(b.String()))
 			b.Reset()
 		case '{', '}':
 			b.WriteByte(' ')
@@ -314,8 +320,26 @@ func recordFields(label string) []string {
 			b.WriteByte(c)
 		}
 	}
-	out = append(out, strings.Join(strings.Fields(b.String()), " "))
+	out = append(out, recordField(b.String()))
 	return out
+}
+
+// recordField tidies one field: its own lines squeezed, and the empty ones
+// its breaks left at either end taken off. A field of nothing but a break
+// is still a field — the divider is there in the source — so one empty line
+// is kept where that is all there was.
+func recordField(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		lines[i] = strings.Join(strings.Fields(l), " ")
+	}
+	for len(lines) > 1 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	for len(lines) > 1 && lines[0] == "" {
+		lines = lines[1:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // labelLines cuts a label on the breaks graphviz spells with a backslash.
