@@ -150,13 +150,17 @@ func Fit(ctx context.Context, r *Raster, svg []byte, cols int, geom term.Geom) (
 // Two measurements of the same wire, both true on their day. On Claude
 // Code 2.1.257 a truecolor foreground was quantised outright:
 // 38;2;253;151;31 came back as 38;5;215, which would have mangled a 24-bit
-// id. On 2.1.261 it arrives exact outside tmux and one step coarser inside
-// it — subcell/colour.go stands on that second reading, because a stroke
-// one step off is still that stroke. An id has no such room: one wrong
-// step is a picture that never comes back. So the id keeps the 256-colour
-// form, which is the one that crossed this wire on every version measured
-// and under tmux besides. Zero is "no image" in the low byte, so it is
-// skipped.
+// id. Measured again on the rig 2026-09-06, on 2.1.261 and three ways: a
+// 24-bit foreground arrives exact outside a tmux pane and snapped to the
+// xterm-256 cube inside one; tmux is not what snaps it, since a raw printf
+// into that pane arrives exact and pipe-pane shows CC already writing 38;5
+// into the pane; and the trigger is $TMUX rather than the terminal's name,
+// since TERM=tmux-256color with no tmux around it arrives exact.
+// subcell/colour.go stands on that second reading, because a stroke one
+// step off is still that stroke. An id has no such room: one wrong step is
+// a picture that never comes back. So the id keeps the 256-colour form,
+// which is the one that crossed this wire on every version measured and in
+// a pane besides. Zero is "no image" in the low byte, so it is skipped.
 func ImageID(src string, cols, rows int) uint32 {
 	h := fnv1a32(strconv.Itoa(cols) + "x" + strconv.Itoa(rows) + "\x00" + src)
 	lo := 1 + h%255

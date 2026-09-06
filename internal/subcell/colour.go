@@ -19,14 +19,21 @@
 // dropping the colour; structure only has to recede where nobody said
 // what colour it is.
 //
-// The wire: Claude Code's display renderer was measured on this box
-// before this file chose a form. Outside tmux a 24-bit foreground arrives
-// exactly; inside tmux CC snaps it to the xterm-256 cube itself, which is
-// the same picture one step coarser. So 24-bit is emitted, and where the
-// wire quantises the quantiser is downstream of here. That reading is CC
-// 2.1.261, and the pixels rung's image id still rides in a 256-colour
-// foreground on purpose: pixel/cut.go carries the older reading and says
-// why an id may not spend the step a stroke can.
+// The wire, measured on the rig 2026-09-06 on Claude Code 2.1.261, three
+// ways, byte captures each time. A 24-bit foreground crosses CC's display
+// wire exactly outside a tmux pane; inside one, the same escape arrives
+// snapped to the xterm-256 cube. tmux is not the one snapping it — a raw
+// printf into that same pane arrives exact, and pipe-pane shows that what
+// CC writes into the pane is already 38;5. Nor is the terminal's name what
+// decides: TERM=tmux-256color with no tmux around it still arrives exact,
+// so what the renderer reads is $TMUX, being in a pane. ESC[39m arrived
+// in every one of those conditions.
+//
+// So 24-bit is emitted here, and where the wire quantises, the quantiser
+// is downstream of this file: the same picture one step coarser, which is
+// still that stroke in that colour. The pixels rung's image id has no such
+// room and rides in a 256-colour foreground on purpose — pixel/cut.go
+// carries this reading beside the older one and says why.
 
 package subcell
 
