@@ -121,6 +121,16 @@ func Reason(ctx context.Context, src string, width, region int) string {
 		}
 	}
 	switch {
+	case lw <= width && lh <= region:
+		// graphviz's footprint fits and the drawing still did not come out.
+		// The rung sizes its own boxes and its own gaps and fails for its
+		// own reasons — every lane short at every rung of the ladder, both
+		// ways up — and graphviz's inches know nothing about that. Naming a
+		// width the reader already has is worse than saying plainly what
+		// happened. Width is still the only lever, so the notice names the
+		// one the reader has rather than inventing a smaller one that
+		// would not help.
+		return fmt.Sprintf("will not come out whole in %d columns; a wider window may", width)
 	case lh <= region && lw > width:
 		return fmt.Sprintf("needs %d columns, this window has %d", lw, width)
 	case th > 0 && lh <= region:
