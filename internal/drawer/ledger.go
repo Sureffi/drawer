@@ -1,8 +1,9 @@
 // ledger.go — the pictures a session has drawn, painted again.
 //
 // A theme switch in Claude Code redraws the transcript in the new colours,
-// and the pictures in it stay as they were: they are kitty's, held under
-// the ids the placeholder cells name, and nothing asks for them again.
+// and the pictures in it stay as they were: they are the terminal's, held
+// under the ids the placeholder cells name, and nothing asks for them
+// again.
 // Measured: the session that switched gets no hook event for its own
 // settings write — every other session on the machine does — so the first
 // thing this hook hears after a switch is the first delta of the next
@@ -10,7 +11,9 @@
 // one the pictures stand in, and where it differs every picture of the
 // session is laid out again in the new theme, at its old cut, and sent
 // under its old id. kitty repaints the cells wherever they are, scrollback
-// included (measured), and nothing is printed into the transcript.
+// included (measured); ghostty draws the same placeholders and reaches this
+// path, and the repaint has not been measured on it. Nothing is printed
+// into the transcript either way.
 //
 // The ledger is one file per session, beside the fence state: the source
 // and cut of every picture, and the theme they were last painted in. The id

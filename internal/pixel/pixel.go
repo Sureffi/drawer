@@ -4,8 +4,9 @@
 // this binary and draw in any terminal that can show a `┌`. This is the
 // ceiling, and it is optional in the strongest sense — every stage fails
 // open to the glyph drawing, so a missing rasteriser, a slow one, a
-// terminal that is not kitty, or a graph cairo chokes on all end in the
-// picture that was already there. No error from here reaches the screen.
+// terminal that does not draw the placeholder cells, or a graph cairo
+// chokes on all end in the picture that was already there. No error from
+// here reaches the screen.
 //
 // Two things have to be true. The terminal has to draw kitty's Unicode
 // placeholders — kitty or ghostty — because those cells are the one way an

@@ -4,9 +4,11 @@
 // each piece of an assistant message before it is laid out and takes back
 // a replacement; this hook finds a DOT fence, lays it out with graphviz
 // (compiled in — no `dot` on the PATH), and hands back the picture as text
-// CC renders verbatim. Where the terminal is kitty it hands back a real
-// image instead. The plugin in this repo is how it is installed; the two
-// hook entry points are what the plugin's script execs.
+// CC renders verbatim. Where the terminal draws kitty's placeholder cells,
+// which is kitty or ghostty, it hands back a real image instead — through
+// tmux too, where the pane's passthrough is allowed. The plugin in this
+// repo is how it is installed; the two hook entry points are what the
+// plugin's script execs.
 //
 //	drawer -hook               # what CC runs: payload on stdin, JSON out
 //	drawer -context            # what a model should know, for a SessionStart hook to hand it

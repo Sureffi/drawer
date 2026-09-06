@@ -3,15 +3,16 @@
 // The hook writes the PNG to a temp file and hands the terminal one short
 // escape naming that file, straight down the parent's own tty via /proc —
 // wrapped in tmux's passthrough where a tmux is in the way, see tmux.go.
-// kitty reads the file, deletes it, and holds the image under the id the
-// cells will name. One write of a hundred-odd bytes is atomic on a tty, so
+// The terminal reads the file, deletes it, and holds the image under the id
+// the cells will name. One write of a hundred-odd bytes is atomic on a tty, so
 // the bytes cannot land inside a frame CC is mid-way through writing —
 // which is the hazard pushing fifty kilobytes down the same wire would
 // have had.
 //
-// Where any of that cannot happen — no kitty, no cell size in pixels, no
-// rasteriser, a tty that is not there — the answer is nil and the rung
-// below draws. Nothing here is a dependency.
+// Where any of that cannot happen — a terminal that does not draw the
+// placeholder cells, no cell size in pixels, no rasteriser, a tty that is
+// not there — the answer is nil and the rung below draws. Nothing here is
+// a dependency.
 
 package pixel
 
@@ -208,9 +209,10 @@ func Send(tty string, png []byte, id uint32, cols, rows int, mux *Tmux) bool {
 	return true
 }
 
-// sweepPictures drops pictures the terminal never collected — a tty that
-// was not kitty after all, or one that had gone away. kitty deletes what it
-// reads within the moment; anything older than a minute is nobody's.
+// sweepPictures drops pictures the terminal never collected — a tty whose
+// terminal draws no placeholder cells after all, or one that had gone away.
+// A terminal that takes the file deletes it within the moment; anything
+// older than a minute is nobody's.
 func sweepPictures() {
 	old, _ := filepath.Glob(filepath.Join(os.TempDir(), "tty-graphics-protocol-graph-*.png"))
 	for _, p := range old {
