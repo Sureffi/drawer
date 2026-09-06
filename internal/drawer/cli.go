@@ -22,11 +22,20 @@ import (
 // session in the way.
 //
 //	drawer -dot graph.dot -size 100x14 -render cells
+//
+// This door draws in glyphs whatever rung was asked for, because a picture
+// is not text: it reaches the terminal as an escape down the tty, and this
+// prints to stdout. -png is the door that writes one. Somebody who asked
+// for pixels here is told, rather than handed a drawing that is not the
+// one they named.
 func (r run) runDotDump(ctx context.Context, path string, w, h int) int {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "-dot:", err)
 		return 1
+	}
+	if r.rung == rungPixels {
+		fmt.Fprintln(os.Stderr, "-dot: a picture goes to the terminal, not to stdout; drawing in cells (-png writes the picture to a file)")
 	}
 	g, err := layout.Read(ctx, string(b))
 	if err != nil {
