@@ -172,7 +172,7 @@ func routeAll(cv *Canvas, g *layout.Graph, sl slots, boxes, frames []Box, encl [
 				hp, ok = reachOut(cv, t, pt, hb, frames, outside(encl[e.Head], encl[e.Tail]), tb.X+tb.W/2, tb.Y+tb.H/2)
 			}
 			if ok {
-				ps = scoutEdge(cv, t, tp, hp, budget)
+				ps = scoutEdge(cv, t, tp, hp, e.Label != "", budget)
 			}
 		}
 		if ps == nil {
@@ -581,9 +581,17 @@ func beside(cv *Canvas, t *terrain, ps Route, s segment, label string, need int)
 	if lo > hi {
 		lo, hi = hi, lo
 	}
-	for _, y := range []int{(lo + hi) / 2, lo, hi} {
-		if put(s.a.x+2, y) || put(s.a.x-1-need, y) {
-			return true
+	// Every row of the run, middle out: several edges going the same way
+	// down the page have to put their words at different heights, and the
+	// middle is only the first place to look.
+	for d := 0; d <= hi-lo; d++ {
+		for _, y := range []int{(lo+hi)/2 + (d+1)/2*sign(d), (lo+hi)/2 - (d+1)/2*sign(d)} {
+			if y < lo || y > hi {
+				continue
+			}
+			if put(s.a.x+2, y) || put(s.a.x-1-need, y) {
+				return true
+			}
 		}
 	}
 	return false
@@ -607,6 +615,14 @@ func nudge(cv *Canvas, t *terrain, ps Route, label string, need int) bool {
 		}
 	}
 	return false
+}
+
+// sign is -1, 0 or 1, for walking outward from a middle.
+func sign(d int) int {
+	if d%2 == 0 {
+		return 1
+	}
+	return -1
 }
 
 // clamp pins v into [lo, hi].

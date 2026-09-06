@@ -29,6 +29,7 @@ const (
 	priceTurn  = 10
 	priceCross = 30
 	priceWall  = 6 // travelling along a box's own edge row or column
+	priceLane  = 2 // travelling right alongside another edge
 )
 
 // Route is one edge's path, cell by cell, the ports at both ends included.
@@ -141,7 +142,7 @@ func (q *pq) Pop() any {
 // direction in the state. The goal is the head port entered the way the
 // arrowhead there points, so an arrow never ends up on the wrong side of
 // its own line.
-func scoutEdge(cv *Canvas, t *terrain, tp, hp port, budget int) Route {
+func scoutEdge(cv *Canvas, t *terrain, tp, hp port, spread bool, budget int) Route {
 	w := t.w
 	if t.blocked(tp.x, tp.y) || t.blocked(hp.x, hp.y) {
 		return nil
@@ -161,12 +162,25 @@ func scoutEdge(cv *Canvas, t *terrain, tp, hp port, budget int) Route {
 		m := cv.MaskAt(x, y).Arms()
 		if m == 0 {
 			c := 0
+			// A lane is worth having to itself. Two lines running side by
+			// side are legible enough on their own, but nothing can be
+			// written beside either of them: a reader gives a label to
+			// whichever line touches it, and one touching both belongs to
+			// neither.
 			if d == East || d == West {
 				if t.rowWall[y] {
 					c = priceWall
 				}
-			} else if t.colWall[x] {
-				c = priceWall
+				if spread && (cv.MaskAt(x, y-1).Horiz() || cv.MaskAt(x, y+1).Horiz()) {
+					c += priceLane
+				}
+			} else {
+				if t.colWall[x] {
+					c = priceWall
+				}
+				if spread && (cv.MaskAt(x-1, y).Vert() || cv.MaskAt(x+1, y).Vert()) {
+					c += priceLane
+				}
 			}
 			return c, false, true
 		}

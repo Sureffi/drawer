@@ -489,9 +489,14 @@ type facing struct{ horiz, reverse bool }
 func orientations(g *layout.Graph) []facing {
 	out := []facing{{g.Horiz, g.Reverse}}
 	if g.Horiz {
-		out = append(out, facing{false, false})
+		return append(out, facing{false, false})
 	}
-	return out
+	// Down the page a label stands beside its line, and several lines
+	// leaving one wall stand a cell apart, so a busy rank has nowhere to
+	// put the words. Across the page a label sits in its own line and
+	// cannot be mistaken for anything. A graph that comes out whole
+	// top-down stays top-down; one that does not is turned.
+	return append(out, facing{true, false})
 }
 
 // attempt draws one whole graph at one set of gaps. It answers the rows
