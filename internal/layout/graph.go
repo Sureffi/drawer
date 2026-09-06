@@ -214,10 +214,20 @@ func readEdge(e *cgraph.Edge, tail, head int, tn, hn, graphName string, directed
 	lbl := e.Label()
 	lbl = strings.NewReplacer(`\T`, tn, `\H`, hn, `\E`, tn+"->"+hn, `\G`, graphName).Replace(lbl)
 	if s, ok := htmlWords(lbl); ok {
-		lbl = s
+		out.Label = strings.Join(strings.Fields(s), " ")
+		return out
 	}
-	out.Label = strings.Join(strings.Fields(strings.NewReplacer(`\n`, " ", `\l`, " ", `\r`, " ").Replace(lbl)), " ")
+	out.Label = flatLabel(lbl)
 	return out
+}
+
+// flatLabel is a label that has to come out on one row — an edge's words, a
+// cluster's name. It reads by the same law as a node's: a break is a space
+// here because there is nowhere to break to, and every other escape prints
+// as the character it escapes. Folding only the breaks left `Group \#0` on
+// the page with the backslash still in it.
+func flatLabel(label string) string {
+	return strings.Join(strings.Fields(strings.Join(labelLines(label), " ")), " ")
 }
 
 func readClusters(g *cgraph.Graph, out *Graph, index map[string]int, parent int) {
@@ -232,9 +242,10 @@ func readClusters(g *cgraph.Graph, out *Graph, index map[string]int, parent int)
 				FontPen: strings.TrimSpace(s.GetStr("fontcolor")),
 			}
 			if w, ok := htmlWords(c.Label); ok {
-				c.Label = w
+				c.Label = strings.Join(strings.Fields(w), " ")
+			} else {
+				c.Label = flatLabel(c.Label)
 			}
-			c.Label = strings.Join(strings.Fields(strings.NewReplacer(`\n`, " ", `\l`, " ", `\r`, " ").Replace(c.Label)), " ")
 			for n, _ := s.FirstNode(); n != nil; n, _ = s.NextNode(n) {
 				nm, _ := n.Name()
 				if i, ok := index[nm]; ok {

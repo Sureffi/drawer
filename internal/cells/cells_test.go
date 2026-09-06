@@ -592,10 +592,27 @@ func TestWideLabelKeepsItsColumns(t *testing.T) {
 // `\"` and `\\` are this format's only escapes. Eating the backslash of
 // everything else turned a label of `a\nb` into `anb` — a word nobody
 // wrote, drawn with full confidence. Absent is survivable; invented is not.
+//
+// Every place a label lands is asked, because for a while only one of them
+// answered: a node's label came through labelLines, which unescapes, while
+// an edge's words and a cluster's name were folded on their line breaks
+// alone and kept the backslash — `Group \#0` printed with the backslash
+// still in it, and the DOT said `Group #0`.
 func TestLabelEscapesAreNotEaten(t *testing.T) {
-	for _, r := range plain(drawn(t, `digraph { rankdir=LR; A[label="a\\nb"]; A -> B }`+"\n", 100)) {
-		if strings.Contains(r, "anb") {
-			t.Errorf("escape eaten, invented a word: %q", r)
+	for _, c := range []struct{ what, src, want, never string }{
+		{"a node's label",
+			`digraph { rankdir=LR; A[label="a\\nb"]; A -> B }`, `a\nb`, "anb"},
+		{"an edge's words",
+			`digraph { rankdir=LR; A -> B [label="x\\ny"] }`, `x\ny`, "xny"},
+		{"a cluster's name",
+			`digraph { subgraph cluster0 { label="Group \#0"; A -> B } }`, "Group #0", `\#`},
+	} {
+		j := joined(drawn(t, c.src+"\n", 100))
+		if !strings.Contains(j, c.want) {
+			t.Errorf("%s: wanted %q on the page:\n%s", c.what, c.want, j)
+		}
+		if strings.Contains(j, c.never) {
+			t.Errorf("%s: %q is on the page and nobody wrote it:\n%s", c.what, c.never, j)
 		}
 	}
 }
