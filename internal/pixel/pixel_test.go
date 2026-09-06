@@ -366,14 +366,16 @@ func TestPixelAMissingGlyphIsSetAsOne(t *testing.T) {
 // The picture stands on graphviz's own canvas: the bounding box, plus the
 // air the graph asked for with `pad`, and where it asked for none the 4pt
 // its SVG writer would have added — a stroke on the boundary would
-// otherwise lose half its width off the edge.
+// otherwise lose half its width off the edge — and the whole thing rounded
+// to whole points, as that writer rounded it, because the cut is arithmetic
+// on this number and a hundredth of a point must not buy a column.
 func TestPixelCanvasIsTheBoxAndItsPad(t *testing.T) {
 	th := mustTheme(t, "")
 	d, err := RenderThemed(t.Context(), th, "digraph { pad=0.15; a -> b }", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c := canvas(d); c.w() != d.W+2*10.8 || c.h() != d.H+2*10.8 {
+	if c := canvas(d); c.w() != math.Round(d.W+2*10.8) || c.h() != math.Round(d.H+2*10.8) {
 		t.Errorf("a pad of 0.15in put %vx%v round a %vx%v box, want 10.8pt on each side",
 			c.w()-d.W, c.h()-d.H, d.W, d.H)
 	}
@@ -381,9 +383,14 @@ func TestPixelCanvasIsTheBoxAndItsPad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c := canvas(d); c.w() != d.W+2*svgPad || c.h() != d.H+2*svgPad {
+	if c := canvas(d); c.w() != math.Round(d.W+2*svgPad) || c.h() != math.Round(d.H+2*svgPad) {
 		t.Errorf("a graph that named no pad got %vx%v of air, want %vpt on each side",
 			c.w()-d.W, c.h()-d.H, svgPad)
+	}
+	// The far corner is the one the rounding moves: a point of the drawing
+	// lands where it landed before the canvas was rounded at all.
+	if c := canvas(d); c.x0 != -svgPad || c.y1 != d.H+svgPad {
+		t.Errorf("the canvas's near corner moved to %v,%v", c.x0, c.y1)
 	}
 }
 

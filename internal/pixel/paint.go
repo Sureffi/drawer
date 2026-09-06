@@ -87,6 +87,14 @@ func (b box) h() float64 { return b.y1 - b.y0 }
 // its SVG writer then pads by 4pt itself. So this does too: a stroke
 // centred on the boundary would otherwise lose half its width off the
 // edge.
+//
+// It is a whole number of points, which is how that same writer wrote the
+// canvas: the cut is arithmetic on this number, and a terminal column is
+// not bought with a hundredth of a point. Measured on corpus/unicode.dot,
+// whose canvas is 105.111pt across — 14.015 columns of a 10px cell — the
+// fraction alone cut a fifteenth column of empty air, and edges.dot and
+// shapes.dot each grew a row the same way. The far corner is the one that
+// moves, so every point of the drawing lands where it landed.
 func canvas(d *layout.Drawing) box {
 	b := box{0, 0, d.W, d.H}
 	for _, op := range d.Draw {
@@ -103,6 +111,7 @@ func canvas(d *layout.Drawing) box {
 	if d.Pad == "" {
 		b = box{b.x0 - svgPad, b.y0 - svgPad, b.x1 + svgPad, b.y1 + svgPad}
 	}
+	b.x1, b.y0 = b.x0+math.Round(b.w()), b.y1-math.Round(b.h())
 	return b
 }
 
