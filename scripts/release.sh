@@ -41,11 +41,16 @@ rm -rf dist
 mkdir -p dist/plugin/scripts/bin
 
 # The binaries: static, stripped, paths trimmed, the version linked in, one
-# per platform the wrapper knows how to name.
+# per platform the wrapper knows how to name, and no VCS stamp. Go writes the
+# commit into a binary by default, and this script commits after it builds,
+# so a re-run at the release commit would build different bytes from the ones
+# it had pinned and upload them against the old pins — measured, two adjacent
+# commits differ with the stamp and are byte-identical without it. The
+# version -X links in is the one fact a reader wants from the binary.
 for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
 	os=${t%/*}
 	arch=${t#*/}
-	CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath \
+	CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -buildvcs=false \
 		-ldflags="-s -w -X github.com/sureffi/drawer/internal/drawer.version=$v" \
 		-o "dist/drawer-$os-$arch" ./cmd/drawer
 	echo "built drawer-$os-$arch $(du -h "dist/drawer-$os-$arch" | cut -f1)"
@@ -122,7 +127,8 @@ if [ -n "$dry" ]; then
 	exit 0
 fi
 # The commit and the tag, unless a run before this one already made them:
-# a re-run after a failed upload picks up where it stopped.
+# a re-run after a failed upload picks up where it stopped, with the same
+# bytes, because the build above is a function of the source alone.
 if git rev-parse -q --verify "refs/tags/v$v" >/dev/null; then
 	echo "tag v$v exists; uploading to it"
 else
@@ -131,16 +137,25 @@ else
 	git tag "v$v"
 	git push -q origin main "v$v"
 fi
-# The release, then its assets. Separately, and the upload retried: on a
-# repository minutes old GitHub's upload host answered 404 to the first
-# release ever made on it, and gh took the half-made release down with it.
+# The release, then its assets. Separately, and the upload retried: on this
+# repository uploads.github.com has answered 404 to an asset on both releases
+# so far — the first release's, minutes after the repository was made, and
+# the second's plugin zip, five times in fifty seconds and then not at all a
+# quarter of an hour later — and gh takes a half-made release down with the
+# first failure. An upload that breaks off leaves an asset behind in GitHub's
+# `starter` state under the name the next try wants, and that name is then
+# refused, so every try first sweeps what did not finish.
 gh release view "v$v" >/dev/null 2>&1 || gh release create "v$v" --title "drawer v$v" \
 	--notes "\`/plugin marketplace add $repo\` then \`/plugin install drawer@drawer\`. The zip is the plugin with every binary inside; the bare binaries are what a git checkout downloads, checked against checksums.txt."
+sweep() {
+	gh api "repos/$repo/releases/tags/v$v" --jq '.assets[] | select(.state != "uploaded") | .id' |
+		while read -r id; do gh api -X DELETE "repos/$repo/releases/assets/$id" >/dev/null; done
+}
 n=0
-until gh release upload "v$v" dist/drawer-* dist/checksums.txt dist/drawer-plugin.zip --clobber; do
+until sweep; gh release upload "v$v" dist/drawer-* dist/checksums.txt dist/drawer-plugin.zip --clobber; do
 	n=$((n + 1))
-	[ $n -lt 5 ] || { echo "release: the upload failed five times" >&2; exit 1; }
-	echo "release: upload failed; again in 10s ($n)" >&2
-	sleep 10
+	[ $n -lt 8 ] || { echo "release: the upload failed eight times" >&2; exit 1; }
+	echo "release: upload failed; again in 60s ($n)" >&2
+	sleep 60
 done
 echo "released v$v: $(gh release view "v$v" --json url --jq .url)"
