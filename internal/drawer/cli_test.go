@@ -252,6 +252,24 @@ func countingTmux(t *testing.T) string {
 	return log
 }
 
+// optionTmux is that tmux with answers: `show -A` with the value in force
+// and `show` without it with what the pane itself was set to, the two apart
+// the way tmux keeps them. The same stub internal/pixel's laws use, because
+// the doctor line reports on exactly what the hook would act on.
+func optionTmux(t *testing.T, inForce, own string) string {
+	t.Helper()
+	dir := t.TempDir()
+	log := filepath.Join(dir, "asked")
+	sh := "#!/bin/sh\nshift 2\nc=$1\ncase \" $* \" in *' -A '*) c=show-A;; esac\n" +
+		"echo \"$c\" >>" + log + "\n" +
+		"case $c in show-A) echo '" + inForce + "';; show) echo '" + own + "';; esac\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(sh), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return log
+}
+
 // asked is what that tmux was asked to do, in order.
 func asked(t *testing.T, log string) []string {
 	t.Helper()
@@ -283,6 +301,60 @@ func captured(t *testing.T) func() string {
 			t.Fatal(err)
 		}
 		return string(b)
+	}
+}
+
+// The tmux line, in the four shapes it has. The question a reader under
+// tmux actually has is not whether there is a tmux — they know — but
+// whether a picture crosses it, and the line answers with the value that
+// decides: the value in force where it is already through, the pane's own
+// where that is what the hook would act on, and the pane nobody named where
+// there is nothing to ask about at all.
+//
+// And the promise in muxLine's own first sentence, asserted rather than
+// stated: the doctor is a read. The hook is what turns passthrough on; a
+// doctor that set it would be a diagnostic that changed the thing it was
+// diagnosing, in somebody else's multiplexer.
+func TestTheDoctorSaysWhetherAPictureCrossesTmux(t *testing.T) {
+	for _, c := range []struct {
+		name, force, own, pane, want string
+	}{
+		{"the value in force is on", "on", "", "%0",
+			"yes: pane %0, allow-passthrough on"},
+		{"the value in force is all, which is more than on", "all", "all", "%0",
+			"yes: pane %0, allow-passthrough all"},
+		{"the pane itself says off", "off", "off", "%0",
+			"yes: pane %0, allow-passthrough off, set on the pane itself: drawer leaves that alone and draws glyphs"},
+		{"TMUX_PANE named no pane", "on", "", "",
+			"yes, and TMUX_PANE names no pane: nothing can be asked or set here — no picture can cross this wire"},
+	} {
+		log := optionTmux(t, c.force, c.own)
+		t.Setenv("TERM", "xterm-kitty")
+		t.Setenv("TMUX", "/nowhere,1,0")
+		t.Setenv("TMUX_PANE", c.pane)
+		t.Setenv("HOME", t.TempDir())
+		t.Setenv("DRAWER_STATE", t.TempDir())
+		var b strings.Builder
+		r := newRun(t.Context(), rungAuto, "", &inForce{th: &theme.Theme{}})
+		if code := r.runDoctor(t.Context(), &b, func() (int, term.Geom, term.WidthFrom) {
+			return 100, term.Geom{}, term.FromDefault
+		}); code != 0 {
+			t.Fatalf("%s: -doctor exited %d", c.name, code)
+		}
+		line := ""
+		for _, l := range strings.Split(b.String(), "\n") {
+			if strings.HasPrefix(l, "tmux: ") {
+				line = strings.TrimPrefix(l, "tmux: ")
+			}
+		}
+		if line != c.want {
+			t.Errorf("%s: the tmux line is\n %q\nwant %q", c.name, line, c.want)
+		}
+		for _, ran := range asked(t, log) {
+			if ran == "set" {
+				t.Errorf("%s: -doctor wrote an option into somebody else's tmux", c.name)
+			}
+		}
 	}
 }
 
