@@ -21,7 +21,10 @@ import (
 	"github.com/sureffi/drawer/internal/layout"
 	"github.com/sureffi/drawer/internal/term"
 	"github.com/sureffi/drawer/internal/theme"
+	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/gomono"
+	"golang.org/x/image/font/opentype"
+	"golang.org/x/image/math/fixed"
 )
 
 // The hook wire quantises a truecolor foreground, so a picture's id rides
@@ -437,7 +440,16 @@ func TestPixelFontnameIsAFileOrGoMono(t *testing.T) {
 	if err := os.WriteFile(bad, []byte("this is not a font"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"monospace", "JetBrains Mono", "Courier", filepath.Join(dir, "gone.ttf")} {
+	// A font file under any other name is not one either. The rule is the
+	// extension, and it is what keeps a family name off the box: those
+	// three below come back empty here because nothing on this box is
+	// called that, and a box with a monospace.ttf on it would answer
+	// differently the moment the rule went.
+	odd := filepath.Join(dir, "carried.font")
+	if err := os.WriteFile(odd, gomono.TTF, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"monospace", "JetBrains Mono", "Courier", odd, filepath.Join(dir, "gone.ttf")} {
 		if got := fontFile(name); got != "" {
 			t.Errorf("%q was taken for a font file and resolved to %q", name, got)
 		}
@@ -487,6 +499,66 @@ func TestPixelAFontnameIsAFileThatCanBeRead(t *testing.T) {
 	p := &painter{s: 1, file: huge}
 	if p.font(&pen{size: 12}) == nil {
 		t.Error("a fontname nobody can read left the picture with no face at all")
+	}
+}
+
+// The picture is set in the monospace this binary carries, and a law that
+// only asks whether some face exists would not know: swap Go Regular in and
+// every label is set proportional in boxes graphviz measured in Courier,
+// which is one of the four things go-graphviz's own renderer does wrong.
+// Courier's advance is 0.600em and Go Mono's 0.602, so a run measured in
+// the one and set in the other still stands in its box.
+func TestPixelThePictureIsSetInGoMono(t *testing.T) {
+	f := face(faceKey{fontKey{"", false, false}, 24})
+	if f == nil {
+		t.Fatal("Go Mono is not in this binary")
+	}
+	sf, err := opentype.Parse(gomono.TTF)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mono, err := opentype.NewFace(sf, &opentype.FaceOptions{Size: 24, DPI: 72, Hinting: font.HintingFull})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var first fixed.Int26_6
+	for i, r := range []rune{'i', 'M', 'W', '.', 'm'} {
+		got, ok := f.GlyphAdvance(r)
+		if !ok {
+			t.Fatalf("the carried face has no %q", r)
+		}
+		if want, _ := mono.GlyphAdvance(r); got != want {
+			t.Errorf("%q is set %v wide, and Go Mono sets it %v: the carried face is not Go Mono", r, got, want)
+		}
+		if i == 0 {
+			first = got
+		} else if got != first {
+			t.Errorf("%q is %v wide against %v: the carried face is not a monospace", r, got, first)
+		}
+	}
+}
+
+// A span asks for its weight and slope in two ways, and both are
+// graphviz's: an HTML `<b>` arrives as a font bit on the run, and a
+// `fontname="Courier-Bold"` as the face's own name. Go Mono has the four
+// faces to answer with.
+func TestPixelABoldSpanIsSetInTheBoldFace(t *testing.T) {
+	p := &painter{s: 1}
+	plain := p.font(&pen{size: 12})
+	bold := p.font(&pen{size: 12, fontchar: 1})
+	italic := p.font(&pen{size: 12, fontchar: 2})
+	named := p.font(&pen{size: 12, face: "Courier-Bold"})
+	if plain == nil || bold == nil || italic == nil || named == nil {
+		t.Fatal("a span was left with no face at all")
+	}
+	if bold == plain {
+		t.Error("a bold span is set in the same face as the plain run")
+	}
+	if italic == plain || italic == bold {
+		t.Error("an italic span is set in the plain or the bold face")
+	}
+	if named != bold {
+		t.Error(`a fontname of "Courier-Bold" is not the bold face`)
 	}
 }
 
