@@ -17,6 +17,7 @@ package cells
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/sureffi/drawer/internal/grid"
 	"github.com/sureffi/drawer/internal/layout"
@@ -150,6 +151,7 @@ func routeAll(cv *Canvas, g *layout.Graph, sl slots, boxes, frames []Box, encl [
 	// which one it is: the first gets the widest pair of ports and the
 	// tallest hoop, and the rest sit inside it.
 	hoops := map[[2]int]int{}
+	var labelled []laid
 	short := 0
 	for _, ei := range order {
 		e := g.Edges[ei]
@@ -178,11 +180,26 @@ func routeAll(cv *Canvas, g *layout.Graph, sl slots, boxes, frames []Box, encl [
 			continue
 		}
 		commit(cv, ps, tp, hp, e)
-		if e.Label != "" && !placeLabel(cv, ps, e.Label) {
+		if e.Label != "" {
+			labelled = append(labelled, laid{ps, e.Label})
+		}
+	}
+	// The words go on once every line is down. A label belongs to the
+	// line it touches and to no other, and that cannot be judged against
+	// a drawing half of which is not there yet — nor can the room for one
+	// be taken from an edge that still has to be routed.
+	for _, l := range labelled {
+		if !placeLabel(cv, l.ps, l.label) {
 			short++
 		}
 	}
 	return short
+}
+
+// laid is one routed edge waiting for its words.
+type laid struct {
+	ps    Route
+	label string
 }
 
 // selfLoop hoops a line out of one wall and back into the same wall. The
@@ -365,9 +382,11 @@ func placeLabel(cv *Canvas, ps Route, label string) bool {
 		return true
 	}
 	segs := segments(ps)
-	for _, s := range segs {
-		if s.horiz && inLine(cv, s, label, need) {
-			return true
+	if bridgeable(label) {
+		for _, s := range segs {
+			if s.horiz && inLine(cv, s, label, need) {
+				return true
+			}
 		}
 	}
 	for _, s := range segs {
@@ -376,6 +395,42 @@ func placeLabel(cv *Canvas, ps Route, label string) bool {
 		}
 	}
 	return nudge(cv, ps, label, need)
+}
+
+// bridgeable says whether a label may be set into its own line. A reader
+// joins the line across the words only when the words begin and end with
+// writing, and every rune the drawing spends on a line — a `v`, a `>`, a
+// colon — is not writing to it. "very long edge label" begins with one,
+// which is why that label used to cut its own edge in two.
+func bridgeable(label string) bool {
+	r := []rune(strings.TrimSpace(label))
+	return len(r) > 0 && !InAlphabet(r[0]) && !InAlphabet(r[len(r)-1])
+}
+
+// safeText says whether a label may stand at a spot without one of its own
+// letters turning into an arrowhead. `v` under a line is a head pointing
+// down, and the reader is right to read it that way — so the label goes
+// somewhere else instead.
+func safeText(cv *Canvas, label string, x, y int) bool {
+	i := 0
+	for _, r := range label {
+		d, ok := heads[r]
+		if !ok {
+			i += grid.Cells(string(r))
+			continue
+		}
+		dx, dy := d.Step()
+		if cv.MaskAt(x+i+dx, y+dy) != 0 {
+			return false
+		}
+		// A dashed line leaves a blank between itself and its head, so a
+		// reader looks one cell further back as well.
+		if cv.Rune(x+i+dx, y+dy) == ' ' && cv.MaskAt(x+i+2*dx, y+2*dy) != 0 {
+			return false
+		}
+		i += grid.Cells(string(r))
+	}
+	return true
 }
 
 // mine says whether a spot's whole neighbourhood belongs to this edge.
@@ -393,6 +448,12 @@ func mine(cv *Canvas, ps Route, x, y, n int) bool {
 	}
 	touched := false
 	look := func(cx, cy int) bool {
+		// Writing next to writing is one label wrapped over two rows, as
+		// far as a reader is concerned, so a spot beside somebody else's
+		// words is not a spot either.
+		if cv.In(cx, cy) && cv.Rune(cx, cy) != ' ' {
+			return false
+		}
 		if cv.MaskAt(cx, cy) == 0 {
 			return true
 		}
@@ -450,7 +511,7 @@ func inLine(cv *Canvas, s segment, label string, need int) bool {
 // two cells out from one down it, which is where a reader looks for it.
 func beside(cv *Canvas, ps Route, s segment, label string, need int) bool {
 	put := func(x, y int) bool {
-		if !cv.Free(x, y, need) || !mine(cv, ps, x, y, need) {
+		if !cv.Free(x, y, need) || !mine(cv, ps, x, y, need) || !safeText(cv, label, x, y) {
 			return false
 		}
 		cv.Text(x, y, label, 0)
@@ -500,7 +561,7 @@ func nudge(cv *Canvas, ps Route, label string, need int) bool {
 		for _, dy := range []int{-1, 1, -2, 2, 0} {
 			for _, dx := range []int{0, 2, -1 - need, 1, -2, -need, 3} {
 				x, y := p.x+dx, p.y+dy
-				if cv.Free(x, y, need) && mine(cv, ps, x, y, need) {
+				if cv.Free(x, y, need) && mine(cv, ps, x, y, need) && safeText(cv, label, x, y) {
 					cv.Text(x, y, label, 0)
 					cv.Hold(x, y, need, 1)
 					return true

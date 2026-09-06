@@ -502,8 +502,21 @@ func attempt(g *layout.Graph, sl slots, extra gaps, width, maxRows int) ([]strin
 	bh := make([]int, len(g.Nodes))
 	colW := make([]int, sl.nCol)
 	rowH := make([]int, sl.nRow)
+	loops := make([]int, len(g.Nodes))
+	for _, e := range g.Edges {
+		if e.Tail == e.Head {
+			loops[e.Tail]++
+		}
+	}
 	for i := range g.Nodes {
 		bw[i], bh[i] = boxSize(g.Nodes[i])
+		// A hoop takes two ports on one wall and each one inside it takes
+		// two more, so a node with self-loops needs wall to hang them on.
+		// Half go above and half below, and a three-row box has one cell
+		// of side wall, which is no wall at all.
+		if n := 2 + 2*((loops[i]+1)/2); n > bw[i] {
+			bw[i] = n
+		}
 		if bw[i] > colW[sl.col[i]] {
 			colW[sl.col[i]] = bw[i]
 		}
@@ -512,7 +525,26 @@ func attempt(g *layout.Graph, sl slots, extra gaps, width, maxRows int) ([]strin
 		}
 	}
 	bs := bounds(g, sl)
-	gapX, gapY := spacing(g, sl, extra, bs)
+	gapX, gapY := spacing(g, sl, extra, bs, loops)
+	// A frame carries its cluster's name, so it has to be wide enough to
+	// hold it. The room comes out of the last column the frame covers,
+	// which is the one place widening cannot push a frame over anything
+	// that is not already inside it.
+	for i, b := range bs {
+		if !b.ok {
+			continue
+		}
+		w := 2*b.left + 2*b.right
+		for c := b.col0; c <= b.col1; c++ {
+			w += colW[c]
+			if c > b.col0 {
+				w += gapX[c]
+			}
+		}
+		if n := titleRoom(g.Clusters[i].Label); n > w {
+			colW[b.col1] += n - w
+		}
+	}
 	xs := make([]int, sl.nCol)
 	x := 0
 	for i := range colW {
@@ -560,7 +592,7 @@ func attempt(g *layout.Graph, sl slots, extra gaps, width, maxRows int) ([]strin
 // spacing is the air between the slots: a base along each axis, whatever
 // the ladder is paying on top of it, and room in the gap for the widest
 // label that has to ride through it.
-func spacing(g *layout.Graph, sl slots, extra gaps, bs []bound) ([]int, []int) {
+func spacing(g *layout.Graph, sl slots, extra gaps, bs []bound, loops []int) ([]int, []int) {
 	flow, cross := 3, 4 // top-down: ranks stack in rows, lanes spread in columns
 	if sl.horiz {
 		flow, cross = 6, 2 // left-right: ranks march in columns, lanes stack in rows
@@ -639,6 +671,29 @@ func spacing(g *layout.Graph, sl slots, extra gaps, bs []bound) ([]int, []int) {
 			if bs[i].row1+1 == bs[j].row0 {
 				need(gapY, bs[j].row0, 2*bs[i].bottom+2*bs[j].top+1)
 			}
+		}
+	}
+	// A hoop stands off the wall it leaves, one cell further for each hoop
+	// already there, and its words stand off the end of it. Both are room
+	// this node's own gaps have to find, on top of any frame's.
+	for v, n := range loops {
+		if n == 0 {
+			continue
+		}
+		room := (n+1)/2 + 2
+		gapY[sl.row[v]] += room
+		gapY[sl.row[v]+1] += room
+		wide := 0
+		for _, e := range g.Edges {
+			if e.Tail == e.Head && e.Tail == v {
+				if c := grid.Cells(e.Label); c > wide {
+					wide = c
+				}
+			}
+		}
+		if wide > 0 {
+			need(gapX, sl.col[v], wide+3)
+			need(gapX, sl.col[v]+1, wide+3)
 		}
 	}
 	return gapX, gapY
@@ -805,6 +860,37 @@ func frameRects(g *layout.Graph, bs []bound, xs, ys, colW, rowH []int) []Box {
 // top edge where there is room for it and on the air row under the edge
 // where there is not. Only the ring is spoken for — everything inside a
 // frame belongs to what the frame is round.
+// titleRoom is the narrowest frame a cluster's name reads in. Set into the
+// top edge the name needs the edge to still read as an edge — a third of
+// it drawn is the reader's bar — and set on the air row inside it needs
+// only a margin each side.
+func titleRoom(title string) int {
+	n := grid.Cells(title)
+	if n == 0 {
+		return 0
+	}
+	if plainTitle(title) {
+		if w := (3*n+7)/2 + 2; w > n+6 {
+			return w
+		}
+		return n + 6
+	}
+	return n + 6
+}
+
+// plainTitle says whether every rune of a name is writing. A name set into
+// the top edge is read off the edge itself, so a colon or a hash in it —
+// runes a box drawing spends on lines — comes back as a blank and the name
+// comes back wrong. Those go on the air row inside the frame instead.
+func plainTitle(title string) bool {
+	for _, r := range title {
+		if r != ' ' && InAlphabet(r) {
+			return false
+		}
+	}
+	return true
+}
+
 func drawFrame(cv *Canvas, b Box) {
 	x1, y1 := b.X+b.W-1, b.Y+b.H-1
 	cv.Stroke(b.X, b.Y, x1, b.Y, b.Pencil)
@@ -813,15 +899,18 @@ func drawFrame(cv *Canvas, b Box) {
 	cv.Stroke(x1, b.Y, x1, y1, b.Pencil)
 	if n := grid.Cells(b.Title); n > 0 {
 		// A name may be set into the edge only while enough edge is left
-		// to read as an edge; past that it stands on the air row inside,
-		// which is where graph-easy puts one and where a reader looks
-		// for it second.
-		if 2*(b.W-2) >= 3*(n+2) && b.W >= n+6 {
+		// to read as an edge and while every rune of it is writing; past
+		// that it stands on the air row inside, which is where graph-easy
+		// puts one and where a reader looks for it second. A name inside
+		// keeps a ring of air round it, so no line ever comes close
+		// enough for a reader to give the words to that line instead.
+		if plainTitle(b.Title) && 2*(b.W-2) >= 3*(n+2) && b.W >= n+6 {
 			cv.Blank(b.X+2, b.Y, n+2)
 			cv.Text(b.X+3, b.Y, b.Title, b.Ink)
-		} else if b.W > n+2 {
+		} else if b.W > n+4 {
 			cv.Text(b.X+2, b.Y+1, b.Title, b.Ink)
-			cv.Hold(b.X+2, b.Y+1, n, 1)
+			cv.Hold(b.X+1, b.Y+1, n+2, 1)
+			cv.Hold(b.X+1, b.Y+2, n+2, 1)
 		}
 	}
 	cv.Hold(b.X, b.Y, b.W, 1)

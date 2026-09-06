@@ -22,6 +22,8 @@
 
 package cells
 
+import "strings"
+
 // A Style is how a line is drawn. Light is the zero value because it is
 // what a line is when nobody said otherwise.
 type Style uint8
@@ -261,3 +263,28 @@ func (m Mask) promote(s Style) Mask {
 func Arrow(d Dir) rune { return arrows[d] }
 
 var arrows = [4]rune{'▲', '▶', '▼', '◀'}
+
+// Alphabet is every rune a box drawing spends on a line, a corner, a
+// junction, a crossing, a border or an arrowhead — this rung's own and
+// the ones graph-easy draws with, because both are read by the same
+// reader. A label made of these is a label a reader takes for a drawing:
+// the words have to be told apart from the picture by their runes alone,
+// and there is nothing else to tell them apart by.
+const Alphabet = "─━═╌╍┄┅┈┉╴╶╸╺▬▀▄−·⋯∼-~=" +
+	"│┃║╎╏┆┇┊┋╵╷╹╻⋮≀▮▌▐∥|:!'\"" +
+	"┌┏╔╭┎┍╒╓┐┓╗╮┒┑╕╖└┗╚╰┖┕╘╙┘┛╝╯┚┙╛╜" +
+	"├┣╠┝┞┟┠┡┢┤┫╣┥┦┧┨┩┪┬┳╦┭┮┯┰┱┲┴┻╩┵┶┷┸┹┺" +
+	"┼╋╬╳⧓┽┾┿╀╁╂╃╄╅╆╇╈╉╊" +
+	"▶▷▸▹►▻◀◁◂◃◄◅▲△▴▵▼▽▾▿" +
+	"><^v∧∨" +
+	"+#█."
+
+// InAlphabet reports whether a rune is one of those.
+func InAlphabet(r rune) bool { return strings.ContainsRune(Alphabet, r) }
+
+// heads is the four ascii arrowheads and the side each joins its line on.
+// They are ordinary letters and punctuation as well, and a reader takes
+// one for a head exactly when there is a line on that side — so a label
+// with a `v` in it must not be set under a line, and one with a `^` must
+// not be set over one.
+var heads = map[rune]Dir{'>': West, '<': East, '^': South, '\u2227': South, 'v': North, '\u2228': North}
