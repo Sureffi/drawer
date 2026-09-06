@@ -446,6 +446,58 @@ func TestPixelAGradientFillIsPaintedAsAGradient(t *testing.T) {
 	}
 }
 
+// A run graphviz centred is centred on the width it will actually take, and
+// not on the width graphviz reserved for it. The wasm has no font system
+// and measures a label byte by byte — measured, "päivää" is nine
+// characters wide to it and six glyphs to anybody setting it — so a run
+// centred on the reservation sits a glyph and a half out of its own box.
+// For the ASCII the layout was measured in, the two numbers are one.
+func TestPixelACentredRunSitsOnItsAnchor(t *testing.T) {
+	th := mustTheme(t, "")
+	for _, label := range []string{"päivää", "paivaa"} {
+		d, err := RenderThemed(t.Context(), th, `digraph { a [shape=plaintext, label="`+label+`"] }`, 0, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		a := d.Object("a")
+		if a == nil {
+			t.Fatal("the drawing has no node a")
+		}
+		var run *layout.Op
+		for i := range a.LDraw {
+			if a.LDraw[i].Op == "T" {
+				run = &a.LDraw[i]
+				break
+			}
+		}
+		if run == nil || run.Align != "c" || len(run.Pt) < 2 {
+			t.Fatalf("the label is not a centred run: %+v", a.LDraw)
+		}
+		im, err := paint(t.Context(), d, th.Face(), 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// A plaintext node is its label and nothing else, so the ink in the
+		// picture is the run.
+		b := im.Bounds()
+		lo, hi := b.Max.X, b.Min.X-1
+		for y := b.Min.Y; y < b.Max.Y; y++ {
+			for x := b.Min.X; x < b.Max.X; x++ {
+				if _, _, _, alpha := im.At(x, y).RGBA(); alpha > 0x7fff {
+					lo, hi = min(lo, x), max(hi, x)
+				}
+			}
+		}
+		if lo > hi {
+			t.Fatalf("%q was not set at all", label)
+		}
+		want := (run.Pt[0] - canvas(d).x0) * pxPerPt
+		if centre := float64(lo+hi+1) / 2; math.Abs(centre-want) > 2 {
+			t.Errorf("%q is set from %d to %d, centred on %.1f, and its anchor is at %.1f", label, lo, hi, centre, want)
+		}
+	}
+}
+
 // The picture stands on graphviz's own canvas: the bounding box, plus the
 // air the graph asked for with `pad`, and where it asked for none the 4pt
 // its SVG writer would have added — a stroke on the boundary would
