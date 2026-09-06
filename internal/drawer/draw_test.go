@@ -16,9 +16,9 @@ import (
 // it is a fact about the terminal the run is standing in. A rung asked for
 // by name is that rung, whatever the terminal says. Otherwise: pixels want
 // a terminal that draws placeholder cells — kitty or ghostty — and a cell
-// size in pixels to cut a picture to; the same terminals draw their own
-// octants when the cell size is missing; everything else gets braille,
-// which every font carries.
+// size in pixels to cut a picture to. Everything else is cells, which is
+// every terminal that draws no placeholders and every one that draws them
+// but would not say how big a cell is.
 //
 // The name is the terminal's, already resolved: under tmux term.Name
 // answers with the terminal behind it, so "xterm-kitty" here is a kitty
@@ -34,12 +34,13 @@ func TestPickRungReadsTheTerminal(t *testing.T) {
 		draws rung
 	}{
 		{"asked for by name", rungCells, "xterm-kitty", geom, rungCells},
+		{"pixels asked for by name", rungPixels, "xterm-256color", term.Geom{}, rungPixels},
 		{"kitty and a cell size", rungAuto, "xterm-kitty", geom, rungPixels},
-		{"kitty through a pipe, so no cell size", rungAuto, "xterm-kitty", term.Geom{}, rungOctants},
+		{"kitty through a pipe, so no cell size", rungAuto, "xterm-kitty", term.Geom{}, rungCells},
 		{"ghostty and a cell size", rungAuto, "xterm-ghostty", geom, rungPixels},
-		{"ghostty through a pipe, so no cell size", rungAuto, "xterm-ghostty", term.Geom{}, rungOctants},
-		{"anything else", rungAuto, "xterm-256color", geom, rungBraille},
-		{"no TERM at all", rungAuto, "", geom, rungBraille},
+		{"ghostty through a pipe, so no cell size", rungAuto, "xterm-ghostty", term.Geom{}, rungCells},
+		{"anything else", rungAuto, "xterm-256color", geom, rungCells},
+		{"no TERM at all", rungAuto, "", geom, rungCells},
 	} {
 		if got := pickRung(c.want, c.term, c.geom); got != c.draws {
 			t.Errorf("%s: draws in %s, want %s", c.name, got, c.draws)

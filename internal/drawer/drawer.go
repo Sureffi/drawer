@@ -52,7 +52,7 @@ func Main(args []string) int {
 	// set for claude in settings.json's `env` or the shell.
 	hook := fs.Bool("hook", false, "act as a CC MessageDisplay hook: payload on stdin, replacement on stdout")
 	contextLine := fs.Bool("context", false, "print what a model should know about this hook, as a SessionStart hook hands it, and exit")
-	render := fs.String("render", envOr("DRAWER_RENDER", "auto"), "how a graph is drawn: auto, pixels, octants, braille or cells (DRAWER_RENDER)")
+	render := fs.String("render", envOr("DRAWER_RENDER", "auto"), "how a graph is drawn: auto, pixels or cells (DRAWER_RENDER)")
 	hooktee := fs.String("hooktee", os.Getenv("DRAWER_TEE"), "as -hook: append every payload here, one JSON object per line, a fixture for -deltas (DRAWER_TEE)")
 	dotDump := fs.String("dot", "", "draw a DOT file and print it")
 	deltaDump := fs.String("deltas", "", "replay a recorded MessageDisplay delta stream through the hook; nonzero if it damaged the message")

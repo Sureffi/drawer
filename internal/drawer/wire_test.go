@@ -314,7 +314,7 @@ func TestHookDeltasTakeTurns(t *testing.T) {
 //
 // The PATH is the stub's own directory and nothing else, and there is no
 // terminal behind this process to answer with a cell size, so the pixels
-// rung fails open to the strokes — and the strokes are the drawing this law
+// rung fails open to the glyphs — and the glyphs are the drawing this law
 // counts.
 func wedgedTmux(t *testing.T) {
 	t.Helper()

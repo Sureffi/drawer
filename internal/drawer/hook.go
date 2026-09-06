@@ -171,10 +171,8 @@ func (r run) sessionContext() string {
 	switch r.pickRung() {
 	case rungPixels:
 		can = "as graphviz's own picture, so everything dot draws, draws"
-	case rungOctants, rungBraille:
-		can = "in strokes, painted in the colours the graph asks for: clusters, node shapes, multi-line labels and dashed edges draw; record and HTML labels print their markup, and a filled node draws its outline, not a block of paint"
 	default:
-		can = "in box-drawing characters: boxes with one-line labels and routed edges; clusters and node shapes do not draw"
+		can = "in box-drawing glyphs, in the colours the graph asks for: clusters, node shapes, records, multi-line labels, edge labels and dashed or heavy edges all draw; HTML labels print their markup, and a filled node draws its outline, not a block of paint"
 	}
 	return "drawer: a ```dot fence in a reply is drawn in place, " + can +
 		". For any diagram, write graphviz DOT in a ```dot fence, not mermaid and not ASCII art. " +

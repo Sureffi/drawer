@@ -115,7 +115,7 @@ $(cat "$here/graph.dot")"
 		-bordercolor '#0a0a0a' -border 24 "$out/$r.png"
 	;;
 *)
-	echo "usage: demo/record.sh session \"PROMPT\" | still pixels|octants|braille|cells" >&2
+	echo "usage: demo/record.sh session \"PROMPT\" | still pixels|cells" >&2
 	exit 2
 	;;
 esac

@@ -30,7 +30,6 @@ import (
 	"github.com/sureffi/drawer/internal/fence"
 	"github.com/sureffi/drawer/internal/grid"
 	"github.com/sureffi/drawer/internal/pixel"
-	"github.com/sureffi/drawer/internal/subcell"
 )
 
 // runDeltas replays a recorded delta stream through the transducer and
@@ -159,8 +158,8 @@ func splitFences(text string) ([]string, string) {
 }
 
 // checkDrawn is law 3: the fence is bare, every row fits the width it was
-// drawn for, and something was actually drawn — a stroke, a placeholder,
-// or the notice that says why not, with the source under it.
+// drawn for, and something was actually drawn — a line, a placeholder, or
+// the notice that says why not, with the source under it.
 func checkDrawn(block, src string, w int) error {
 	lines := strings.Split(block, "\n")
 	if len(lines) < 3 || strings.TrimSpace(lines[0]) != fenceTick ||
@@ -175,7 +174,7 @@ func checkDrawn(block, src string, w int) error {
 			return fmt.Errorf("row is %d cells in %d columns: %q", n, w, plain)
 		}
 		if strings.ContainsAny(plain, "─│╭╮╰╯▶◀▲▼") || strings.ContainsRune(plain, pixel.PlaceholderRune) ||
-			strings.Contains(plain, "no diagram") || subcell.HasInk(plain) {
+			strings.Contains(plain, "no diagram") {
 			drawn = true
 		}
 	}

@@ -164,8 +164,9 @@ func Fit(ctx context.Context, d *layout.Drawing, face string, cols int, geom ter
 // into that pane arrives exact and pipe-pane shows CC already writing 38;5
 // into the pane; and the trigger is $TMUX rather than the terminal's name,
 // since TERM=tmux-256color with no tmux around it arrives exact.
-// subcell/colour.go stands on that second reading, because a stroke one
-// step off is still that stroke. An id has no such room: one wrong step is
+// The pen a drawing is coloured in stands on that second reading, because
+// a line one step off is still that line. An id has no such room: one
+// wrong step is
 // a picture that never comes back. So the id keeps the 256-colour form,
 // which is the one that crossed this wire on every version measured and in
 // a pane besides. Zero is "no image" in the low byte, so it is skipped.

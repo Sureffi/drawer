@@ -13,7 +13,6 @@ import (
 	"github.com/sureffi/drawer/internal/cells"
 	"github.com/sureffi/drawer/internal/layout"
 	"github.com/sureffi/drawer/internal/pixel"
-	"github.com/sureffi/drawer/internal/subcell"
 	"github.com/sureffi/drawer/internal/term"
 	"github.com/sureffi/drawer/internal/theme"
 )
@@ -22,29 +21,19 @@ import (
 // fast loop for judging how a diagram actually reads, without a live
 // session in the way.
 //
-//	drawer -dot graph.dot -size 100x14 -render braille
+//	drawer -dot graph.dot -size 100x14 -render cells
 func (r run) runDotDump(ctx context.Context, path string, w, h int) int {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "-dot:", err)
 		return 1
 	}
-	var rows []string
-	if r.rung == rungBraille || r.rung == rungOctants {
-		rows = subcell.Draw(ctx, string(b), w, r.rung == rungOctants)
-		if rows == nil {
-			fmt.Fprintf(os.Stderr, "-dot: will not fit in %d columns as strokes (source would be left alone)\n", w)
-			return 1
-		}
+	g, err := layout.Read(ctx, string(b))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "-dot:", err)
+		return 1
 	}
-	if rows == nil {
-		g, err := layout.Read(ctx, string(b))
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "-dot:", err)
-			return 1
-		}
-		rows = cells.Draw(g, w, h)
-	}
+	rows := cells.Draw(g, w, h)
 	if rows == nil {
 		fmt.Fprintf(os.Stderr, "-dot: will not fit in %dx%d (source would be left alone)\n", w, h)
 		return 1
@@ -191,7 +180,7 @@ func (r run) doctor(ctx context.Context, w io.Writer, cols int, from term.WidthF
 	// drawBlock falls from pixels to the strokes where the picture cannot
 	// cross the wire, and the doctor falls with it.
 	if pick := r.pickRung(); pick == rungPixels && !r.mux.Through(ctx) {
-		fmt.Fprintf(w, "rung: %s (asked: %s; pixels, but the tmux wire is closed)\n", rungOctants, r.rung)
+		fmt.Fprintf(w, "rung: %s (asked: %s; pixels, but the tmux wire is closed)\n", rungCells, r.rung)
 	} else {
 		fmt.Fprintf(w, "rung: %s (asked: %s)\n", pick, r.rung)
 	}

@@ -115,8 +115,8 @@ func TestTheDoctorDoorSaysTheWindowItWasHanded(t *testing.T) {
 // -doctor is what a hook process would decide from, said out loud: ten
 // facts, one per line, in the order the ladder decides them. Under a pipe
 // there is no window to ask — the columns are the number nobody chose and
-// the cell size is unknown — and a terminal that says nothing gets braille,
-// which every font carries.
+// the cell size is unknown — and a terminal that says nothing gets cells,
+// which every terminal draws with its own hand.
 //
 // The window is handed in rather than probed: `go test` runs under the go
 // command, and the go command's own stdin is a terminal on the machine this
@@ -137,7 +137,7 @@ func TestDoctorSaysWhatAHookWouldSee(t *testing.T) {
 		"columns: 100 (from default)",
 		"cell: unknown: the terminal did not say",
 		"placeholders: no",
-		"rung: braille (asked: auto)",
+		"rung: cells (asked: auto)",
 		"theme: Claude Code's dark",
 		"state: ",
 		"tee: none",
@@ -367,8 +367,8 @@ func TestTheDoctorsRungIsWhatThisWireGets(t *testing.T) {
 	}{
 		{"a wire already through", "all", "all", "%0", "rung: pixels (asked: auto)"},
 		{"a pane nobody set, which the hook would set on", "off", "", "%0", "rung: pixels (asked: auto)"},
-		{"a pane that said off", "off", "off", "%0", "rung: octants (asked: auto; pixels, but the tmux wire is closed)"},
-		{"no pane to ask about", "on", "", "", "rung: octants (asked: auto; pixels, but the tmux wire is closed)"},
+		{"a pane that said off", "off", "off", "%0", "rung: cells (asked: auto; pixels, but the tmux wire is closed)"},
+		{"no pane to ask about", "on", "", "", "rung: cells (asked: auto; pixels, but the tmux wire is closed)"},
 	} {
 		log := optionTmux(t, c.force, c.own)
 		t.Setenv("TERM", "xterm-kitty")

@@ -38,8 +38,10 @@ import (
 // structure dim, as the stroke rungs have always drawn it. Structure
 // recedes, content stands.
 //
-// The reading of it is subcell's, measured on the rig; the code is this
-// package's own because a rung may not import a rung.
+// Measured on the rig: a 24-bit foreground arrives exact outside a tmux
+// pane and snapped to the xterm-256 cube inside one, and a line one step
+// off is still that line, so the pen is written truecolor and left to the
+// wire.
 type Pen uint32
 
 const penSet Pen = 0x01000000

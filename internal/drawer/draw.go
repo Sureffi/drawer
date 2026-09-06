@@ -7,13 +7,17 @@
 // through the display wire on CC 2.1.257 before this file was written, and
 // the shape below is exactly what survived.
 //
-// The rungs, best first, each failing open to the one below it:
+// The rungs, best first, the upper failing open to the lower:
 //
 //	pixels   a real graphviz picture in kitty's placeholder cells —
 //	         kitty draws them, and so does ghostty
-//	octants  strokes at 2x4 per cell, solid; labels as glyphs
-//	braille  the same at 2x4, dotted, and every font has it
-//	cells    box-drawing characters, and nothing but this binary
+//	cells    box-drawing glyphs, which every terminal draws with its own
+//	         hand, so a line is a line
+//
+// There is no third. A mosaic of sub-cell blocks — octants, braille —
+// cannot draw a thin line or an arrowhead, because both are smaller than
+// the block it is made of, and those two are the whole of a graph. The
+// glyphs are lines already.
 //
 // What no rung can do: be right after a resize. CC keeps what a hook
 // returned and re-wraps it without asking again, so the drawing is correct
@@ -33,7 +37,6 @@ import (
 	"github.com/sureffi/drawer/internal/layout"
 	"github.com/sureffi/drawer/internal/notice"
 	"github.com/sureffi/drawer/internal/pixel"
-	"github.com/sureffi/drawer/internal/subcell"
 	"github.com/sureffi/drawer/internal/term"
 )
 
@@ -45,15 +48,11 @@ func (r run) drawBlock(ctx context.Context, src string, width int) []string {
 	if width <= 0 {
 		width = 100
 	}
-	pick := r.pickRung()
-	if pick == rungPixels {
+	// Too narrow, too tall, out of time, or no way through to the
+	// terminal: the glyphs still can, so the picture falls to them rather
+	// than to a notice.
+	if r.pickRung() == rungPixels {
 		if rows := r.drawPixels(ctx, src, width); rows != nil {
-			return bare(rows)
-		}
-		pick = rungOctants // too narrow, too tall, out of time, or no way through to the terminal; the glyphs still can
-	}
-	if pick == rungOctants || pick == rungBraille {
-		if rows := subcell.Draw(ctx, src, width, pick == rungOctants); rows != nil {
 			return bare(rows)
 		}
 	}
@@ -90,17 +89,18 @@ func bare(rows []string) []string {
 
 // pickRung answers which drawing this terminal gets. `auto` reads the
 // terminal, and nothing else: pixels want a terminal that draws
-// placeholder cells and a cell size in pixels to cut the picture to;
-// octants want a terminal that draws them itself, which is the same list
-// less the cell size; everything else gets braille, which every font
-// carries.
+// placeholder cells and a cell size in pixels to cut the picture to.
+// Everything else is cells — a terminal that draws no placeholders, and a
+// terminal that draws them but would not say how big a cell is, which is
+// what a pipe looks like. Cells is not the fallback in the sense of the
+// lesser thing: it is what most terminals get, and it is held to the same
+// bar as the best box drawing anyone has made of a graph.
 //
 // The list is pixel.Placeholders and it lives there alone — one predicate,
 // read by the gate and by the doctor, so a terminal joins the rung in one
 // place. ghostty joined it on 2026-09-06, measured on the rig: its
 // placeholder cells hold streaming, complete and scrolled, inside tmux and
-// out. It was on the octants tier only because this gate had asked for the
-// word kitty.
+// out.
 //
 // Everything the judgement needs is what the run already knows, so it can
 // be read — and tested — without a terminal anywhere near it.
@@ -108,13 +108,10 @@ func pickRung(want rung, name string, geom term.Geom) rung {
 	if want != rungAuto {
 		return want
 	}
-	if !pixel.Placeholders(name) {
-		return rungBraille
-	}
-	if geom.OK() {
+	if pixel.Placeholders(name) && geom.OK() {
 		return rungPixels
 	}
-	return rungOctants
+	return rungCells
 }
 
 func (r run) pickRung() rung {

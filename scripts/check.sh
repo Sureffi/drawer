@@ -43,9 +43,8 @@ layers_table() {
   fence      grid layout
   notice     grid layout
   cells      grid layout
-  subcell    grid layout
   pixel      grid term layout theme
-  drawer     grid term layout theme fence notice cells subcell pixel
+  drawer     grid term layout theme fence notice cells pixel
   cmd/drawer drawer
 TABLE
 }
@@ -95,15 +94,12 @@ gofmt_clean() { f=$(gofmt -l .); [ -z "$f" ] || { printf '%s\n' "$f"; return 1; 
 stage "gofmt" gofmt_clean || true
 stage "laws (go test -race)" go test -race ./... || true
 
-for r in cells braille octants; do
-  stage "dot: $r" ./bin/drawer -dot testdata/chain.dot -size 100x14 -render $r || true
-done
-# The pens the strokes draw in, on the source the harness and the delta
-# fixture both carry. Only the glyph rungs: the cells rung has no colour to
-# put a graph's own pen into, and chain.dot above already draws it.
-for r in braille octants; do
-  stage "dot: colour $r" ./bin/drawer -dot testdata/colour.dot -size 100x20 -render $r || true
-done
+# The two rungs, on the source the harness and the delta fixture both carry.
+# The pixels rung is stood up by the -png stage below, which is the one cut
+# that needs no terminal; here the glyphs draw, and draw again in the pens
+# the graph asked for.
+stage "dot: cells" ./bin/drawer -dot testdata/chain.dot -size 100x14 -render cells || true
+stage "dot: colour cells" ./bin/drawer -dot testdata/colour.dot -size 100x20 -render cells || true
 
 # A theme file is read by graphviz's parser; the example themes must load,
 # and the theme in force — Claude Code's, derived — must print as DOT.
@@ -155,15 +151,13 @@ stage "png: testdata/chain.dot" ./bin/drawer -dot testdata/chain.dot -png bin/ch
 # The hook wire: recorded delta streams, replayed. `drawer -hook -hooktee`
 # writes these straight off a live session, so the corpus is not limited to
 # cases somebody thought of.
-for r in cells braille; do
-  for f in testdata/deltas-*.jsonl; do
-    n=$(basename "$f" .jsonl)
-    if out=$(./bin/drawer -deltas "$f" -size 100x40 -render $r 2>&1); then
-      say "deltas ($r): $n" "$out"
-    else
-      say "deltas ($r): $n" "DAMAGED"; echo "$out" | head -4; fail=1
-    fi
-  done
+for f in testdata/deltas-*.jsonl; do
+  n=$(basename "$f" .jsonl)
+  if out=$(./bin/drawer -deltas "$f" -size 100x40 -render cells 2>&1); then
+    say "deltas: $n" "$out"
+  else
+    say "deltas: $n" "DAMAGED"; echo "$out" | head -4; fail=1
+  fi
 done
 
 [ $fail -eq 0 ] && say "" "all clear" || say "" "FAILURES ABOVE"
