@@ -32,8 +32,10 @@ import (
 // so ten seconds is not a budget anybody draws inside — it is the bound on
 // a wasm that has stopped answering, and on a tmux that has. A layout
 // already under way runs to its end whatever this says: the context is
-// spent at graphviz's door, at tmux's, and nowhere deeper, so what the
-// deadline buys is that the next door does not open —
+// spent at graphviz's door, at tmux's, and at the painter's, and nowhere
+// deeper — the painter reads it before it starts and then paints to the
+// end, bounding what it reads off the box by size rather than by a clock —
+// so what the deadline buys is that the next door does not open —
 // Fit's second orientation, Cut's, a repaint of a fence already drawn — and
 // that is the difference between late and never. A door that refuses
 // returns an error like any other, and the fence shows its source under a

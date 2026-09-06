@@ -64,8 +64,10 @@ const (
 	// answers for itself. The largest picture those bounds allow on a 4K
 	// screen is 297 columns of a 13px cell by 120 rows of a 30px one —
 	// 3861 x 3600, fourteen million pixels — so this is twice the biggest
-	// real one, and still only 128MB of RGBA. Past it there is no picture
-	// and the glyphs draw.
+	// real one. The image at the ceiling is 128MB of RGBA and the process
+	// about two and a half times that: measured, a 9760x2838 picture took
+	// 1.63s and peaked at 259MB. Past the ceiling there is no picture and
+	// the glyphs draw.
 	maxPixels = 32 << 20
 	// maxFontBytes is the ceiling on a font file a theme names, which the
 	// painter reads whole. Measured, the largest font on this box is
@@ -136,10 +138,15 @@ func paintPNG(ctx context.Context, d *layout.Drawing, face string, zoom float64)
 // paint draws a laid-out picture at a zoom. face is the theme's, which is
 // a face only where it names a font file; see the font table below.
 //
-// The context is read once, here, the way layout.Door reads it: painting
-// is arithmetic in this process and measured in milliseconds, so there is
-// nothing to interrupt — what a spent deadline buys is that the picture
-// nobody is waiting for any more is not painted at all.
+// The context is read once, here, the way layout.Door reads it, and that is
+// the only reading there is: what a spent deadline buys is that the picture
+// nobody is waiting for any more is not painted at all. Nothing under this
+// line waits on anything. The arithmetic runs to its end — measured, a
+// 9760x2838 picture, four fifths of the ceiling, took 1.63s and peaked at
+// 259MB, so a corpus graph in a terminal-sized block is milliseconds and
+// the ceiling is seconds — and the one thing the painter asks of the box,
+// the font file a theme may name, is bounded where it is read rather than
+// by a clock; see isFont.
 func paint(ctx context.Context, d *layout.Drawing, face string, zoom float64) (*image.RGBA, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -760,6 +767,10 @@ var (
 // The size is in pixels and the face is asked for at 72 dpi, which is the
 // resolution at which a point is a pixel: the zoom is already in the
 // number.
+//
+// The lock is over the maps alone. A face carries a glyph buffer of its own
+// and is not safe to set type with from two goroutines at once, and nothing
+// here starts one: a picture is painted in the goroutine that asked for it.
 func face(k faceKey) font.Face {
 	facesMu.Lock()
 	defer facesMu.Unlock()
