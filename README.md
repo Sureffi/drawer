@@ -89,10 +89,10 @@ prints the theme in force as DOT, which is where a theme file starts;
 theme file is the whole theme, not a patch on Claude Code's: what it leaves
 undeclared is graphviz's default. `graph [...]` is the root and every
 cluster alike. Three attributes are rules rather than values. `fontname`
-may name a font file — an absolute path, or a file name found in the
-system font directories — and the picture is then set in that face;
-anything else, and any file that will not parse, leaves it in the Go Mono
-the binary carries. The layout is measured in Courier whatever it says, so
+may name a font file — an absolute path, or a `.ttf`, `.otf` or `.ttc`
+found in the system font directories — and the picture is then set in that
+face; anything else, a family name included, and any file that will not
+read or parse, leaves it in the Go Mono the binary carries. The layout is measured in Courier whatever it says, so
 a monospace file fits and a proportional one will not. `fontsize` yields to
 the cell when the theme has none. A node's `fillcolor` is a rule: a node the
 model filled keeps its own text colour, any other gets the theme's fill with

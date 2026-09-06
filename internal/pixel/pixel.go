@@ -206,10 +206,11 @@ func RenderThemed(ctx context.Context, th *theme.Theme, src string, fontPt float
 
 // ---------- pixels ----------
 
-// A drawing is measured in points, and a point is 96dpi's ninety-sixth of
-// an inch: the size the picture has always been rendered at. Measured, not
-// assumed — the reference 672pt × 121pt picture came back 896 × 162 px at
-// zoom 1, and 672 × 96/72 is 896.
+// A drawing is measured in points, a point is a seventy-second of an inch,
+// and a picture is rendered at 96 of those pixels to the inch: the size the
+// picture has always been rendered at. Measured, not assumed — the
+// reference 672pt × 121pt picture came back 896 × 162 px at zoom 1, and
+// 672 × 96/72 is 896.
 const pxPerPt = 96.0 / 72.0
 
 // ---------- names ----------

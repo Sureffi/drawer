@@ -10,9 +10,9 @@
 // else. `graph [...]` is the root and every cluster alike; an attribute that
 // means nothing on one of them is ignored there, as graphviz already ignores
 // it. Three attributes are read as rules rather than values, and
-// internal/pixel says how: fontname names the face the picture is set in,
-// fontsize yields to the cell when the theme has none, and a node's fill is
-// a rule.
+// internal/pixel says how: fontname names a font file the picture is set in
+// and nothing else, fontsize yields to the cell when the theme has none,
+// and a node's fill is a rule.
 //
 // The theme in force is Claude Code's own, unless DRAWER_THEME names a
 // file. Claude Code's theme is a palette of named colours — claude, text,
@@ -174,8 +174,9 @@ type Theme struct {
 	Source            string
 }
 
-// Face is the font the picture is set in: the theme's fontname, from
-// whichever kind declares one, or the terminal's generic monospace.
+// Face is what the theme asked the picture to be set in: the fontname of
+// whichever kind declares one, or "monospace", which names no file and so
+// leaves the picture in the Go Mono the binary carries.
 func (t *Theme) Face() string {
 	for _, m := range []map[string]string{t.Node, t.Graph, t.Edge} {
 		if f := m["fontname"]; f != "" {
