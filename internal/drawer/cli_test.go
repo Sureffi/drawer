@@ -180,6 +180,10 @@ func TestDoctorSaysWhichThemeCameOut(t *testing.T) {
 			"theme: file /themes/night.dot"},
 		{"a file that would not", &inForce{file: "/themes/gone.dot", readErr: errors.New("open /themes/gone.dot: no such file or directory")},
 			"theme: file /themes/gone.dot (would not read: open /themes/gone.dot: no such file or directory)"},
+		// A path is a string a reader typed once and a terminal obeys every
+		// time it is printed; the tmux line learned this on the rig.
+		{"a file whose name the terminal would obey", &inForce{file: "/themes/\x1b]0;pwned\x07gone.dot", readErr: errors.New("open /themes/\x1b]0;pwned\x07gone.dot: no such file or directory")},
+			"theme: file /themes/]0;pwnedgone.dot (would not read: open /themes/]0;pwnedgone.dot: no such file or directory)"},
 	}
 	for _, c := range cases {
 		var b strings.Builder

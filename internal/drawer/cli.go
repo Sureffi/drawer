@@ -207,12 +207,12 @@ func (r run) doctor(ctx context.Context, w io.Writer, cols int, from term.WidthF
 	r.theme.get(ctx) // the answer is in the run afterwards, not in the value
 	switch {
 	case r.theme.file != "" && r.theme.readErr != nil:
-		fmt.Fprintf(w, "theme: file %s (would not read: %s)\n", r.theme.file, firstLine(r.theme.readErr.Error()))
+		fmt.Fprintf(w, "theme: file %s (would not read: %s)\n", term.Printable(r.theme.file), term.Printable(firstLine(r.theme.readErr.Error())))
 	case r.theme.file != "":
-		fmt.Fprintln(w, "theme: file", r.theme.file)
+		fmt.Fprintln(w, "theme: file", term.Printable(r.theme.file))
 	case r.theme.deriveErr != nil:
 		fmt.Fprintf(w, "theme: graphviz's defaults (Claude Code's theme would not derive: %s)\n",
-			firstLine(r.theme.deriveErr.Error()))
+			term.Printable(firstLine(r.theme.deriveErr.Error())))
 	default:
 		fmt.Fprintln(w, "theme: Claude Code's", theme.ClaudeName())
 	}
