@@ -159,15 +159,7 @@ func routeAll(cv *Canvas, g *layout.Graph, sl slots, boxes, frames []Box, encl [
 		var tp, hp port
 		var ps Route
 		if e.Tail == e.Head {
-			// A loop with words on it needs a leg long enough to set
-			// them into, and a leg is long where it leaves a side wall
-			// rather than the top: out, along, and back in. One with no
-			// words wants the smallest hoop there is, over the top.
-			sides, minK := []Dir{North, South, East, West}, 0
-			if n := grid.Cells(e.Label); n > 0 {
-				sides, minK = []Dir{East, West, North, South}, n+5
-			}
-			tp, hp, ps = selfLoop(cv, t, pt, tb, e.Tail, hoops, sides, minK)
+			tp, hp, ps = selfLoop(cv, t, pt, tb, e.Tail, hoops, e.Label != "", grid.Cells(e.Label))
 		} else {
 			// A node inside a frame the other end is not inside cannot
 			// have the line come to it: a frame cuts a line in two. The
@@ -220,8 +212,19 @@ type laid struct {
 // that one and hops a cell further, so no two ever meet. A loop that
 // carries a label reaches further out, and out of a side wall, so its own
 // leg is long enough to set the words into.
-func selfLoop(cv *Canvas, t *terrain, pt *porter, b Box, node int, hoops map[[2]int]int, sides []Dir, minK int) (port, port, Route) {
-	for _, side := range sides {
+func selfLoop(cv *Canvas, t *terrain, pt *porter, b Box, node int, hoops map[[2]int]int, said bool, need int) (port, port, Route) {
+	// The wall with the fewest hoops on it goes first: four loops on one
+	// node get a wall each rather than nesting, and a hoop with nothing
+	// beside it has room for its own words. Words want a side wall, where
+	// the leg runs across the page and the label can sit in it.
+	order := []Dir{North, South, East, West}
+	if said {
+		order = []Dir{East, West, North, South}
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		return hoops[[2]int{node, int(order[i])}] < hoops[[2]int{node, int(order[j])}]
+	})
+	for _, side := range order {
 		all := slotsIn(b, side)
 		key := [2]int{node, int(side)}
 		for j := hoops[key]; j < len(all)/2; j++ {
@@ -233,8 +236,15 @@ func selfLoop(cv *Canvas, t *terrain, pt *porter, b Box, node int, hoops map[[2]
 			// Each hoop inside another reaches two cells further, so
 			// their turns never land in the same column or row.
 			k := j + 1
-			if minK > 0 {
-				k = minK + 2*j
+			if said {
+				// Words go into the leg where the leg runs across the
+				// page, and beside it where it runs down: one wants the
+				// whole label's length, the other only somewhere to sit.
+				if side == East || side == West {
+					k = need + 5 + 2*j
+				} else if k < 3 {
+					k = 3
+				}
 			}
 			dx, dy := side.Step()
 			ps := hoop(a, z, dx, dy, k)
@@ -399,7 +409,7 @@ func placeLabel(cv *Canvas, t *terrain, ps Route, label string) bool {
 	segs := segments(ps)
 	if bridgeable(label) {
 		for _, s := range segs {
-			if s.horiz && inLine(cv, s, label, need) {
+			if s.horiz && inLine(cv, t, ps, s, label, need) {
 				return true
 			}
 		}
@@ -499,7 +509,7 @@ func mine(cv *Canvas, t *terrain, ps Route, x, y, n int) bool {
 
 // inLine writes the label into its own line: the run is blanked for the
 // words and a shoulder, and the line carries on either side of them.
-func inLine(cv *Canvas, s segment, label string, need int) bool {
+func inLine(cv *Canvas, t *terrain, ps Route, s segment, label string, need int) bool {
 	lo, hi := s.a.x, s.b.x
 	if lo > hi {
 		lo, hi = hi, lo
@@ -521,6 +531,12 @@ func inLine(cv *Canvas, s segment, label string, need int) bool {
 		if cv.Rune(x, y) != ' ' || cv.Held(x, y) || m.Vert() || !m.Horiz() {
 			return false
 		}
+	}
+	// A label set into a line is still given to whichever line touches it
+	// most, so the rows over and under it have to be this edge's or
+	// nobody's — an edge running one row above steals the words off it.
+	if !mine(cv, t, ps, x0+1, y, need) {
+		return false
 	}
 	cv.Blank(x0, y, need+2)
 	cv.Text(x0+1, y, label, 0)

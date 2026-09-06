@@ -520,11 +520,13 @@ func attempt(g *layout.Graph, sl slots, extra gaps, width, maxRows int) ([]strin
 		// The plain ones hang over the top and the bottom, which is width;
 		// the ones with words reach out of the side walls, which a
 		// three-row box has none of.
-		if n := 2 + 2*((loops[i]-said[i]+1)/2); n > bw[i] {
+		if n := 2 + 2*((loops[i]+1)/2); n > bw[i] {
 			bw[i] = n
 		}
-		if n := 2 + 2*((said[i]+1)/2); n > bh[i] {
-			bh[i] = n
+		if said[i] > 0 {
+			if n := 2 + 2*((said[i]+1)/2); n > bh[i] {
+				bh[i] = n
+			}
 		}
 		if bw[i] > colW[sl.col[i]] {
 			colW[sl.col[i]] = bw[i]
@@ -536,8 +538,14 @@ func attempt(g *layout.Graph, sl slots, extra gaps, width, maxRows int) ([]strin
 	room := make([]int, len(g.Nodes)) // rows a plain hoop needs above and below
 	wide := make([]int, len(g.Nodes)) // columns a hoop with words needs beside
 	for i := range loops {
-		if n := loops[i] - said[i]; n > 0 {
-			room[i] = (n+1)/2 + 2
+		if loops[i] == 0 {
+			continue
+		}
+		// A hoop that has to hold words stands three cells off the wall
+		// rather than one, so the words have somewhere to sit beside it.
+		room[i] = (loops[i]+1)/2 + 2
+		if said[i] > 0 {
+			room[i] += 2
 		}
 	}
 	for _, e := range g.Edges {
