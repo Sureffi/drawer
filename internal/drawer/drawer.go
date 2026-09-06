@@ -83,16 +83,28 @@ func Main(args []string) int {
 		th = loaded // nil where it would not read: Claude Code's, as before
 	}
 
-	r := newRun(ctx, parseRung(*render), *hooktee, &inForce{th: th, file: file, readErr: readErr})
-	w, h := parseSize(*size, 100, 40)
+	inf := &inForce{th: th, file: file, readErr: readErr}
 
+	// Two doors need neither the terminal nor the multiplexer, and building
+	// the run asks tmux which terminal is behind this pane — a fork and a
+	// socket round-trip in front of a door whose whole job is to print a
+	// string. They answer before there is a run to answer from. The cost of
+	// the ordering is that -show-theme now wins over -doctor where somebody
+	// passed both, which nobody has a reason to.
 	switch {
 	case *showVersion:
 		return runVersion(os.Stdout)
+	case *showTheme:
+		fmt.Print(inf.get(ctx).Source)
+		return 0
+	}
+
+	r := newRun(ctx, parseRung(*render), *hooktee, inf)
+	w, h := parseSize(*size, 100, 40)
+
+	switch {
 	case *doctor:
 		return r.runDoctor(ctx, os.Stdout, term.Size)
-	case *showTheme:
-		fmt.Print(r.theme.get(ctx).Source)
 	case *contextLine:
 		fmt.Print(r.sessionContext())
 	case *dotDump != "" && *pngOut != "":

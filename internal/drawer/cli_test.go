@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -191,6 +192,66 @@ func TestDoctorSaysWhichThemeCameOut(t *testing.T) {
 		}
 		if line != c.want {
 			t.Errorf("%s: theme line is %q, want %q", c.name, line, c.want)
+		}
+	}
+}
+
+// countingTmux puts a tmux on the PATH that writes down every command it is
+// given and answers nothing. The file it writes is the count.
+func countingTmux(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	log := filepath.Join(dir, "asked")
+	sh := "#!/bin/sh\nshift 2\necho \"$1\" >>" + log + "\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(sh), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return log
+}
+
+// asked is what that tmux was asked to do, in order.
+func asked(t *testing.T, log string) []string {
+	t.Helper()
+	b, err := os.ReadFile(log)
+	if err != nil {
+		return nil
+	}
+	return strings.Fields(string(b))
+}
+
+// -version and -show-theme need neither the terminal nor the multiplexer:
+// one prints a linker variable and the other prints a theme. Building the
+// run asks tmux which terminal is behind this pane, and that is a fork and
+// a socket round-trip in front of a door whose whole job is to print a
+// string — and on a tmux that has stopped answering, two seconds of it.
+// Both answer before the run exists.
+//
+// The boundary is the point, so a door that does need the terminal stands
+// beside them: -context reads the rung it is describing, so it builds the
+// run and asks.
+func TestTheDoorsThatNeedNoTerminalRunNoTmux(t *testing.T) {
+	for _, c := range []struct {
+		door string
+		runs int
+	}{
+		{"-version", 0},
+		{"-show-theme", 0},
+		{"-context", 1},
+	} {
+		log := countingTmux(t)
+		t.Setenv("TERM", "xterm-256color")
+		t.Setenv("TMUX", "/nowhere,1,0")
+		t.Setenv("TMUX_PANE", "%0")
+		t.Setenv("HOME", t.TempDir())
+		t.Setenv("DRAWER_THEME", "")
+		t.Setenv("DRAWER_TEE", "")
+		t.Setenv("DRAWER_RENDER", "")
+		if code := Main([]string{c.door}); code != 0 {
+			t.Errorf("%s exited %d", c.door, code)
+		}
+		if got := asked(t, log); len(got) != c.runs {
+			t.Errorf("%s ran tmux %v; want %d times", c.door, got, c.runs)
 		}
 	}
 }
