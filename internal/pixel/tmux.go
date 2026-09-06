@@ -49,6 +49,11 @@ type Tmux struct {
 	ownAsked bool   // whether this pane's own value has been read
 	own      string // what the pane itself was set to, nothing inherited
 	ownErr   error
+
+	tried  bool  // whether this process has tried to set it
+	setErr error // and how that went
+
+	noted bool // whether the tee already has this process's note
 }
 
 // errNoPane is a tmux this process cannot name a pane in. TMUX_PANE is set
@@ -144,8 +149,10 @@ func (t *Tmux) Passthrough(ctx context.Context) (string, error) {
 // answer of its own is written to, and what it is written is "on".
 //
 // The note is empty where it was already through and there was nothing to
-// do, because a note about nothing is noise — and a second picture in the
-// same process finds it on, because setting it is what this wrote down.
+// do, because a note about nothing is noise — and it is written once
+// whatever happened, because a hook draws a picture and may repaint a
+// ledger of them behind it, and the tee is a fixture a replay reads and
+// not a log.
 func (t *Tmux) Allow(ctx context.Context) (string, bool) {
 	if t == nil {
 		return "", true
@@ -158,29 +165,45 @@ func (t *Tmux) Allow(ctx context.Context) (string, bool) {
 		// string for "exited 0, said nothing" and for "never ran at all",
 		// and a box with no tmux on the PATH went out expecting pixels
 		// that had nowhere to come from.
-		return "tmux: allow-passthrough could not be asked about" + pane +
-			": " + reason(err), false
+		return t.note("tmux: allow-passthrough could not be asked about" + pane +
+			": " + reason(err)), false
 	}
 	if was == "on" || was == "all" {
 		return "", true
 	}
 	own, err := t.PaneOption(ctx)
 	if err != nil {
-		return "tmux: allow-passthrough is " + quoted(was) + pane +
-			" and this pane's own value could not be read: " + reason(err), false
+		return t.note("tmux: allow-passthrough is " + quoted(was) + pane +
+			" and this pane's own value could not be read: " + reason(err)), false
 	}
 	if own == "off" {
-		return "tmux: allow-passthrough is off" + pane +
+		return t.note("tmux: allow-passthrough is off" + pane +
 			", set there and not inherited from the server: a reader said no in this" +
-			" pane, so drawer leaves it and draws in glyphs", false
+			" pane, so drawer leaves it and draws in glyphs"), false
 	}
-	if err := t.allow(ctx); err != nil {
-		return "tmux: allow-passthrough is " + quoted(was) + pane +
-			" and would not be set: " + reason(err), false
+	if !t.tried {
+		t.setErr, t.tried = t.allow(ctx), true
+	}
+	if t.setErr != nil {
+		return t.note("tmux: allow-passthrough is " + quoted(was) + pane +
+			" and would not be set: " + reason(t.setErr)), false
 	}
 	t.was, t.err = "on", nil
-	return "tmux: allow-passthrough was " + quoted(was) + "; set on" + pane +
-		" (this pane only, until it closes)", true
+	return t.note("tmux: allow-passthrough was " + quoted(was) + "; set on" + pane +
+		" (this pane only, until it closes)"), true
+}
+
+// note hands back something worth writing down, once. Every failing path
+// used to hand its note back on every call, and a hook that drew a picture
+// and repainted a ledger behind it put four identical lines about the same
+// tmux into the tee — measured. The wire is asked once and answered once,
+// so it is said once.
+func (t *Tmux) note(s string) string {
+	if t.noted {
+		return ""
+	}
+	t.noted = true
+	return s
 }
 
 // PaneOption is what this pane itself was set to, with nothing inherited

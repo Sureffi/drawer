@@ -370,3 +370,61 @@ func TestTheNoteCarriesNothingTheTerminalWouldObey(t *testing.T) {
 		}
 	}
 }
+
+// The note is written once per process, and so is every exec behind it —
+// on the paths that fail as much as on the one that works. A hook draws a
+// picture and may repaint a whole ledger of them behind it, and each of
+// those calls Allow: measured, one process put four identical lines about
+// the same tmux into the tee, and tried the same doomed `set` four times.
+//
+// The tee is a fixture a replay reads, not a log, so a line repeated is a
+// line that says something happened again.
+func TestAClosedWireIsWrittenDownOnce(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		log  func(*testing.T) string
+		runs []string
+	}{
+		{"a tmux that cannot be asked at all", func(t *testing.T) string {
+			t.Setenv("PATH", "")
+			return ""
+		}, nil},
+		{"a set that would not take", func(t *testing.T) string {
+			return failingSetTmux(t)
+		}, []string{"show-A", "show", "set"}},
+	} {
+		log := c.log(t)
+		mux := &Tmux{Socket: "/nowhere/tmux-does-not-exist", Pane: "%0"}
+		first, through := mux.Allow(t.Context())
+		if through || first == "" {
+			t.Errorf("%s: said %q, through=%v; want a closed wire, written down", c.name, first, through)
+		}
+		for i := 0; i < 3; i++ {
+			if note, through := mux.Allow(t.Context()); note != "" || through {
+				t.Errorf("%s: call %d said %q again, through=%v", c.name, i+2, note, through)
+			}
+		}
+		if log != "" {
+			if got := asked(t, log); len(got) != len(c.runs) {
+				t.Errorf("%s: tmux was run %v; want %v", c.name, got, c.runs)
+			}
+		}
+	}
+}
+
+// failingSetTmux answers both reads and refuses the write, which is what a
+// tmux with a read-only option or a pane that went away does.
+func failingSetTmux(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	log := filepath.Join(dir, "asked")
+	sh := "#!/bin/sh\nshift 2\nc=$1\ncase \" $* \" in *' -A '*) c=show-A;; esac\n" +
+		"echo \"$c\" >>" + log + "\n" +
+		"case $c in set) echo \"can't set option: allow-passthrough\" >&2; exit 1;; " +
+		"show-A) echo off;; esac\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(sh), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return log
+}
