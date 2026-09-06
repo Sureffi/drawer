@@ -331,40 +331,19 @@ func (cv *Canvas) Free(x, y, n int) bool {
 // against corners.
 type Box struct {
 	X, Y, W, H int
-	Pencil            // the border's style and pen
-	Round      bool   // ╭ ╮ ╰ ╯ rather than ┌ ┐ └ ┘: a wall, never a bend
-	Ink        Pen    // the text's pen
-	Title      string // set into the top edge — a cluster's name
-	Label      []string
+	Pencil          // the border's style and pen
+	Round      bool // ╭ ╮ ╰ ╯ rather than ┌ ┐ └ ┘: a wall, never a bend
+	Ink        Pen  // the text's pen
+	// Title is a cluster's name. The canvas does not draw it: a frame is
+	// laid by drawFrame and named by nameFrame, after every line is down,
+	// because where the name goes depends on where the lines went.
+	Title string
+	Label []string
 }
 
 // Has reports whether a cell is inside this box, wall included.
 func (b Box) Has(x, y int) bool {
 	return x >= b.X && x < b.X+b.W && y >= b.Y && y < b.Y+b.H
-}
-
-// titlePad is the air a title needs in a top edge: two corners, a
-// length of line each side, and a space each side of the words.
-const titlePad = 6
-
-// Size is the smallest box a label and a title fit in: the widest line
-// plus a wall and pad cells of air each side, a row per line between
-// the two edges, and enough top edge for the title.
-func Size(title string, label []string, pad int) (w, h int) {
-	for _, l := range label {
-		if n := grid.Cells(l); n > w {
-			w = n
-		}
-	}
-	w += 2 + 2*pad
-	if n := grid.Cells(title); n > 0 && n+titlePad > w {
-		w = n + titlePad
-	}
-	h = len(label) + 2
-	if h < 3 {
-		h = 3
-	}
-	return w, h
 }
 
 // Box draws one. The label is centred in what the walls leave; a box
@@ -388,10 +367,6 @@ func (cv *Canvas) Box(b Box) {
 				cv.mask[i] = cv.mask[i].Round()
 			}
 		}
-	}
-	if n := grid.Cells(b.Title); n > 0 && b.W >= n+titlePad {
-		cv.Blank(b.X+2, b.Y, n+2)
-		cv.Text(b.X+3, b.Y, b.Title, b.Ink)
 	}
 	cv.label(b, b.X+1, b.Y+1, b.W-2, b.H-2)
 	cv.Hold(b.X, b.Y, b.W, b.H)

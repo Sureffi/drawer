@@ -107,7 +107,13 @@ func Main(args []string) int {
 		return 0
 	}
 
-	r := newRun(ctx, parseRung(*render), *hooktee, inf)
+	rg, retired := parseRung(*render)
+	if retired {
+		// Said once, on the way past, to stderr — the hook's stdout is a
+		// JSON payload and a word in it is damage.
+		fmt.Fprintf(os.Stderr, "drawer: -render %s is gone; the rungs are auto, pixels and cells\n", *render)
+	}
+	r := newRun(ctx, rg, *hooktee, inf)
 	w, h := parseSize(*size, 100, 40)
 
 	switch {

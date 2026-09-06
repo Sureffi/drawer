@@ -83,12 +83,20 @@ func (r rung) String() string {
 
 // parseRung reads -render / DRAWER_RENDER. Anything else is auto, which is
 // what a string nobody recognised already meant.
-func parseRung(s string) rung {
+//
+// `retired` is the second answer, and it is why this returns two things
+// now: `braille` and `octants` were rungs and are not, and a settings.json
+// that still pins one meant "auto" in silence. Somebody who pinned braille
+// to keep the old drawing got the pixels rung on kitty and never learned
+// why the word stopped working.
+func parseRung(s string) (r rung, retired bool) {
 	switch s {
 	case "cells":
-		return rungCells
+		return rungCells, false
 	case "pixels":
-		return rungPixels
+		return rungPixels, false
+	case "braille", "octants":
+		return rungAuto, true
 	}
-	return rungAuto
+	return rungAuto, false
 }

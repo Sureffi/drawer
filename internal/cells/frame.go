@@ -122,10 +122,6 @@ func frameRects(g *layout.Graph, bs []bound, xs, ys, colW, rowH []int) []Box {
 	return out
 }
 
-// drawFrame lays a cluster's frame: four walls, and its name set into the
-// top edge where there is room for it and on the air row under the edge
-// where there is not. Only the ring is spoken for — everything inside a
-// frame belongs to what the frame is round.
 // titleRoom is the narrowest frame a cluster's name reads in. Set into the
 // top edge the name needs the edge to still read as an edge — a third of
 // it drawn is the reader's bar — and set on the air row inside it needs

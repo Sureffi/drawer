@@ -437,19 +437,9 @@ func TestTheBoxKinds(t *testing.T) {
 		t.Errorf("rounded corners:\n%s", joined(round.Rows()))
 	}
 
-	// A cluster's name is set into the top edge, and the frame's own
-	// line comes out from under it — a name with a rule struck through
-	// it is not a name.
-	cw, _ := Size("group", nil, 0)
-	frame := New(cw+2, 4)
-	frame.Box(Box{X: 0, Y: 0, W: cw, H: 4, Pencil: Pencil{Style: Dashed}, Title: "group"})
-	top := plain(frame.Rows())[0]
-	if !strings.Contains(top, " group ") {
-		t.Errorf("the cluster's name is not in its top edge: %q", top)
-	}
-	if strings.Contains(top, "─group") || strings.Contains(top, "┄group") {
-		t.Errorf("the frame's line runs through its own name: %q", top)
-	}
+	// A cluster's frame and its name are drawn by drawFrame and nameFrame,
+	// not here — see TestAClustersNameIsSetIntoItsTopEdge, which asks the
+	// question of a real drawing.
 
 	// A record is one box ruled into fields, and the rules join the
 	// walls: a line trapped inside a box reads as a second box.
@@ -1505,19 +1495,25 @@ func TestABoxIsItsLabelAndACellOfAirEachSide(t *testing.T) {
 // this rung does not have.
 func TestEveryShapeIsSomeBox(t *testing.T) {
 	for _, c := range []struct {
-		shape  string
-		corner rune
+		shape, style string
+		corner       rune
 	}{
-		{"", '╭'}, {"ellipse", '╭'}, {"circle", '╭'}, {"oval", '╭'},
-		{"doublecircle", '╭'}, {"diamond", '╭'},
-		{"box", '┌'}, {"square", '┌'}, {"hexagon", '┌'}, {"cylinder", '┌'},
-		{"nothing_graphviz_has_ever_drawn", '┌'},
+		{"", "", '╭'}, {"ellipse", "", '╭'}, {"circle", "", '╭'}, {"oval", "", '╭'},
+		{"doublecircle", "", '╭'}, {"diamond", "", '╭'},
+		{"box", "", '┌'}, {"square", "", '┌'}, {"hexagon", "", '┌'}, {"cylinder", "", '┌'},
+		{"nothing_graphviz_has_ever_drawn", "", '┌'},
+		// `style=rounded` says the same thing about a box's corners that a
+		// round shape says, and it is how a model writes a diagram. It was
+		// read for dashed and bold only, so six of the corpus's own model
+		// fixtures drew square where their source said round.
+		{"box", "rounded", '╭'}, {"", "rounded", '╭'},
+		{"box", "rounded,dashed", '╭'}, {"box", "filled", '┌'},
 	} {
-		src := `digraph { rankdir=LR; n [shape="` + c.shape + `", label="shape"]; n -> other }` + "\n"
+		src := `digraph { rankdir=LR; n [shape="` + c.shape + `", style="` + c.style + `", label="shape"]; n -> other }` + "\n"
 		rows := plain(drawn(t, src, 120))
 		if !strings.ContainsRune(rows[0], c.corner) {
-			t.Errorf("shape %q drew its top-left corner as %q, want %q:\n%s",
-				c.shape, string([]rune(rows[0])[0]), string(c.corner), strings.Join(rows, "\n"))
+			t.Errorf("shape %q style %q drew its top-left corner as %q, want %q:\n%s",
+				c.shape, c.style, string([]rune(rows[0])[0]), string(c.corner), strings.Join(rows, "\n"))
 		}
 	}
 }

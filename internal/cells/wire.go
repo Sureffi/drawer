@@ -16,8 +16,6 @@
 package cells
 
 import (
-	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -188,9 +186,6 @@ func routeAll(cv *Canvas, g *layout.Graph, sl slots, boxes, frames []Box, encl [
 			}
 		}
 		if ps == nil {
-			if os.Getenv("DBG") != "" {
-				fmt.Fprintf(os.Stderr, "SHORT %s->%s tp=%v hp=%v\n", g.Nodes[e.Tail].Name, g.Nodes[e.Head].Name, tp, hp)
-			}
 			short++
 			continue
 		}

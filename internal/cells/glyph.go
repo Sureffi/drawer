@@ -80,9 +80,6 @@ func (m Mask) With(d Dir, s Style) Mask {
 	return m&^(0xf<<(4*d)) | Mask(s+1)<<(4*d)
 }
 
-// Without returns the mask with side d's arm taken away.
-func (m Mask) Without(d Dir) Mask { return m &^ (0xf << (4 * d)) }
-
 // Has reports whether a line leaves this cell on side d.
 func (m Mask) Has(d Dir) bool { return m>>(4*d)&0xf != 0 }
 

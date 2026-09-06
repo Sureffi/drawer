@@ -158,10 +158,16 @@ var roundShapes = map[string]bool{
 func readNode(n *cgraph.Node, graphName string) GNode {
 	name, _ := n.Name()
 	shape := strings.TrimSpace(n.GetStr("shape"))
+	style := strings.TrimSpace(n.GetStr("style"))
 	out := GNode{
-		Name:     name,
-		Round:    roundShapes[shape],
-		Style:    strings.TrimSpace(n.GetStr("style")),
+		Name: name,
+		// The shape says which family the box is in, and `style=rounded`
+		// says the same thing about a box that named none — which is how a
+		// model actually writes a diagram: `node [shape=box,
+		// style=rounded]` in six of the corpus's own model fixtures, every
+		// one of them drawn square while the source said round.
+		Round:    roundShapes[shape] || (strings.Contains(style, "rounded") && !strings.Contains(shape, "record")),
+		Style:    style,
 		Pen:      strings.TrimSpace(n.GetStr("color")),
 		FontPen:  strings.TrimSpace(n.GetStr("fontcolor")),
 		PenWidth: atof(n.GetStr("penwidth")),

@@ -1,8 +1,8 @@
 // pixel.go — the same drawing, in real pixels, where the terminal can.
 //
-// The cells and the sub-cell strokes are the floor: they need nothing but
-// this binary and draw in any terminal that can show a `┌`. This is the
-// ceiling, and it is optional in the strongest sense — every stage fails
+// The cells rung is the other one: it needs nothing but this binary and
+// draws in any terminal that can show a `┌`. This is the ceiling, and it
+// is optional in the strongest sense — every stage fails
 // open to the glyph drawing, so a terminal that does not draw the
 // placeholder cells, a graph too big for the block it was given, or a
 // deadline already spent all end in the picture that was already there. No
