@@ -230,27 +230,28 @@ with nothing but `claude`.
   theme file that changes the type changes the layout, and a picture that
   no longer fits its old cut is left as it was.
 - Installed mid-session and reloaded with `/reload-plugins`, the hooks are
-  registered but SessionStart does not fire, so the binary is not put in
-  place and the first fence shows its source until a new session.
-  Measured on the first install of the release. The hook could copy the
-  shipped binary itself when it finds none, one `cp`; it does not yet.
+  registered but SessionStart does not fire, so the model is not handed the
+  line until a new session. Measured on the first install of the release.
+  The hook puts the binary in place itself when it finds none, so a ```dot
+  fence the model does write draws.
 
 ## developing
 
 A plugin runs no install step, so `scripts/drawer` puts the binary in the
-plugin's data directory itself, at the first session, by the first of
-four ways that works: a built checkout's `bin/drawer`, linked, so a
-rebuild is live at the next reply; the binaries the release zip carries,
-one per platform; the release binary downloaded for this platform and
-checked against the sum `scripts/release.sh` pinned in the script; or
-`go build`, where Go is on the PATH. A stranger's install is the zip. A
-checkout that arrived by git — an organisation pushing the plugin to its
-people can only point at git — downloads the same binary the zip would
-have carried. Until one of the four lands, both hooks fail open: a
-session without the line is a fence that shows its source. The script
-execs the binary rather than running it, because the binary reads the
-terminal's size as its parent's, and its parent has to be `claude`. The
-hook wire is Unix through and through and Windows does not build.
+plugin's data directory itself, at the first session, by the first of four
+ways that works: a built checkout's `bin/drawer`, linked, so a rebuild is
+live at the next reply; the binaries the release zip carries, one per
+platform; the release binary downloaded for this platform and checked
+against the sum `scripts/release.sh` pinned in the script; or `go build`,
+where Go is on the PATH. A hook that finds no binary takes the first two
+itself, the link and the copy, since neither reaches out. A stranger's
+install is the zip. A checkout that arrived by git — an organisation pushing
+the plugin to its people can only point at git — downloads the same binary
+the zip would have carried. Until one of the four lands, both hooks fail
+open: a session without the line is a fence that shows its source. The
+script execs the binary rather than running it, because the binary reads the
+terminal's size as its parent's, and its parent has to be `claude`. The hook
+wire is Unix through and through and Windows does not build.
 
 Install from the checkout: `/plugin marketplace add /path/to/drawer` then
 `/plugin install drawer@drawer`. Claude Code copies the tree into its cache

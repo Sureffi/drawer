@@ -136,6 +136,16 @@ hook_draws() {
 }
 stage "plugin: session" session_speaks || true
 stage "plugin: hook" hook_draws || true
+# The hook with no binary in place — the session that never ran, because
+# the plugin was installed mid-session and reloaded — puts the checkout's
+# binary there itself and draws through it.
+rm -rf bin/pdata-cold
+hook_cold() {
+  printf '{"delta":"```dot\\ndigraph{a->b}\\n```\\n","final":true,"message_id":"cold","index":0}' |
+    CLAUDE_PLUGIN_ROOT=. CLAUDE_PLUGIN_DATA=bin/pdata-cold DRAWER_STATE=bin/pdata-cold ./scripts/drawer hook |
+    grep -q displayContent
+}
+stage "plugin: hook, cold" hook_cold || true
 
 # The pixels rung, to a file: the same cut the hook makes. Nothing gates
 # this — the picture is painted in the binary, so a box that can run the

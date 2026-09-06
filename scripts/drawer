@@ -19,7 +19,11 @@
 #   built              go build, where Go is on the PATH: a checkout with
 #                      no release for this platform, or none reachable
 #
-# Until one of them lands every hook fails open: {} is "display the
+# A hook that finds no binary takes the first two itself. Installed
+# mid-session and reloaded, the hooks are registered but SessionStart is
+# not fired (measured, Claude Code 2.1.261), and a link or a copy costs
+# nothing; a download or a build is not what a hook with a reply on screen
+# does. Until one of them lands every hook fails open: {} is "display the
 # original", and a session without the line of context is a fence that
 # shows its source.
 #
@@ -122,6 +126,9 @@ session)
 	exec "$bin" -context
 	;;
 hook)
+	if [ ! -x "$bin" ] && [ -n "$data" ]; then
+		mkdir -p "$data" && { from_checkout || from_shipped; } >/dev/null 2>&1
+	fi
 	[ -x "$bin" ] || { echo '{}'; exit 0; }
 	exec "$bin" -hook
 	;;
