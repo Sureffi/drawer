@@ -16,8 +16,6 @@
 package cells
 
 import (
-	"strings"
-
 	"github.com/sureffi/drawer/internal/grid"
 	"github.com/sureffi/drawer/internal/layout"
 )
@@ -136,8 +134,9 @@ func titleRoom(title string) int {
 		return 0
 	}
 	if plainTitle(title) {
-		// Two cells past what the name needs, so a line coming up to the
-		// edge has somewhere to meet it that the name is not standing on.
+		// Four cells past what the name needs, so a line coming up to
+		// the edge has somewhere to meet it that the name is not
+		// standing on — two would leave the name only one place to go.
 		if w := (3*n+7)/2 + 2; w > n+10 {
 			return w
 		}
@@ -183,10 +182,14 @@ func drawFrame(cv *Canvas, b Box) {
 	if n := grid.Cells(b.Title); n > 0 && !inEdge(b) && b.W > n+4 {
 		// A name inside keeps a ring of air round it, so no line ever
 		// comes close enough for a reader to give the words to that
-		// line instead.
+		// line instead. The ring is two cells wide on the open sides:
+		// one was not enough — a dashed edge starting the cell after
+		// "namespace: prod" took the words off the frame and wore them
+		// as its own label.
 		cv.Text(b.X+2, b.Y+1, b.Title, b.Ink)
-		cv.Hold(b.X+1, b.Y+1, n+2, 1)
-		cv.Hold(b.X+1, b.Y+2, n+2, 1)
+		w := min(n+4, b.W-2)
+		cv.Hold(b.X+1, b.Y+1, w, 1)
+		cv.Hold(b.X+1, b.Y+2, w, 1)
 	}
 	cv.Hold(b.X, b.Y, b.W, 1)
 	cv.Hold(b.X, y1, b.W, 1)
@@ -209,13 +212,12 @@ func nameFrame(cv *Canvas, b Box) {
 	// A line crosses the top edge at x when it leaves an arm on the edge
 	// itself, and also when it only comes up to it: an edge that has to
 	// stop outside a frame lays nothing on the frame at all, and the head
-	// sitting one cell off it is the whole of the crossing.
-	busy := func(x, y int) bool {
-		return cv.MaskAt(x, y) != 0 || strings.ContainsRune("▲▼◀▶", cv.Rune(x, y))
-	}
+	// sitting one cell off it is the whole of the crossing. A line that
+	// runs along beside the frame crosses nothing, so only arms pointing
+	// at the edge count.
 	crosses := func(x int) bool {
 		return cv.MaskAt(x, b.Y).Has(North) || cv.MaskAt(x, b.Y).Has(South) ||
-			busy(x, b.Y-1) || busy(x, b.Y+1)
+			cv.MaskAt(x, b.Y-1).Has(South) || cv.MaskAt(x, b.Y+1).Has(North)
 	}
 	// A crossing on one of the name's own letters is the bad one: the
 	// head ends up against a rune of the name. A crossing on the blank

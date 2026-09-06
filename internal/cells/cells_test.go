@@ -1561,3 +1561,46 @@ func TestNoHeadEverLandsOnAClustersName(t *testing.T) {
 		}
 	}
 }
+
+// BOXES. A cluster's name standing inside its frame keeps two cells of
+// air on the sides a line comes from. One was not enough: a dashed
+// edge that began the cell after "namespace: prod" stood close enough
+// for the reader to take the frame's name for that edge's label, and the
+// cluster came back nameless with an edge wearing its words.
+func TestAClustersNameKeepsItsAir(t *testing.T) {
+	const src = `digraph { rankdir=TB
+	  node [shape=box, style=rounded]
+	  subgraph cluster_ns { label="namespace: prod"
+	    Ingress; Service; Deployment; Pod1 [label="Pod 1"]; Pod2 [label="Pod 2"]
+	    ConfigMap; Secret }
+	  Ingress -> Service; Service -> Pod1; Service -> Pod2
+	  Deployment -> Pod1; Deployment -> Pod2
+	  ConfigMap -> Pod1 [style=dashed]; Secret -> Pod1 [style=dashed] }` + "\n"
+	for _, w := range []int{60, 80, 120} {
+		g, err := layout.Read(t.Context(), src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rows := Draw(g, w, 120)
+		if rows == nil {
+			continue
+		}
+		gr := gridOf(plain(rows))
+		const name = "namespace: prod"
+		for y := range gr {
+			i := runeIndex(gr[y], name)
+			if i < 0 {
+				continue
+			}
+			// Two cells of air each side on the name's own row. The
+			// frame's own wall may stand in the second one — that is the
+			// frame, and a reader never gives words to a wall.
+			for _, x := range []int{i - 1, i - 2, i + len([]rune(name)), i + len([]rune(name)) + 1} {
+				if c := at(gr, x, y); c != ' ' && c != '│' && c != '┆' && c != '┃' {
+					t.Errorf("at %d columns the name has %q beside it at %d,%d:\n%s",
+						w, c, x, y, strings.Join(plain(rows), "\n"))
+				}
+			}
+		}
+	}
+}
