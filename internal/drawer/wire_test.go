@@ -410,3 +410,38 @@ func TestTheTeeWritesPayloadsAndNotesTheSameWay(t *testing.T) {
 	none.teePayload([]byte("x"))
 	none.teeNote("y")
 }
+
+// The painted fixture and the painted source are one graph.
+// testdata/colour.dot is what the laws, scripts/check.sh and the harness
+// draw; testdata/deltas-colour.jsonl carries the same DOT in its fence for
+// the -deltas replay. A fixture that drifted from the file would hold a
+// second graph and say it held the first.
+func TestThePaintedFixtureCarriesThePaintedSource(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "testdata", "colour.dot"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "deltas-colour.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var text strings.Builder
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		var in hookIn
+		if err := json.Unmarshal([]byte(line), &in); err != nil {
+			t.Fatal(err)
+		}
+		text.WriteString(in.Delta)
+	}
+	_, after, ok := strings.Cut(text.String(), "```dot\n")
+	if !ok {
+		t.Fatal("the fixture carries no ```dot fence")
+	}
+	body, _, ok := strings.Cut(after, "\n```")
+	if !ok {
+		t.Fatal("the fixture's fence never closes")
+	}
+	if strings.TrimSpace(body) != strings.TrimSpace(string(src)) {
+		t.Errorf("the fixture's fence is not testdata/colour.dot:\n--- fence\n%s\n--- file\n%s", body, src)
+	}
+}
