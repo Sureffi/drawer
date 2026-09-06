@@ -49,6 +49,7 @@ type jop struct {
 	Pt     []float64    `json:"pt"`
 	Text   string       `json:"text"`
 	Align  string       `json:"align"`
+	Color  string       `json:"color"`
 	Width  float64      `json:"width"`
 	Style  string       `json:"style"`
 	Size   float64      `json:"size"`
@@ -170,9 +171,12 @@ func fitInk(ctx context.Context, src string, width, maxRows int) (*jgraph, int, 
 type ink struct {
 	cols, rows int
 	dots       []bool   // (cols*2) x (rows*4)
+	dotc       []uint32 // the same grid: what colour each dot was laid in
 	glyph      []rune   // per cell: a label glyph, or 0
 	comb       []string // marks riding on that glyph
+	gcol       []uint32 // per cell: what colour that glyph is set in
 	label      []bool   // per cell: spoken for by a label
+	pen        uint32   // the colour in force, as parseColor encodes it
 	// where the picture's points land: origin top-left, sub-pixels
 	sx, sy func(float64) float64
 	// off shifts every point of the object being drawn, in sub-pixels: a
@@ -183,8 +187,10 @@ type ink struct {
 func newInk(cols, rows int, h float64) *ink {
 	k := &ink{cols: cols, rows: rows,
 		dots:  make([]bool, cols*2*rows*4),
+		dotc:  make([]uint32, cols*2*rows*4),
 		glyph: make([]rune, cols*rows),
 		comb:  make([]string, cols*rows),
+		gcol:  make([]uint32, cols*rows),
 		label: make([]bool, cols*rows),
 	}
 	k.sx = func(x float64) float64 { return x/ptPerCell*2 + k.dx }
@@ -197,6 +203,7 @@ func (k *ink) dot(x, y int) {
 		return
 	}
 	k.dots[y*k.cols*2+x] = true
+	k.dotc[y*k.cols*2+x] = k.pen
 }
 
 // line draws between two sub-pixel points. The dash state carries across
@@ -361,9 +368,9 @@ func (k *ink) text(op jop, size float64) {
 		}
 		if x >= 0 && x < k.cols {
 			i := row*k.cols + x
-			k.glyph[i], k.comb[i], k.label[i] = r, "", true
+			k.glyph[i], k.comb[i], k.label[i], k.gcol[i] = r, "", true, k.pen
 			if w == 2 && x+1 < k.cols {
-				k.glyph[i+1], k.label[i+1] = grid.Shadow, true
+				k.glyph[i+1], k.label[i+1], k.gcol[i+1] = grid.Shadow, true, k.pen
 			}
 		}
 		x += w
@@ -412,8 +419,22 @@ func (k *ink) snapToLabel(ldraw []jop) (dx, dy float64) {
 func (k *ink) ops(list []jop, fill bool) {
 	p := &pen{}
 	size := inkSize
+	// One drawing list is one object; the pen it sets is its own, and the
+	// next object starts from whatever it inherited rather than from
+	// whatever its neighbour happened to leave behind.
+	was := k.pen
+	defer func() { k.pen = was }()
 	for _, op := range list {
 		switch op.Op {
+		case "c":
+			k.pen = parseColor(op.Color)
+		case "C":
+			// A fill colour is only the pen where the fill is drawn. A node
+			// outline is drawn from `c`; taking `C` there would paint every
+			// box in the colour of the paint it never got.
+			if fill {
+				k.pen = parseColor(op.Color)
+			}
 		case "S":
 			p.dashed = op.Style == "dashed"
 			p.dotted = op.Style == "dotted"
@@ -456,43 +477,49 @@ var brailleBit = [2][4]rune{
 func (k *ink) rowsOut(octants bool) []string {
 	out := make([]string, 0, k.rows)
 	var b strings.Builder
+	var lit [8]uint32 // the pens of one cell's dots, for major
 	for y := 0; y < k.rows; y++ {
 		b.Reset()
-		dim := false
+		w := wire{b: &b}
 		for x := 0; x < k.cols; x++ {
 			i := y*k.cols + x
 			if g := k.glyph[i]; g != 0 {
 				if g == grid.Shadow {
 					continue
 				}
-				if dim {
-					b.WriteString("\x1b[22m")
-					dim = false
-				}
+				w.faint(false)
+				w.colour(k.gcol[i])
 				b.WriteRune(g)
 				b.WriteString(k.comb[i])
 				continue
 			}
 			var bits, obits rune
+			n := 0
 			for c := 0; c < 2; c++ {
 				for r := 0; r < 4; r++ {
-					if k.dots[(y*4+r)*k.cols*2+x*2+c] {
-						bits |= brailleBit[c][r]
-						obits |= 1 << uint(r*2+c)
+					j := (y*4+r)*k.cols*2 + x*2 + c
+					if !k.dots[j] {
+						continue
 					}
+					bits |= brailleBit[c][r]
+					obits |= 1 << uint(r*2+c)
+					lit[n], n = k.dotc[j], n+1
 				}
 			}
 			if bits == 0 {
-				if dim {
-					b.WriteString("\x1b[22m")
-					dim = false
-				}
+				w.faint(false)
+				w.colour(0)
 				b.WriteRune(' ')
 				continue
 			}
-			if !dim {
-				b.WriteString("\x1b[2m")
-				dim = true
+			// A stroke nobody coloured recedes, as it always has; a stroke
+			// somebody coloured is that colour and nothing else.
+			if c := major(lit[:n]); c == 0 {
+				w.colour(0)
+				w.faint(true)
+			} else {
+				w.faint(false)
+				w.colour(c)
 			}
 			if octants {
 				b.WriteRune(octantGlyphs[obits])
@@ -500,9 +527,8 @@ func (k *ink) rowsOut(octants bool) []string {
 				b.WriteRune(0x2800 + bits)
 			}
 		}
-		if dim {
-			b.WriteString("\x1b[22m")
-		}
+		w.faint(false)
+		w.colour(0)
 		out = append(out, strings.TrimRight(b.String(), " "))
 	}
 	return grid.TrimBlank(out)
