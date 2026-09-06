@@ -248,7 +248,7 @@ func attempt(g *layout.Graph, sl slots, extra gaps, width, maxRows int) ([]strin
 func spacing(g *layout.Graph, sl slots, extra gaps, bs []bound, room []int, wide []int) ([]int, []int) {
 	flow, cross := 2, 3 // top-down: ranks stack in rows, lanes spread in columns
 	if sl.horiz {
-		flow, cross = 5, 1 // left-right: ranks march in columns, lanes stack in rows
+		flow, cross = 3, 1 // left-right: ranks march in columns, lanes stack in rows
 	}
 	flow += extra.flow
 	cross += extra.cross

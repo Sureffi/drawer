@@ -1077,3 +1077,64 @@ func TestMultiLineLabelGrowsItsBox(t *testing.T) {
 		}
 	}
 }
+
+// ---------- the build organ's laws ----------
+//
+// The blueprint's build organ is five headings — lanes, boxes, edges,
+// size and text — and every sentence under them is a law. What follows is
+// those sentences, one test each, and every one of them has a fixture in
+// the oracle's corpus under `own/` so the reader is asked the same
+// question of a real drawing. A law without a fixture is not a law.
+
+// acrossRunes and downRunes are the glyphs a run of line continues
+// through. They are how a test asks "is this cell part of a line running
+// this way", which is the only question a reader ever asks of one.
+const acrossRunes = "─━┄┅┈┉╌╍═┌┐└┘╭╮╰╯├┤┬┴┼┏┓┗┛┣┫┳┻╋┽┾┿╀╁╂"
+const downRunes = "│┃┆┇┊┋╎╏║┌┐└┘╭╮╰╯├┤┬┴┼┏┓┗┛┣┫┳┻╋┽┾┿╀╁╂"
+
+// at reads one cell of a drawing, air off the end.
+func at(g [][]rune, x, y int) rune {
+	if y < 0 || y >= len(g) || x < 0 || x >= len(g[y]) {
+		return ' '
+	}
+	return g[y][x]
+}
+
+// LANES. A rank stands two or three cells off the next: room for a line
+// and its head, and no more, because every cell between two boxes is a
+// cell the reader's eye has to carry the join across. Two boxes never
+// touch — a wall against a wall is one box with a rule through it.
+func TestRanksStandTwoOrThreeCellsApart(t *testing.T) {
+	// Down the page: the boxes stack, so the gap is rows.
+	rows := plain(drawn(t, "digraph { rankdir=TB; a -> b -> c }\n", 100))
+	var tops []int
+	for i, r := range rows {
+		if strings.Contains(r, "╭") {
+			tops = append(tops, i)
+		}
+	}
+	if len(tops) != 3 {
+		t.Fatalf("want three boxes down the page, found %d:\n%s", len(tops), strings.Join(rows, "\n"))
+	}
+	for i := 1; i < len(tops); i++ {
+		if gap := tops[i] - tops[i-1] - 3; gap < 2 || gap > 3 {
+			t.Errorf("top-down ranks stand %d rows apart, want 2 or 3:\n%s", gap, strings.Join(rows, "\n"))
+		}
+	}
+	// Across the page: the boxes march, so the gap is columns.
+	across := plain(drawn(t, "digraph { rankdir=LR; a -> b -> c }\n", 100))
+	var lefts []int
+	for i, r := range []rune(across[0]) {
+		if r == '╭' {
+			lefts = append(lefts, i)
+		}
+	}
+	if len(lefts) != 3 {
+		t.Fatalf("want three boxes across the page, found %d:\n%s", len(lefts), strings.Join(across, "\n"))
+	}
+	for i := 1; i < len(lefts); i++ {
+		if gap := lefts[i] - lefts[i-1] - 5; gap < 2 || gap > 3 {
+			t.Errorf("left-right ranks stand %d columns apart, want 2 or 3:\n%s", gap, strings.Join(across, "\n"))
+		}
+	}
+}
