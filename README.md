@@ -88,15 +88,15 @@ prints the theme in force as DOT, which is where a theme file starts;
 `themes/tokyonight.dot` and `themes/tokyonight-day.dot` are two. A
 theme file is the whole theme, not a patch on Claude Code's: what it leaves
 undeclared is graphviz's default. `graph [...]` is the root and every
-cluster alike. Three attributes are rules rather than values. `fontname`
-may name a font file — an absolute path, or a `.ttf`, `.otf` or `.ttc`
-found in the system font directories — and the picture is then set in that
-face; anything else, a family name included, and any file that will not
-read or parse, leaves it in the Go Mono the binary carries. The layout is measured in Courier whatever it says, so
-a monospace file fits and a proportional one will not. `fontsize` yields to
-the cell when the theme has none. A node's `fillcolor` is a rule: a node the
-model filled keeps its own text colour, any other gets the theme's fill with
-`filled` added to its style. A theme
+cluster alike. Three attributes are rules rather than values. `fontname` may
+name a font file — an absolute path, or a `.ttf`, `.otf` or `.ttc` found in
+the system font directories — and the picture is then set in that face;
+anything else, a family name included, and any file that will not read or
+parse, leaves it in the Go Mono the binary carries. The layout is measured
+in Courier whatever it says, so a monospace file fits and a proportional one
+will not. `fontsize` yields to the cell when the theme has none. A node's
+`fillcolor` is a rule: a node the model filled keeps its own text colour,
+any other gets the theme's fill with `filled` added to its style. A theme
 the hook cannot read is Claude Code's, so the picture draws; `-theme FILE
 -dot g.dot` says what is wrong with the file, and `-theme FILE -dot g.dot
 -png out.png` shows what it draws, without a session.
@@ -156,11 +156,10 @@ know exactly — and set in Go Mono, which the binary carries, at the size
 that puts one glyph in one cell, so a label stands at the terminal's own
 text size and a node reads as text that grew a border. An edge label sits on
 its line and the line stops a glyph short of it on either side, as in the
-glyph rungs: the graph
-is rewritten before layout so the label is a node on the edge, which is
-what dot does inside itself for a labelled edge anyway, down to halving
-`ranksep` for the doubled ranks and doubling every other edge's `minlen`,
-so a plain edge still spans a full rank gap.
+glyph rungs: the graph is rewritten before layout so the label is a node on
+the edge, which is what dot does inside itself for a labelled edge anyway,
+down to halving `ranksep` for the doubled ranks and doubling every other
+edge's `minlen`, so a plain edge still spans a full rank gap.
 
 **Octants and braille.** Everything comes from graphviz's json output —
 every polygon, ellipse, bezier and text anchor it would have painted — so
