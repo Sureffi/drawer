@@ -7,8 +7,6 @@ streams. One binary, nothing else running.
 
 ![a live session](demo/session.gif)
 
-That is a live session: sonnet writing, Claude Code 2.1.261, kitty on
-Linux. The typing is sped up; nothing else is.
 
     /plugin marketplace add sureffi/drawer
     /plugin install drawer@drawer
