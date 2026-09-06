@@ -9,9 +9,9 @@
 //
 // The repair pass is here too, and it is the only one: an attempt that
 // loses an edge or a label is made again with more air, and if the graph
-// will not come out whole either way up, the least-lost attempt is what is
-// drawn. A drawing that is short says so by being short, never by a
-// caveat.
+// will not come out whole either way up, nothing is drawn — the caller
+// shows the source under a notice. A picture that is missing an edge has
+// no way of saying so, and a failure here is visible or it is a lie.
 
 package cells
 
@@ -63,14 +63,20 @@ type gaps struct{ flow, cross int }
 var ladder = []gaps{{0, 0}, {1, 1}, {2, 2}, {4, 3}, {8, 5}}
 
 // Draw lays a graph out and draws it into a box `width` cells across and
-// at most `maxRows` deep. Returns nil where the drawing will not fit,
-// which is the caller's cue to show the source under a notice.
+// at most `maxRows` deep. Returns nil where the graph will not come out
+// whole — too big for the box, or too tight to route every edge and set
+// every label — which is the caller's cue to show the source under a
+// notice.
+//
+// Nothing short is ever drawn. A drawing missing one edge says the two
+// nodes it joined are not joined, and says it with the same confidence
+// as the rest of the picture; there is nothing on the page for a reader
+// to notice. The source under a notice is the honest answer, and it is
+// the same answer the other rungs give.
 func Draw(g *layout.Graph, width, maxRows int) []string {
 	if g == nil || len(g.Nodes) == 0 {
 		return nil
 	}
-	var best []string
-	bestShort := 1 << 30
 	for _, flip := range orientations(g) {
 		h := *g
 		h.Horiz, h.Reverse = flip.horiz, flip.reverse
@@ -89,15 +95,9 @@ func Draw(g *layout.Graph, width, maxRows int) []string {
 			if short == 0 {
 				return rows
 			}
-			// More room drew more of the graph: keep whichever attempt
-			// lost the least, so a drawing that will not come out whole
-			// still comes out as complete as it can.
-			if best == nil || short < bestShort {
-				best, bestShort = rows, short
-			}
 		}
 	}
-	return best
+	return nil
 }
 
 type facing struct{ horiz, reverse bool }

@@ -10,8 +10,8 @@
 // arrowheads, text laid by the terminal's own width rules, and a colour
 // per run. What it does not have is an opinion about where anything
 // goes — that is the layout's, and layouts are meant to be swapped.
-// glyph.go turns a cell's arms into its glyph; route.go is one layout
-// drawn here.
+// glyph.go turns a cell's arms into its glyph; chains.go, sheet.go,
+// frame.go, scout.go and wire.go are one layout drawn here.
 //
 // The rule that outranks the rest: a drawing renders into the cell box
 // it was measured for, and if it does not fit, the source shows under a

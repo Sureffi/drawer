@@ -1604,3 +1604,56 @@ func TestAClustersNameKeepsItsAir(t *testing.T) {
 		}
 	}
 }
+
+// SIZE. Nothing short is ever drawn. A picture missing one edge says the
+// two nodes it joined are not joined, with the same confidence as the
+// rest of it, and there is nothing on the page for a reader to notice.
+// So at every width the answer is the whole graph or no graph: one head
+// per directed edge, every node inside a box, or nil and the notice.
+func TestNothingShortIsEverDrawn(t *testing.T) {
+	for _, c := range []struct {
+		src   string
+		nodes []string
+		heads int
+	}{
+		{`digraph { rankdir=TB
+		   subgraph cluster_ns { label="namespace: prod"
+		     ingress; service; deploy; pod1; pod2; conf; secret }
+		   ingress -> service; service -> pod1; service -> pod2
+		   deploy -> pod1; deploy -> pod2
+		   conf -> pod1 [style=dashed]; secret -> pod1 [style=dashed] }`,
+			[]string{"ingress", "service", "deploy", "pod1", "pod2", "conf", "secret"}, 7},
+		{`digraph { rankdir=LR
+		   closed -> listen [label="passive open"]
+		   listen -> syn [label="recv syn"]
+		   syn -> est [label="recv ack"]
+		   est -> closed [label="close"]
+		   listen -> closed [label="close"] }`,
+			[]string{"closed", "listen", "syn", "est"}, 5},
+	} {
+		for w := 40; w <= 200; w += 8 {
+			g, err := layout.Read(t.Context(), c.src+"\n")
+			if err != nil {
+				t.Fatal(err)
+			}
+			rows := Draw(g, w, 120)
+			if rows == nil {
+				continue // the notice's job, and honest
+			}
+			j := strings.Join(plain(rows), "\n")
+			n := 0
+			for _, r := range "▶◀▲▼" {
+				n += strings.Count(j, string(r))
+			}
+			if n != c.heads {
+				t.Errorf("at %d columns the drawing carries %d heads for %d edges:\n%s",
+					w, n, c.heads, j)
+			}
+			for _, name := range c.nodes {
+				if !strings.Contains(j, name) {
+					t.Errorf("at %d columns the drawing lost %q:\n%s", w, name, j)
+				}
+			}
+		}
+	}
+}
