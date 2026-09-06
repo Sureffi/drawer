@@ -317,36 +317,6 @@ func Footprint(l *Plain) (w, h int) {
 	return int(l.W*CellsPerInchX) + 2, int(l.H*RowsPerInchY) + 1
 }
 
-// Fit chooses how to draw a graph in the space that actually exists. A
-// graph too wide to fit is redrawn top-down before it is given up on:
-// vertical costs rows, and rows scroll, where horizontal costs columns,
-// and columns simply run out. Only when neither orientation fits does the
-// source show, which is still the whole failure policy.
-//
-// maxRows bounds the answer; 0 is no ceiling.
-//
-// It returns the layout it settled on. Measuring meant laying the graph
-// out, and the drawing that follows needs exactly that layout; running
-// graphviz a second time to rediscover what this call already knows would
-// be the plainest waste in the file.
-func Fit(ctx context.Context, src string, width, maxRows int) (*Plain, int, bool) {
-	for _, rd := range Orientations(src) {
-		l, err := DOT(ctx, src, rd)
-		if err != nil {
-			continue
-		}
-		w, h := Footprint(l)
-		if w <= 0 || h <= 0 || w > width {
-			continue
-		}
-		if maxRows > 0 && h > maxRows {
-			continue
-		}
-		return l, h, true
-	}
-	return nil, 0, false
-}
-
 // Complete says whether a source is a whole graph: graphviz reads it, and
 // there is a graph in it.
 func Complete(ctx context.Context, src string) bool {

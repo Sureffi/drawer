@@ -15,6 +15,8 @@ import (
 // wrong with what it was asked. Everything downstream dereferenced that nil,
 // so one empty ```dot fence took the process with it. Every other law in the
 // tree passed the whole time it was live, which is the argument for this one.
+// `digraph{}` is the other half of it: the door answers a graph, and the
+// graph is empty, and an empty graph is nothing to draw.
 func TestEmptySourceIsRefusedNotFatal(t *testing.T) {
 	for _, src := range []string{
 		"",
@@ -25,8 +27,9 @@ func TestEmptySourceIsRefusedNotFatal(t *testing.T) {
 		"/* nothing */",
 		"digraph{}",
 	} {
-		if _, _, ok := Fit(t.Context(), src, 90, 0); ok {
-			t.Errorf("laid out a source with no graph in it: %q", src)
+		g, err := Read(t.Context(), src)
+		if err == nil && g != nil && len(g.Nodes) > 0 {
+			t.Errorf("read nodes out of a source with no graph in it: %q", src)
 		}
 	}
 }
