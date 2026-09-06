@@ -849,3 +849,231 @@ func TestCornersNameTheirOwner(t *testing.T) {
 		}
 	}
 }
+
+// ---------- the chains layout's own laws ----------
+//
+// Everything below is a thing a reader has to be able to get back out of
+// the drawing. They are written as questions about the glyphs because
+// that is all a reader has: no drawing may say a thing the graph did not.
+
+// grid reads a drawing back as a rectangle of runes, padded, colour off.
+func gridOf(rows []string) [][]rune {
+	p := plain(rows)
+	w := 0
+	for _, r := range p {
+		if n := len([]rune(r)); n > w {
+			w = n
+		}
+	}
+	out := make([][]rune, len(p))
+	for i, r := range p {
+		line := []rune(r)
+		out[i] = make([]rune, w)
+		for j := range out[i] {
+			if j < len(line) {
+				out[i][j] = line[j]
+			} else {
+				out[i][j] = ' '
+			}
+		}
+	}
+	return out
+}
+
+// Two edges cross and never join. A reader takes one connected run of
+// line cells as one edge, so a tee standing anywhere but on a wall is two
+// edges fused into a shape neither of them is. Every junction in a
+// drawing therefore has a box's border under it, and every meeting of two
+// lines in the open is `┼`.
+func TestLinesCrossAndNeverJoin(t *testing.T) {
+	srcs := []string{
+		corpusTB, corpusLR,
+		"digraph { rankdir=LR; a -> b; a -> c; a -> d; b -> d; c -> d; d -> a }",
+		"digraph { rankdir=TB; a -> b; b -> c; c -> a; a -> c; b -> a }",
+	}
+	tees := "├┤┬┴┝┞┟┠┡┢┥┦┧┨┩┪┭┮┯┰┱┲┵┶┷┸┹┺╞╟╠╡╢╣╤╥╦╧╨╩"
+	for _, src := range srcs {
+		g := gridOf(drawn(t, src+"\n", 120))
+		wall := func(y, x int) bool {
+			// a wall cell is one a box's own border passes through: it has
+			// a corner or a straight run of the same box on either side.
+			return y >= 0 && y < len(g) && x >= 0 && x < len(g[y]) &&
+				strings.ContainsRune("┌┐└┘╭╮╰╯│─"+tees, g[y][x])
+		}
+		for y := range g {
+			for x, r := range g[y] {
+				if !strings.ContainsRune(tees, r) {
+					continue
+				}
+				// A tee is legal only where a box's wall runs through it:
+				// the two cells along the wall's own axis are wall too.
+				horiz := r == '┬' || r == '┴'
+				ok := false
+				if horiz {
+					ok = wall(y, x-1) && wall(y, x+1)
+				} else {
+					ok = wall(y-1, x) && wall(y+1, x)
+				}
+				if !ok {
+					t.Errorf("a junction with no wall under it at %d,%d in\n%s", x, y, strings.Join(plain(drawn(t, src+"\n", 120)), "\n"))
+				}
+			}
+		}
+	}
+}
+
+// A cluster is a frame, its name is on it, and what is inside it is its
+// members and nothing else.
+func TestClusterIsAFrameRoundItsMembers(t *testing.T) {
+	src := `digraph {
+	  rankdir=LR
+	  subgraph cluster_one { label="Inside:"; a; b }
+	  outside
+	  a -> b; b -> outside; outside -> a
+	}`
+	rows := plain(drawn(t, src+"\n", 120))
+	j := strings.Join(rows, "\n")
+	if !strings.Contains(j, "Inside:") {
+		t.Fatalf("the cluster lost its name:\n%s", j)
+	}
+	// The frame is the square-cornered rectangle; the boxes are the
+	// round-cornered ones. Find the frame, then ask what stands in it.
+	top, left, right := -1, -1, -1
+	for y, r := range rows {
+		a := strings.Index(r, "┌")
+		b := strings.LastIndex(r, "┐")
+		if a >= 0 && b > a {
+			top, left, right = y, a, b
+			break
+		}
+	}
+	if top < 0 {
+		t.Fatalf("no frame drawn:\n%s", j)
+	}
+	in := func(word string) bool {
+		for y := top; y < len(rows); y++ {
+			r := []rune(rows[y])
+			for k := 0; k+len([]rune(word)) <= len(r); k++ {
+				if string(r[k:k+len([]rune(word))]) != word {
+					continue
+				}
+				if k > left && k+len([]rune(word)) < right && walled(rows[y], word) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	for _, w := range []string{"a", "b"} {
+		if !in(w) {
+			t.Errorf("member %q is not inside the frame:\n%s", w, j)
+		}
+	}
+	if in("outside") {
+		t.Errorf("a node that is not a member stands inside the frame:\n%s", j)
+	}
+}
+
+// A line never crosses a frame. A reader stops at a border, so an edge
+// drawn through one is an edge cut in half; it stops outside instead and
+// the reader walks in across the blanks.
+func TestNoLineCrossesAFrame(t *testing.T) {
+	src := `digraph {
+	  rankdir=TB
+	  subgraph cluster_a { label="A"; p; q }
+	  subgraph cluster_b { label="B"; r; s }
+	  p -> q; q -> r; r -> s; s -> p
+	}`
+	rows := plain(drawn(t, src+"\n", 120))
+	j := strings.Join(rows, "\n")
+	// A frame's own corner runes are square; a node's are round. So any
+	// square corner belongs to a frame, and a frame's edges must be whole
+	// runs of `─` and `│` broken only by its name and by the tees where a
+	// line stops against it.
+	if !strings.Contains(j, "┌") || !strings.Contains(j, "╭") {
+		t.Fatalf("want both frames and boxes:\n%s", j)
+	}
+	if strings.ContainsAny(j, "┼") {
+		// A crossing inside a frame's own wall would be a line through it.
+		for _, r := range rows {
+			if strings.Contains(r, "┼") && (strings.Count(r, "┌")+strings.Count(r, "└")) > 0 {
+				t.Errorf("a line crossed a frame:\n%s", j)
+			}
+		}
+	}
+}
+
+// A record is one box with its fields ruled off inside it.
+func TestRecordIsOneBoxWithDividers(t *testing.T) {
+	j := joined(drawn(t, `digraph { rankdir=LR; n [shape=record, label="<f0> id | name | age"]; n -> other }`+"\n", 120))
+	for _, w := range []string{"id", "name", "age"} {
+		if !strings.Contains(j, w) {
+			t.Errorf("record field %q missing:\n%s", w, j)
+		}
+	}
+	if !strings.Contains(j, "┬") || !strings.Contains(j, "┴") {
+		t.Errorf("record has no dividers joined into its walls:\n%s", j)
+	}
+}
+
+// The four things an edge's ends can say, and each drawn as itself.
+func TestTheEndsSayWhatTheGraphSaid(t *testing.T) {
+	heads := func(src string) int {
+		j := joined(drawn(t, src+"\n", 100))
+		n := 0
+		for _, r := range "▶◀▲▼" {
+			n += strings.Count(j, string(r))
+		}
+		return n
+	}
+	if n := heads(`digraph { rankdir=LR; a -> b }`); n != 1 {
+		t.Errorf("a forward edge wants one head, got %d", n)
+	}
+	if n := heads(`digraph { rankdir=LR; a -> b [dir=none] }`); n != 0 {
+		t.Errorf("dir=none wants no head, got %d", n)
+	}
+	if n := heads(`digraph { rankdir=LR; a -> b [arrowhead=none] }`); n != 0 {
+		t.Errorf("arrowhead=none wants no head, got %d", n)
+	}
+	if n := heads(`digraph { rankdir=LR; a -> b [dir=both] }`); n != 2 {
+		t.Errorf("dir=both wants two heads, got %d", n)
+	}
+	// A back edge points at the tail: the head is on the left of the
+	// drawing, where `a` is, not on the right where `b` is.
+	j := joined(drawn(t, `digraph { rankdir=LR; a -> b [dir=back] }`+"\n", 100))
+	if !strings.Contains(j, "◀") {
+		t.Errorf("dir=back did not turn its head round:\n%s", j)
+	}
+}
+
+// A label a reader would take for a line never goes into one. `v` under a
+// line is an arrowhead pointing down and the reader is right about that,
+// so the words go somewhere the letter cannot be one.
+func TestLabelIsNeverMistakenForTheDrawing(t *testing.T) {
+	j := joined(drawn(t, `digraph { rankdir=LR; A -> B [label="very long edge label"] }`+"\n", 120))
+	if !strings.Contains(j, "very long edge label") {
+		t.Fatalf("label missing:\n%s", j)
+	}
+	// Set into the line, the run would read `─ very ...` — and a reader
+	// gives the words back to the writing only when the writing begins
+	// and ends with writing. `v` does not, so this one stands beside.
+	if strings.Contains(j, "─ very long edge label ─") {
+		t.Errorf("a label beginning with a line rune was set into its own line:\n%s", j)
+	}
+}
+
+// A multi-line label grows its box rather than losing a line.
+func TestMultiLineLabelGrowsItsBox(t *testing.T) {
+	rows := plain(drawn(t, `digraph { rankdir=LR; a [label="one\ntwo\nthree"]; a -> b }`+"\n", 100))
+	for _, w := range []string{"one", "two", "three"} {
+		found := false
+		for _, r := range rows {
+			if walled(r, w) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("label line %q is not inside a box:\n%s", w, strings.Join(rows, "\n"))
+		}
+	}
+}
