@@ -7,6 +7,7 @@ package pixel
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -323,5 +324,49 @@ func TestAPaneNobodySetIsTheOneWritten(t *testing.T) {
 	}
 	if got := asked(t, log); len(got) != 3 || got[0] != "show-A" || got[1] != "show" || got[2] != "set" {
 		t.Errorf("tmux was run %v; want both reads and the one write", got)
+	}
+}
+
+// nastyTmux answers `show` with an OSC title, a clear-screen, a kitty
+// graphics escape and a megabyte of filler, and complains on stderr with
+// the same. An option's value is whatever somebody set it to, and this one
+// travels to the tee's note and to -doctor's line.
+func nastyTmux(t *testing.T, code int) {
+	t.Helper()
+	dir := t.TempDir()
+	sh := "#!/bin/sh\n" +
+		"s=0123456789abcdef\ni=0\n" +
+		"while [ $i -lt 16 ]; do s=$s$s; i=$((i+1)); done\n" +
+		"printf '\\033]0;pwned\\007\\033[2J%s\\n' \"$s\"\n" +
+		"printf '\\033]0;stderr too\\007%s\\n' \"$s\" >&2\n" +
+		"exit " + strconv.Itoa(code) + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(sh), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// What tmux says goes into the tee's note and onto -doctor's line, so it is
+// bounded on the way in and made printable on the way out — whether it came
+// back as the option's value or as the reason the option could not be read.
+// Measured: a stub answering an OSC title, a clear-screen and a kitty
+// graphics escape had -doctor execute all three, and a 256 MB answer was
+// held and printed as 536 MB.
+func TestTheNoteCarriesNothingTheTerminalWouldObey(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		code int
+	}{
+		{"tmux answered", 0},
+		{"tmux failed and said why on stderr", 1},
+	} {
+		nastyTmux(t, c.code)
+		note, _ := (&Tmux{Socket: "/nowhere", Pane: "%0"}).Allow(t.Context())
+		if strings.ContainsAny(note, "\x1b\x07\n") {
+			t.Errorf("%s: the note carries an escape: %q", c.name, note)
+		}
+		if len(note) > 1024 {
+			t.Errorf("%s: the note is %d bytes long", c.name, len(note))
+		}
 	}
 }

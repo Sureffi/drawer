@@ -138,3 +138,43 @@ func TestATmuxHoldingThePipeIsNotAnAnswer(t *testing.T) {
 		t.Errorf("the terminal is %q; a tmux that never answered leaves TERM standing", got)
 	}
 }
+
+// nastyTmux is a tmux that answers with an OSC title, a clear-screen, a
+// kitty graphics escape and a megabyte of filler. Not a hypothetical: the
+// answer to `#{client_termname}` is whatever the client's TERM holds, and
+// TERM is set by whoever started the terminal.
+func nastyTmux(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	sh := "#!/bin/sh\n" +
+		"printf '\\033]0;pwned\\007\\033[2J\\033_Ga=T;x\\033\\\\'\n" +
+		"s=0123456789abcdef\ni=0\n" +
+		"while [ $i -lt 16 ]; do s=$s$s; i=$((i+1)); done\n" +
+		"printf '%s\\n' \"$s\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(sh), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// What tmux says is another program's stdout on its way to a reader's
+// screen, so it is bounded on the way in and made printable on the way out.
+// Measured: a stub answering an OSC title, a clear-screen and a kitty
+// graphics escape had -doctor run all three against the terminal it was
+// reporting on, and a stub answering 256 MB had drawer print 536 MB.
+func TestWhatTmuxSaysIsBoundedAndPrintable(t *testing.T) {
+	nastyTmux(t)
+	t.Setenv("TERM", "tmux-256color")
+	t.Setenv("TMUX", "/nowhere,1,0")
+	t.Setenv("TMUX_PANE", "%0")
+	got := Name(t.Context())
+	if strings.ContainsAny(got, "\x1b\x07\n") {
+		t.Errorf("the terminal's name carries an escape: %q", got)
+	}
+	if len(got) > printableMax {
+		t.Errorf("the terminal's name is %d bytes; the line's worth is %d", len(got), printableMax)
+	}
+	if got == "" || got == "tmux-256color" {
+		t.Errorf("the answer was dropped whole rather than cleaned: %q", got)
+	}
+}

@@ -53,6 +53,7 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // env is one variable as this process's parent chain has it: the hook's own
@@ -78,8 +79,60 @@ func TmuxSocket() string {
 	return s
 }
 
-// TmuxPane is the pane the parent is in, for a command scoped to it.
-func TmuxPane() string { return env("TMUX_PANE") }
+// TmuxPane is the pane the parent is in, for a command scoped to it. It is
+// made printable on the way out because it is put on a line a reader reads
+// — the tee's note, -doctor's tmux fact — as well as on a command line.
+func TmuxPane() string { return Printable(env("TMUX_PANE")) }
+
+// printableMax is a line's worth. A terminal's name is a dozen bytes and an
+// option's value is three; anything past this is not an answer to the
+// question that was asked.
+const printableMax = 200
+
+// Printable is a string another program said, made fit to print. tmux hands
+// back whatever the client's TERM or the pane's option happens to hold, and
+// that goes into a note, onto -doctor's terminal: line, and through CC's
+// display wire: measured, a stub answering an OSC title, a clear-screen and
+// a kitty graphics escape had -doctor run all three against the reader's
+// terminal. Control bytes and escapes are dropped rather than shown,
+// because there is nothing in them a reader asked for, and what is left is
+// cut to a line.
+func Printable(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
+			continue
+		}
+		if b.Len()+utf8.RuneLen(r) > printableMax {
+			break
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// muxMaxOut bounds what tmux is allowed to say. This is another program's
+// stdout arriving in a hook's memory: measured, a stub that answered with
+// 256 MB had drawer hold and print 536 MB of it. Four kilobytes is a
+// thousand times more than any answer this asks for.
+const muxMaxOut = 4 << 10
+
+// capped is a buffer that stops. What is past the bound is dropped and not
+// kept, and the writer is still told it all went in, so a tmux that answers
+// with a megabyte finishes rather than dying on a closed pipe.
+type capped struct{ b []byte }
+
+func (c *capped) Write(p []byte) (int, error) {
+	if n := muxMaxOut - len(c.b); n > 0 {
+		if n > len(p) {
+			n = len(p)
+		}
+		c.b = append(c.b, p[:n]...)
+	}
+	return len(p), nil
+}
+
+func (c *capped) String() string { return string(c.b) }
 
 // muxTimeout bounds the one question this file asks. tmux answers on a
 // local socket in single-digit milliseconds or it is not answering, and a
@@ -96,7 +149,10 @@ const muxWaitDelay = muxTimeout / 4
 
 // askTmux is the one command this file runs, as a variable so a law can
 // stand a tmux up without one. Read-only: display-message -p prints a
-// format and changes nothing.
+// format and changes nothing. What it says is bounded on the way in and
+// made printable on the way out: it is another program's stdout, and it
+// ends up on a reader's screen. Its stderr is nowhere, because the only
+// answer this has for a tmux that failed is the empty one.
 //
 // The deadline is derived from the caller's, not from nothing: this is
 // another process on the far side of a socket, and a question asked on its
@@ -109,11 +165,12 @@ var askTmux = func(ctx context.Context, socket string, args ...string) string {
 	cmd := exec.CommandContext(ctx, "tmux",
 		append([]string{"-S", socket}, args...)...)
 	cmd.WaitDelay = muxWaitDelay
-	out, err := cmd.Output()
-	if err != nil {
+	var out capped
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(out))
+	return Printable(strings.TrimSpace(out.String()))
 }
 
 // behindTmux names the terminal a pane is really in: the TERM of the client

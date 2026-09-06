@@ -22,6 +22,7 @@ package pixel
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os/exec"
 	"strings"
 	"time"
@@ -158,7 +159,7 @@ func (t *Tmux) Allow(ctx context.Context) (string, bool) {
 		// and a box with no tmux on the PATH went out expecting pixels
 		// that had nowhere to come from.
 		return "tmux: allow-passthrough could not be asked about" + pane +
-			": " + reason(was, err), false
+			": " + reason(err), false
 	}
 	if was == "on" || was == "all" {
 		return "", true
@@ -166,16 +167,16 @@ func (t *Tmux) Allow(ctx context.Context) (string, bool) {
 	own, err := t.PaneOption(ctx)
 	if err != nil {
 		return "tmux: allow-passthrough is " + quoted(was) + pane +
-			" and this pane's own value could not be read: " + reason(own, err), false
+			" and this pane's own value could not be read: " + reason(err), false
 	}
 	if own == "off" {
 		return "tmux: allow-passthrough is off" + pane +
 			", set there and not inherited from the server: a reader said no in this" +
 			" pane, so drawer leaves it and draws in glyphs", false
 	}
-	if out, err := t.allow(ctx); err != nil {
+	if err := t.allow(ctx); err != nil {
 		return "tmux: allow-passthrough is " + quoted(was) + pane +
-			" and would not be set: " + reason(out, err), false
+			" and would not be set: " + reason(err), false
 	}
 	t.was, t.err = "on", nil
 	return "tmux: allow-passthrough was " + quoted(was) + "; set on" + pane +
@@ -224,23 +225,20 @@ func quoted(v string) string {
 	return v
 }
 
-// reason is what to put in the note: what tmux said, or where it failed
-// when it said nothing.
-func reason(out string, err error) string {
-	if out != "" {
-		return out
-	}
-	return err.Error()
-}
+// reason is what to put in the note when tmux would not answer: the error,
+// which run has already folded tmux's own complaint into. Not stdout — that
+// is the option's value, and a tmux that failed did not give one.
+func reason(err error) string { return term.Printable(err.Error()) }
 
-// allow is the one write this package makes to anything but a tty: what
-// tmux said about it, and the error where it could not be told at all.
-func (t *Tmux) allow(ctx context.Context) (string, error) {
+// allow is the one write this package makes to anything but a tty. There is
+// no value to bring back — `set` says nothing when it works — so the only
+// answer is whether it could be told at all.
+func (t *Tmux) allow(ctx context.Context) error {
 	if t.Pane == "" {
-		return "", errNoPane
+		return errNoPane
 	}
-	out, err := t.run(ctx, "set", "-p", "-t", t.Pane, "allow-passthrough", "on")
-	return strings.TrimSpace(out), err
+	_, err := t.run(ctx, "set", "-p", "-t", t.Pane, "allow-passthrough", "on")
+	return err
 }
 
 // run is one tmux command against this server. The socket is addressed
@@ -250,7 +248,9 @@ func (t *Tmux) allow(ctx context.Context) (string, error) {
 // Two answers, and they are not one: what tmux said, and whether it ran at
 // all. A tmux that exited 0 and printed nothing is an answer of nothing; a
 // tmux that is not on the PATH is no answer, and the two read the same
-// until the error is carried out with the output.
+// until the error is carried out with the output. Both are bounded and made
+// printable: this is somebody else's program writing onto a reader's
+// screen by way of a note.
 //
 // The deadline is derived from the caller's rather than started fresh. A
 // hook has one deadline for the whole of what it draws, and a question put
@@ -262,6 +262,39 @@ func (t *Tmux) run(ctx context.Context, args ...string) (string, error) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "tmux", append([]string{"-S", t.Socket}, args...)...)
 	cmd.WaitDelay = tmuxWaitDelay
-	out, err := cmd.CombinedOutput()
-	return string(out), err
+	var out, said capped
+	cmd.Stdout, cmd.Stderr = &out, &said
+	err := cmd.Run()
+	if err != nil {
+		// tmux says why on stderr, and that belongs in the note beside the
+		// error. It does not belong in the option's value: the two were one
+		// string here, so a tmux that complained about something else
+		// entirely could be read back as the pane's answer.
+		if s := term.Printable(said.String()); s != "" {
+			err = fmt.Errorf("%w: %s", err, s)
+		}
+	}
+	return term.Printable(out.String()), err
 }
+
+// tmuxMaxOut bounds what tmux is allowed to say here, for the reason
+// term's own bound exists: this is another program's output on its way to
+// a reader's screen. An option's value is three bytes.
+const tmuxMaxOut = 4 << 10
+
+// capped is a buffer that stops, and tells the writer it did not: a tmux
+// answering with a megabyte finishes rather than dying on a closed pipe,
+// and what is past the bound is dropped.
+type capped struct{ b []byte }
+
+func (c *capped) Write(p []byte) (int, error) {
+	if n := tmuxMaxOut - len(c.b); n > 0 {
+		if n > len(p) {
+			n = len(p)
+		}
+		c.b = append(c.b, p[:n]...)
+	}
+	return len(p), nil
+}
+
+func (c *capped) String() string { return string(c.b) }
