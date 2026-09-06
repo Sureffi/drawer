@@ -186,3 +186,52 @@ func TestSubcellParseColor(t *testing.T) {
 		}
 	}
 }
+
+// Where a coloured run runs out, the pen goes back before the dim goes on:
+// ESC[39m and then ESC[2m, in that order and with nothing between them.
+// The order is the whole composition — SGR 2 over a foreground somebody set
+// is the terminal's own business and several of them answer it by dropping
+// the colour, so the structure around a painted edge may only recede once
+// the pen it was painted with is gone.
+//
+// The graph is testdata/deltas-colour.jsonl's, which is the same shape the
+// replay draws: coloured nodes, a coloured edge, and one node nobody
+// painted for the run to end against.
+func TestSubcellAColouredRunEndsBeforeTheDimBegins(t *testing.T) {
+	const painted = "digraph {\n  rankdir=LR;\n" +
+		"  parse [color=\"#7aa2f7\", fontcolor=\"#7aa2f7\"];\n" +
+		"  grid [fillcolor=\"#9ece6a\", style=filled];\n" +
+		"  paint [color=\"#e0af68\", fontcolor=\"#e0af68\"];\n" +
+		"  glass;\n" +
+		"  parse -> grid [color=\"#f7768e\"];\n" +
+		"  grid -> paint [color=\"#bb9af7\", fontcolor=\"#bb9af7\", label=\"scale\"];\n" +
+		"  paint -> glass;\n}\n"
+	for _, octants := range []bool{false, true} {
+		rows := Draw(t.Context(), painted, 90, octants)
+		if rows == nil {
+			t.Fatal("nothing drawn")
+		}
+		s := strings.Join(rows, "\n")
+		if !strings.Contains(s, "\x1b[38;2;") {
+			t.Fatalf("octants=%v: a painted graph reached the row with no pen in it", octants)
+		}
+		if !strings.Contains(s, "\x1b[39m\x1b[2m") {
+			t.Errorf("octants=%v: no coloured run ends on ESC[39m before the dim begins:\n%q", octants, s)
+		}
+		if i := strings.Index(s, "\x1b[2m\x1b[39m"); i >= 0 {
+			t.Errorf("octants=%v: the dim went on over a pen still set, at %d:\n%q", octants, i, s)
+		}
+	}
+	// and the control from the other side: a graph nobody painted carries no
+	// foreground at all, so the drawing from before colour existed is the
+	// drawing an uncoloured graph still gets.
+	for _, octants := range []bool{false, true} {
+		rows := Draw(t.Context(), "digraph { rankdir=LR; parse -> grid -> paint -> glass }\n", 90, octants)
+		if rows == nil {
+			t.Fatal("nothing drawn")
+		}
+		if s := strings.Join(rows, "\n"); strings.Contains(s, "\x1b[38") {
+			t.Errorf("octants=%v: an uncoloured graph set a foreground:\n%q", octants, s)
+		}
+	}
+}
