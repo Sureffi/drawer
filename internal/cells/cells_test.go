@@ -1386,6 +1386,61 @@ func TestACrossingIsACrossingAndNeverACorner(t *testing.T) {
 	}
 }
 
+// LANES. An edge owns its lane: two edges share a segment only where they
+// share an end, and here they share no end at all, so they share nothing.
+// A fan is the shape that provokes it — three edges into one box, three
+// out of one box, and six doing both — and the way it fails is that two of
+// them fuse into one line, which costs a head and grows a junction with no
+// wall under it.
+//
+// The blueprint's first lane sentence had no test of its own; the fusion
+// glyph was asked for by TestLinesCrossAndNeverJoin on other graphs, and
+// the head count by TestTheEndsSayWhatTheGraphSaid on single edges.
+func TestAnEdgeOwnsItsLane(t *testing.T) {
+	tees := "├┤┬┴┝┞┟┠┡┢┥┦┧┨┩┪┭┮┯┰┱┲┵┶┷┸┹┺╞╟╠╡╢╣╤╥╦╧╨╩"
+	walls := "┌┐└┘╭╮╰╯│─┏┓┗┛┃━┄┆╌╎" + tees
+	for _, c := range []struct {
+		src string
+		n   int
+	}{
+		{"digraph { rankdir=LR; a -> b; a -> c; a -> d }", 3},
+		{"digraph { rankdir=TB; a -> b; a -> c; a -> d }", 3},
+		{"digraph { rankdir=LR; a -> d; b -> d; c -> d }", 3},
+		{"digraph { rankdir=TB; a -> d; b -> d; c -> d }", 3},
+		{"digraph { rankdir=LR; a -> e; b -> e; c -> e; a -> z; b -> z; c -> z }", 6},
+	} {
+		rows := plain(drawn(t, c.src+"\n", 160))
+		j := strings.Join(rows, "\n")
+		heads := 0
+		for _, r := range "▶◀▲▼" {
+			heads += strings.Count(j, string(r))
+		}
+		if heads != c.n {
+			t.Errorf("%s: %d edges, %d heads — two of them fused:\n%s", c.src, c.n, heads, j)
+		}
+		// And nothing fused anywhere else either: a junction is legal only
+		// where a box's own wall runs through it.
+		g := gridOf(rows)
+		wall := func(y, x int) bool {
+			return strings.ContainsRune(walls, at(g, x, y))
+		}
+		for y := range g {
+			for x, r := range g[y] {
+				if !strings.ContainsRune(tees, r) {
+					continue
+				}
+				ok := wall(y-1, x) && wall(y+1, x)
+				if r == '┬' || r == '┴' {
+					ok = wall(y, x-1) && wall(y, x+1)
+				}
+				if !ok {
+					t.Errorf("%s: two edges met at %q at %d,%d:\n%s", c.src, string(r), x, y, j)
+				}
+			}
+		}
+	}
+}
+
 // LANES. Two edges between the same pair, one each way, are two lines
 // with two heads pointing opposite ways. Sharing the corridor would draw
 // one line with a head at each end, which is what `dir=both` means and
