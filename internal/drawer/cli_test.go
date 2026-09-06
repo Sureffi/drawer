@@ -82,8 +82,15 @@ func TestVersionSaysTheReleaseItWasBuiltFrom(t *testing.T) {
 // ask for real — go test runs under the go command, whose stdin is a
 // terminal on the machine this was written on and a pipe on CI — so the
 // probe is a parameter and this one answers with a window nobody has.
+//
+// TMUX is cleared for the same reason the window is handed in. A run built
+// under a live tmux asks that tmux about its pane, so the law would read
+// the developer's own multiplexer and answer differently on a machine that
+// has one — and it would run somebody else's tmux to do it.
 func TestTheDoctorDoorSaysTheWindowItWasHanded(t *testing.T) {
 	t.Setenv("TERM", "xterm-kitty")
+	t.Setenv("TMUX", "")
+	t.Setenv("TMUX_PANE", "")
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("DRAWER_STATE", t.TempDir())
 	probe := func() (int, term.Geom, term.WidthFrom) {
@@ -154,9 +161,13 @@ func TestDoctorSaysWhatAHookWouldSee(t *testing.T) {
 
 // The theme line says which theme actually came out, and a -theme file that
 // would not read says so there rather than taking the whole door down: the
-// reader who ran -doctor is the reader whose theme is wrong.
+// reader who ran -doctor is the reader whose theme is wrong. TMUX is
+// cleared here too: the run this builds is a run in no multiplexer, and a
+// law that read the developer's would fork his tmux to find out.
 func TestDoctorSaysWhichThemeCameOut(t *testing.T) {
 	t.Setenv("TERM", "dumb")
+	t.Setenv("TMUX", "")
+	t.Setenv("TMUX_PANE", "")
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("DRAWER_STATE", t.TempDir())
 	cases := []struct {
