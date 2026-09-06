@@ -1,6 +1,6 @@
 {
   "name": "drawer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A ```dot fence in a reply is drawn in place, as the reply streams. Graphviz compiled in; nothing else running.",
   "author": { "name": "Sureffi", "email": "sureffi@proton.me" },
   "repository": "https://github.com/sureffi/drawer",
