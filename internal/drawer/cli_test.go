@@ -196,6 +196,48 @@ func TestDoctorSaysWhichThemeCameOut(t *testing.T) {
 	}
 }
 
+// -doctor is read on a terminal, and half of what it prints came from
+// somewhere else: the option's value is whatever somebody set it to, and
+// the error behind a tmux that would not run carries the PATH entry the
+// exec was looking in. A directory name is a string a reader never chose to
+// have executed.
+//
+// Measured on the rig: with an OSC title and a clear-screen in that
+// directory's name, -doctor's own tmux line put two ESC and a live BEL onto
+// the screen of the reader who ran it to find out what was wrong. The tmux
+// here is a file with an interpreter that is not there, which is the
+// shortest exec that fails with the path in its message.
+func TestTheDoctorLineCarriesNothingTheTerminalWouldObey(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "\x1b]0;pwned\x07\x1b[2Jbin")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte("#!/nonexistent/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	t.Setenv("TERM", "xterm-kitty")
+	t.Setenv("TMUX", "/nowhere,1,0")
+	t.Setenv("TMUX_PANE", "%0")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DRAWER_STATE", t.TempDir())
+	var b strings.Builder
+	r := newRun(t.Context(), rungAuto, "", &inForce{th: &theme.Theme{}})
+	if code := r.runDoctor(t.Context(), &b, func() (int, term.Geom, term.WidthFrom) {
+		return 100, term.Geom{}, term.FromDefault
+	}); code != 0 {
+		t.Fatalf("-doctor exited %d", code)
+	}
+	for i, c := range b.String() {
+		if c != '\n' && (c < 0x20 || c == 0x7f) {
+			t.Fatalf("-doctor put a control byte %#x on the reader's terminal, at %d:\n%q", c, i, b.String())
+		}
+	}
+	if !strings.Contains(b.String(), "could not be asked about") {
+		t.Errorf("the tmux line does not say the question could not be put:\n%s", b.String())
+	}
+}
+
 // countingTmux puts a tmux on the PATH that writes down every command it is
 // given and answers nothing. The file it writes is the count.
 func countingTmux(t *testing.T) string {

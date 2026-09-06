@@ -112,6 +112,13 @@ func runVersion(w io.Writer) int {
 // read too, because that is the answer the hook would act on: a pane that
 // set itself anything at all is one drawer will not write to, and a line
 // saying it would is a line that is not true.
+//
+// Every string on this line that came from outside goes through
+// term.Printable first, the reason the tee's note does: the option's value
+// is whatever somebody set it to, and an error from a failed exec carries
+// the PATH entry it was looking in. Measured on the rig: a directory named
+// with an OSC title and a clear-screen put two ESC and a live BEL onto the
+// terminal of the reader who ran -doctor to find out what was wrong.
 func (r run) muxLine(ctx context.Context) string {
 	if r.mux == nil {
 		return "no"
@@ -129,8 +136,8 @@ func (r run) muxLine(ctx context.Context) string {
 	case err != nil:
 		// Not "unknown": a tmux that cannot be asked is a tmux that cannot
 		// be told either, and a picture down this wire is a picture gone.
-		return "yes: " + pane + ", allow-passthrough could not be asked about: " + err.Error() +
-			" — no picture can cross this wire"
+		return "yes: " + pane + ", allow-passthrough could not be asked about: " +
+			term.Printable(err.Error()) + " — no picture can cross this wire"
 	case was == "on" || was == "all":
 		return "yes: " + pane + ", allow-passthrough " + was
 	}
@@ -138,7 +145,7 @@ func (r run) muxLine(ctx context.Context) string {
 	switch {
 	case err != nil:
 		return "yes: " + pane + ", allow-passthrough " + pixel.Quoted(was) +
-			", and this pane's own value could not be read: " + err.Error() +
+			", and this pane's own value could not be read: " + term.Printable(err.Error()) +
 			" — no picture can cross this wire"
 	case own != "":
 		return "yes: " + pane + ", allow-passthrough " + own + ", set on the pane itself" +
