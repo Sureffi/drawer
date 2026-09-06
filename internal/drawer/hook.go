@@ -67,14 +67,13 @@ func hookWidth(cols int) int {
 	return cols
 }
 
-// teePayload writes a live turn down, one payload per line, in exactly the
-// shape -deltas reads. One armed session therefore produces a fixture
-// rather than a log. Where it writes is -hooktee on the command line, or
+// teeLine appends one line to the tee, which is the whole of how anything
+// gets written there. Where it writes is -hooktee on the command line, or
 // DRAWER_TEE in the environment: a variable set for claude — the shell's,
 // or settings.json's `env` — reaches a hook (measured on 2.1.261; an
 // earlier measurement said the environment was scrubbed, and on 2.1.257
 // it was not either way that mattered here).
-func (r run) teePayload(raw []byte) {
+func (r run) teeLine(b []byte) {
 	if r.tee == "" {
 		return
 	}
@@ -82,19 +81,27 @@ func (r run) teePayload(raw []byte) {
 	if err != nil {
 		return
 	}
-	f.Write(append(bytes.TrimRight(raw, "\n"), '\n'))
+	f.Write(append(b, '\n'))
 	f.Close()
 }
 
-// teeNote writes down something this process did to the terminal's
+// teePayload writes a live turn down, one payload per line, in exactly the
+// shape -deltas reads. One armed session therefore produces a fixture
+// rather than a log.
+func (r run) teePayload(raw []byte) {
+	r.teeLine(bytes.TrimRight(raw, "\n"))
+}
+
+// teeNote writes down something this process found or did in the terminal's
 // surroundings, into the same tee, in the shape -deltas reads: an empty
 // delta, and the note beside it. A tee is a fixture, not a log — a line
 // that would not parse takes -deltas down — so the note travels as a field
 // and the replay sees a delta that says nothing.
 //
-// There is one note today, and it is the reason the door exists: turning
-// tmux's passthrough on is drawer changing a setting in somebody else's
-// multiplexer, and that is not a thing to do quietly.
+// Every note there is today is about the same thing, and it is the reason
+// the door exists: tmux's passthrough is a setting in somebody else's
+// multiplexer, and neither turning it on nor finding it shut is a thing to
+// do quietly.
 func (r run) teeNote(note string) {
 	if note == "" || r.tee == "" {
 		return
@@ -106,12 +113,7 @@ func (r run) teeNote(note string) {
 	if err != nil {
 		return
 	}
-	f, err := os.OpenFile(r.tee, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return
-	}
-	f.Write(append(b, '\n'))
-	f.Close()
+	r.teeLine(b)
 }
 
 // runHook is the whole of the -hook entry point: one payload in, one

@@ -25,9 +25,10 @@ import (
 // layoutTimeout is how long one process may spend at graphviz's door. A
 // hook is one process per delta and a delta is on screen in milliseconds,
 // so ten seconds is not a budget anybody draws inside — it is the bound on
-// a wasm that has stopped answering. A layout already under way runs to its
-// end whatever this says: the context is spent at the door and nowhere
-// deeper, so what the deadline buys is that the next door does not open —
+// a wasm that has stopped answering, and on a tmux that has. A layout
+// already under way runs to its end whatever this says: the context is
+// spent at graphviz's door, at tmux's, and nowhere deeper, so what the
+// deadline buys is that the next door does not open —
 // Fit's second orientation, Cut's, a repaint of a fence already drawn — and
 // that is the difference between late and never. A door that refuses
 // returns an error like any other, and the fence shows its source under a

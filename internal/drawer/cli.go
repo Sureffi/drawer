@@ -137,25 +137,16 @@ func (r run) muxLine(ctx context.Context) string {
 	own, err := r.mux.PaneOption(ctx)
 	switch {
 	case err != nil:
-		return "yes: " + pane + ", allow-passthrough " + quotedOpt(was) +
+		return "yes: " + pane + ", allow-passthrough " + pixel.Quoted(was) +
 			", and this pane's own value could not be read: " + err.Error() +
 			" — no picture can cross this wire"
 	case own == "off":
 		return "yes: " + pane + ", allow-passthrough off, set on the pane itself" +
 			": drawer leaves that alone and draws glyphs"
 	default:
-		return "yes: " + pane + ", allow-passthrough " + quotedOpt(was) +
+		return "yes: " + pane + ", allow-passthrough " + pixel.Quoted(was) +
 			": drawer sets it on for this pane, and this pane only, when it draws a picture"
 	}
-}
-
-// quotedOpt names an option value a reader has to be able to tell from a
-// value nobody set.
-func quotedOpt(v string) string {
-	if v == "" {
-		return "unset"
-	}
-	return v
 }
 
 // runDoctor is the -doctor door: what this binary sees, one fact per line.

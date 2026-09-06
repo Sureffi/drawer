@@ -5,6 +5,7 @@ package drawer
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -371,4 +372,41 @@ func TestATmuxThatNeverAnswersIsAskedOnce(t *testing.T) {
 	if strings.Contains(out, "no diagram") || strings.Contains(out, "digraph") {
 		t.Errorf("a fence came back as a notice over its own source:\n%s", out)
 	}
+}
+
+// The tee takes two kinds of line and writes them the same way: a payload
+// exactly as it arrived, and a note about the terminal's surroundings as a
+// delta that says nothing with the note beside it. Both have to parse as
+// the JSON -deltas reads, because a tee is a fixture and one line that will
+// not parse takes the whole replay down.
+func TestTheTeeWritesPayloadsAndNotesTheSameWay(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tee.jsonl")
+	r := run{tee: path}
+	r.teePayload([]byte(`{"delta":"hello","final":true}` + "\n\n"))
+	r.teeNote("tmux: allow-passthrough was off; set on for pane %0")
+	r.teeNote("")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("the tee holds %d lines, want the payload and the one note:\n%s", len(lines), b)
+	}
+	for i, l := range lines {
+		var in hookIn
+		if err := json.Unmarshal([]byte(l), &in); err != nil {
+			t.Errorf("line %d does not parse as a delta: %v", i+1, err)
+		}
+	}
+	if lines[0] != `{"delta":"hello","final":true}` {
+		t.Errorf("the payload was not written as it arrived: %s", lines[0])
+	}
+	if !strings.Contains(lines[1], `"drawer_note"`) || !strings.Contains(lines[1], `"delta":""`) {
+		t.Errorf("the note is not a delta that says nothing: %s", lines[1])
+	}
+	// and a run nobody armed writes nowhere
+	none := run{}
+	none.teePayload([]byte("x"))
+	none.teeNote("y")
 }

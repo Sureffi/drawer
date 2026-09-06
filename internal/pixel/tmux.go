@@ -1,4 +1,5 @@
-// tmux.go — the shape a graphics escape has to have to get past tmux.
+// tmux.go — the shape a graphics escape has to have to get past tmux, and
+// what has to be true of the pane for tmux to forward it.
 //
 // tmux reads everything an application writes and forwards only what it
 // understands; a kitty graphics APC is not on that list and is dropped
@@ -14,8 +15,8 @@
 // go through CC's display wire as they always did; a cursor move or a colour
 // inside the wrap would be tmux's screen being written behind tmux's back.
 //
-// The fact that there is a tmux at all is term's — this file is only the
-// bytes, and the one command that lets them past.
+// The fact that there is a tmux at all is term's — this file is the bytes,
+// and the two questions and one write that decide whether they get through.
 
 package pixel
 
@@ -35,15 +36,16 @@ import (
 // multiplexer", and every method here reads that as nothing to do, so a
 // caller has one path whether or not tmux is in the way.
 //
-// What the pane answered about passthrough is kept here, because the answer
-// cannot change under a process that is the only one writing it: one hook
-// draws a picture and may repaint a whole ledger of them, and each of those
-// used to fork a tmux to ask the same question over again.
+// What this process asked, found and did about passthrough is kept here,
+// because none of it can change under a process that is the only one
+// writing it: one hook draws a picture and may repaint a whole ledger of
+// them, and each of those used to fork a tmux to ask the same questions
+// over again and write the same line into the tee.
 type Tmux struct {
 	Socket, Pane string
 
-	asked bool   // whether this process has run `show` yet
-	was   string // what it said
+	asked bool   // whether this process has run `show -A` yet
+	was   string // the value in force it said
 	err   error  // or why it could not be asked at all
 
 	ownAsked bool   // whether this pane's own value has been read
@@ -98,10 +100,11 @@ const tmuxTimeout = 2 * time.Second
 // command is already over — the answer is late by then whatever it says.
 const tmuxWaitDelay = tmuxTimeout / 4
 
-// Passthrough is whether this pane lets a passthrough through: "on", "off",
-// or whatever else tmux says. -A asks for the value in force rather than
-// the one set on the pane, because an option nobody set on the pane reads
-// as empty while the server's own answer is the one that counts.
+// Passthrough is the allow-passthrough in force for this pane: "on",
+// "all", "off", or whatever else tmux says. -A is what makes it the value
+// in force rather than the pane's own — an option nobody set on the pane
+// reads as empty, and what governs it then is the server's. PaneOption is
+// the other question, and Allow says when each of them is asked.
 //
 // The error is the other answer, and it is not the same as an empty one: a
 // tmux that could not be asked at all — no server on that socket, no tmux
@@ -139,6 +142,7 @@ func (t *Tmux) Passthrough(ctx context.Context) (string, error) {
 // somebody else's tmux and drawer is a guest in it. The change reaches the
 // pane claude is running in and no other, it is never written to a file,
 // the server's own setting is left where it was, and it dies with the pane.
+//
 // The policy, in three sentences. The value in force says whether an escape
 // gets through, and "on" and "all" both say yes — "all" is the more
 // permissive of the two, not the lesser, so a pane already sitting on it is
@@ -173,7 +177,7 @@ func (t *Tmux) Allow(ctx context.Context) (string, bool) {
 	}
 	own, err := t.PaneOption(ctx)
 	if err != nil {
-		return t.note("tmux: allow-passthrough is " + quoted(was) + pane +
+		return t.note("tmux: allow-passthrough is " + Quoted(was) + pane +
 			" and this pane's own value could not be read: " + reason(err)), false
 	}
 	if own == "off" {
@@ -185,11 +189,11 @@ func (t *Tmux) Allow(ctx context.Context) (string, bool) {
 		t.setErr, t.tried = t.allow(ctx), true
 	}
 	if t.setErr != nil {
-		return t.note("tmux: allow-passthrough is " + quoted(was) + pane +
+		return t.note("tmux: allow-passthrough is " + Quoted(was) + pane +
 			" and would not be set: " + reason(t.setErr)), false
 	}
 	t.was, t.err = "on", nil
-	return t.note("tmux: allow-passthrough was " + quoted(was) + "; set on" + pane +
+	return t.note("tmux: allow-passthrough was " + Quoted(was) + "; set on" + pane +
 		" (this pane only, until it closes)"), true
 }
 
@@ -240,8 +244,10 @@ func (t *Tmux) paneIn() string {
 	return " for pane " + t.Pane
 }
 
-// quoted names a value a reader has to be able to tell from nothing at all.
-func quoted(v string) string {
+// Quoted names an option value a reader has to be able to tell from a value
+// nobody set. Exported because -doctor prints the same values this file
+// puts in its notes, and one spelling of "unset" is enough.
+func Quoted(v string) string {
 	if v == "" {
 		return "unset"
 	}
@@ -253,8 +259,10 @@ func quoted(v string) string {
 // is the option's value, and a tmux that failed did not give one.
 func reason(err error) string { return term.Printable(err.Error()) }
 
-// allow is the one write this package makes to anything but a tty. There is
-// no value to bring back — `set` says nothing when it works — so the only
+// allow is the one change this package makes to somebody else's state.
+// (Not the one write: Send lays a picture in a temp file for the terminal
+// to collect, and sweepPictures unlinks the ones it never did.) There is no
+// value to bring back — `set` says nothing when it works — so the only
 // answer is whether it could be told at all.
 func (t *Tmux) allow(ctx context.Context) error {
 	if t.Pane == "" {
