@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/sureffi/drawer/internal/grid"
+	"github.com/sureffi/drawer/internal/pixel"
 	"github.com/sureffi/drawer/internal/term"
 )
 
@@ -43,6 +44,26 @@ func TestPickRungReadsTheTerminal(t *testing.T) {
 		if got := pickRung(c.want, c.term, c.geom); got != c.draws {
 			t.Errorf("%s: draws in %s, want %s", c.name, got, c.draws)
 		}
+	}
+}
+
+// A rung asked for by name is that rung — and the pixels rung still asks
+// the one thing of the terminal that nothing else in this binary asks:
+// U+10EEEE is a picture in kitty and ghostty and a tofu box everywhere
+// else, and the picture itself goes down the parent's own tty as an escape
+// nobody there would read. So `-render pixels` in a terminal that draws
+// none of that draws glyphs, which is the same fail-open every other stage
+// of the rung takes.
+func TestForcedPixelsStillNeedATerminalThatDrawsThem(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TMPDIR", t.TempDir())
+	r := run{rung: rungPixels, term: "xterm-256color", geom: term.Geom{CellW: 10, CellH: 24}, theme: &inForce{}}
+	rows := r.drawBlock(t.Context(), "digraph { a -> b }", 60)
+	if rows == nil {
+		t.Fatal("a forced pixels rung drew nothing at all")
+	}
+	if strings.ContainsRune(strings.Join(rows, "\n"), pixel.PlaceholderRune) {
+		t.Errorf("placeholder cells went to a terminal that draws none:\n%s", strings.Join(rows, "\n"))
 	}
 }
 
