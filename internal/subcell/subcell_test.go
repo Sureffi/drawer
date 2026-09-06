@@ -3,6 +3,8 @@
 package subcell
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -194,18 +196,18 @@ func TestSubcellParseColor(t *testing.T) {
 // the colour, so the structure around a painted edge may only recede once
 // the pen it was painted with is gone.
 //
-// The graph is testdata/deltas-colour.jsonl's, which is the same shape the
-// replay draws: coloured nodes, a coloured edge, and one node nobody
-// painted for the run to end against.
+// The graph is testdata/colour.dot, which is the source the -dot cases in
+// the equivalence harness and scripts/check.sh draw and the same one
+// testdata/deltas-colour.jsonl carries in its fence: coloured nodes, a
+// coloured edge, and one node nobody painted for the run to end against.
+// It is read rather than copied here, because a law and a fixture that
+// drift apart hold two different graphs and say they hold one.
 func TestSubcellAColouredRunEndsBeforeTheDimBegins(t *testing.T) {
-	const painted = "digraph {\n  rankdir=LR;\n" +
-		"  parse [color=\"#7aa2f7\", fontcolor=\"#7aa2f7\"];\n" +
-		"  grid [fillcolor=\"#9ece6a\", style=filled];\n" +
-		"  paint [color=\"#e0af68\", fontcolor=\"#e0af68\"];\n" +
-		"  glass;\n" +
-		"  parse -> grid [color=\"#f7768e\"];\n" +
-		"  grid -> paint [color=\"#bb9af7\", fontcolor=\"#bb9af7\", label=\"scale\"];\n" +
-		"  paint -> glass;\n}\n"
+	b, err := os.ReadFile(filepath.Join("..", "..", "testdata", "colour.dot"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	painted := string(b)
 	for _, octants := range []bool{false, true} {
 		rows := Draw(t.Context(), painted, 90, octants)
 		if rows == nil {

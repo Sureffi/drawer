@@ -1,0 +1,10 @@
+digraph {
+  rankdir=LR;
+  parse [color="#7aa2f7", fontcolor="#7aa2f7"];
+  grid [fillcolor="#9ece6a", style=filled];
+  paint [color="#e0af68", fontcolor="#e0af68"];
+  glass;
+  parse -> grid [color="#f7768e"];
+  grid -> paint [color="#bb9af7", fontcolor="#bb9af7", label="scale"];
+  paint -> glass;
+}

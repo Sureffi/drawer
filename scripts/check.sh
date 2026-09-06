@@ -92,6 +92,12 @@ stage "laws (go test -race)" go test -race ./... || true
 for r in cells braille octants; do
   stage "dot: $r" ./bin/drawer -dot testdata/chain.dot -size 100x14 -render $r || true
 done
+# The pens the strokes draw in, on the source the harness and the delta
+# fixture both carry. Only the glyph rungs: the cells rung has no colour to
+# put a graph's own pen into, and chain.dot above already draws it.
+for r in braille octants; do
+  stage "dot: colour $r" ./bin/drawer -dot testdata/colour.dot -size 100x20 -render $r || true
+done
 
 # A theme file is read by graphviz's parser; the example themes must load,
 # and the theme in force — Claude Code's, derived — must print as DOT.
