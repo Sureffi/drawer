@@ -50,13 +50,12 @@ layers_table() {
   cmd/drawer drawer
 TABLE
 }
-layers() {
-  # The listing is taken first and on its own. A package that will not load
-  # makes go list answer nothing, and nothing reads as no sideways edges —
-  # the stage passing on a tree it never saw.
-  list=$(go list -f '{{.ImportPath}} {{join .Imports " "}} {{join .TestImports " "}} {{join .XTestImports " "}}' \
-    ./cmd/... ./internal/...) || return 1
-  bad=$(printf '%s\n' "$list" | while read -r p rest; do
+# sideways reads the listing on stdin and prints every import that is not
+# in the table. A function rather than a loop inside a substitution: the sh
+# on macOS is bash 3.2, which cannot parse a case inside $( ), and the
+# first push to a Mac runner stopped here with a syntax error.
+sideways() {
+  while read -r p rest; do
     pkg=${p#github.com/sureffi/drawer/}
     pkg=${pkg#internal/}
     allowed=$(layers_table | awk -v k="$pkg" '$1 == k { $1 = ""; print }')
@@ -72,7 +71,15 @@ layers() {
       *) echo "$pkg -> $d is not a layer $pkg may import" ;;
       esac
     done
-  done | sort -u)
+  done
+}
+layers() {
+  # The listing is taken first and on its own. A package that will not load
+  # makes go list answer nothing, and nothing reads as no sideways edges —
+  # the stage passing on a tree it never saw.
+  list=$(go list -f '{{.ImportPath}} {{join .Imports " "}} {{join .TestImports " "}} {{join .XTestImports " "}}' \
+    ./cmd/... ./internal/...) || return 1
+  bad=$(printf '%s\n' "$list" | sideways | sort -u)
   [ -z "$bad" ] || { printf '%s\n\nthe layers, and what each may import:\n' "$bad"; layers_table; return 1; }
 }
 
