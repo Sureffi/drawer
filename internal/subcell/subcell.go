@@ -25,10 +25,7 @@
 package subcell
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
 	"math"
 	"strconv"
 	"strings"
@@ -39,45 +36,6 @@ import (
 	"github.com/sureffi/drawer/internal/grid"
 	"github.com/sureffi/drawer/internal/layout"
 )
-
-// ---------- graphviz's drawing, as json ----------
-
-type jop struct {
-	Op     string       `json:"op"`
-	Points [][2]float64 `json:"points"`
-	Rect   []float64    `json:"rect"`
-	Pt     []float64    `json:"pt"`
-	Text   string       `json:"text"`
-	Align  string       `json:"align"`
-	Color  string       `json:"color"`
-	Width  float64      `json:"width"`
-	Style  string       `json:"style"`
-	Size   float64      `json:"size"`
-}
-
-type jobj struct {
-	Name  string `json:"name"`
-	Draw  []jop  `json:"_draw_"`
-	LDraw []jop  `json:"_ldraw_"`
-	Nodes []int  `json:"nodes"` // present on a cluster, absent on a node
-}
-
-type jedge struct {
-	Tail  int   `json:"tail"`
-	Head  int   `json:"head"`
-	Draw  []jop `json:"_draw_"`
-	HDraw []jop `json:"_hdraw_"`
-	TDraw []jop `json:"_tdraw_"`
-	LDraw []jop `json:"_ldraw_"`
-}
-
-type jgraph struct {
-	BB      string  `json:"bb"`
-	Objects []jobj  `json:"objects"`
-	Edges   []jedge `json:"edges"`
-	LDraw   []jop   `json:"_ldraw_"`
-	w, h    float64
-}
 
 // The type graphviz measures with. Courier is one of the three faces it
 // carries width tables for when no font system exists — the wasm has none
@@ -91,8 +49,8 @@ const (
 )
 
 // layoutInk runs graphviz and reads back what it would have drawn.
-func layoutInk(ctx context.Context, src string, force cgraph.RankDir) (*jgraph, error) {
-	var jg jgraph
+func layoutInk(ctx context.Context, src string, force cgraph.RankDir) (*layout.Drawing, error) {
+	var d *layout.Drawing
 	err := layout.Door(ctx, src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
 		rd := force
 		if rd == "" {
@@ -123,43 +81,34 @@ func layoutInk(ctx context.Context, src string, force cgraph.RankDir) (*jgraph, 
 		for sg, _ := graph.FirstSubGraph(); sg != nil; sg, _ = sg.NextSubGraph() {
 			sg.SafeSet("margin", strconv.FormatFloat(2*ptPerCell, 'f', 1, 64), "")
 		}
-		var buf bytes.Buffer
-		if err := g.Render(ctx, graph, graphviz.Format("json"), &buf); err != nil {
-			return err
-		}
-		return json.Unmarshal(buf.Bytes(), &jg)
+		var err error
+		d, err = layout.Render(ctx, g, graph)
+		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	// bb is "x0,y0,x1,y1" with the origin at 0,0: the far corner is the size.
-	if f := strings.Split(jg.BB, ","); len(f) == 4 {
-		jg.w, jg.h = layout.Atof(f[2]), layout.Atof(f[3])
-	}
-	if jg.w <= 0 || jg.h <= 0 {
-		return nil, errors.New("layout has no bounding box")
-	}
-	return &jg, nil
+	return d, nil
 }
 
 // inkFootprint is the cell box the drawing occupies.
-func inkFootprint(jg *jgraph) (cols, rows int) {
-	return int(math.Ceil(jg.w/ptPerCell)) + 1, int(math.Ceil(jg.h/ptPerRow)) + 1
+func inkFootprint(d *layout.Drawing) (cols, rows int) {
+	return int(math.Ceil(d.W/ptPerCell)) + 1, int(math.Ceil(d.H/ptPerRow)) + 1
 }
 
 // fitInk is layout.Fit for this renderer: as written, then top-down, the
 // first that fits the width and the height wins.
-func fitInk(ctx context.Context, src string, width, maxRows int) (*jgraph, int, int, bool) {
+func fitInk(ctx context.Context, src string, width, maxRows int) (*layout.Drawing, int, int, bool) {
 	for _, rd := range layout.Orientations(src) {
-		jg, err := layoutInk(ctx, src, rd)
+		d, err := layoutInk(ctx, src, rd)
 		if err != nil {
 			continue
 		}
-		cols, rows := inkFootprint(jg)
+		cols, rows := inkFootprint(d)
 		if cols > width || (maxRows > 0 && rows > maxRows) {
 			continue
 		}
-		return jg, cols, rows, true
+		return d, cols, rows, true
 	}
 	return nil, 0, 0, false
 }
@@ -325,7 +274,7 @@ func (k *ink) ellipse(p *pen, r []float64) {
 // one graphviz guessed with. The run is centred as a whole and then
 // snapped: snapping the anchor first and centring after put every
 // odd-width label half a cell right of its box.
-func (k *ink) place(op jop, size float64) (col, row, n int, ok bool) {
+func (k *ink) place(op layout.Op, size float64) (col, row, n int, ok bool) {
 	if len(op.Pt) < 2 || op.Text == "" {
 		return 0, 0, 0, false
 	}
@@ -349,7 +298,7 @@ func (k *ink) place(op jop, size float64) (col, row, n int, ok bool) {
 }
 
 // text sets a label as glyphs at the cells place chose.
-func (k *ink) text(op jop, size float64) {
+func (k *ink) text(op layout.Op, size float64) {
 	col, row, _, ok := k.place(op, size)
 	if !ok {
 		return
@@ -383,7 +332,7 @@ func (k *ink) text(op jop, size float64) {
 // renderer settled this long ago — the box is sized from the label, the
 // label does not fit itself into the box — and the same rule holds here.
 // Returns the shift in sub-pixels; zero for a node with no label.
-func (k *ink) snapToLabel(ldraw []jop) (dx, dy float64) {
+func (k *ink) snapToLabel(ldraw []layout.Op) (dx, dy float64) {
 	size := inkSize
 	var sumDX, sumDY float64
 	lines := 0
@@ -416,7 +365,7 @@ func (k *ink) snapToLabel(ldraw []jop) (dx, dy float64) {
 
 // ops runs one drawing list. Fill is for arrowheads; a node's own shape is
 // outlined only, because a solid box would blot the label inside it.
-func (k *ink) ops(list []jop, fill bool) {
+func (k *ink) ops(list []layout.Op, fill bool) {
 	p := &pen{}
 	size := inkSize
 	// One drawing list is one object; the pen it sets is its own, and the
@@ -540,32 +489,32 @@ func (k *ink) rowsOut(octants bool) []string {
 // heads, then node outlines, and every label last so it wins its cells;
 // the dots beneath a label are cleared, which is what lets an edge label
 // sit in its own stroke the way the cell renderer's do.
-func renderInk(jg *jgraph, cols, rows int, octants bool) []string {
-	k := newInk(cols, rows, jg.h)
-	for _, o := range jg.Objects {
+func renderInk(d *layout.Drawing, cols, rows int, octants bool) []string {
+	k := newInk(cols, rows, d.H)
+	for _, o := range d.Objects {
 		if o.Nodes != nil {
 			k.ops(o.Draw, false)
 		}
 	}
-	for _, e := range jg.Edges {
+	for _, e := range d.Edges {
 		k.ops(e.Draw, false)
 		k.ops(e.HDraw, true)
 		k.ops(e.TDraw, true)
 	}
-	for _, o := range jg.Objects {
+	for _, o := range d.Objects {
 		if o.Nodes == nil {
 			k.dx, k.dy = k.snapToLabel(o.LDraw)
 			k.ops(o.Draw, false)
 			k.dx, k.dy = 0, 0
 		}
 	}
-	for _, o := range jg.Objects {
+	for _, o := range d.Objects {
 		k.ops(o.LDraw, false)
 	}
-	for _, e := range jg.Edges {
+	for _, e := range d.Edges {
 		k.ops(e.LDraw, false)
 	}
-	k.ops(jg.LDraw, false)
+	k.ops(d.LDraw, false)
 	// labels win: clear the dots in every cell a glyph occupies
 	for i, l := range k.label {
 		if !l {
@@ -584,11 +533,11 @@ func renderInk(jg *jgraph, cols, rows int, octants bool) []string {
 // Draw is the braille and octant rung: rows, or nil when nothing fits and
 // the caller steps down.
 func Draw(ctx context.Context, src string, width int, octants bool) []string {
-	jg, cols, rows, ok := fitInk(ctx, src, width, grid.MaxRows)
+	d, cols, rows, ok := fitInk(ctx, src, width, grid.MaxRows)
 	if !ok {
 		return nil
 	}
-	return renderInk(jg, cols, rows, octants)
+	return renderInk(d, cols, rows, octants)
 }
 
 // HasInk reports a braille or octant stroke in a row.
