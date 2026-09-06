@@ -131,17 +131,21 @@ func paint(ctx context.Context, d *layout.Drawing, face string, zoom float64) (*
 	}
 	b := canvas(d)
 	s := zoom * pxPerPt
+	// The size is judged before it is a number of pixels: a float too big
+	// for an int converts to whatever the machine feels like, and this is
+	// the one place a caller's arithmetic reaches an allocation.
+	wf, hf := b.w()*s, b.h()*s
+	if !(wf >= 1 && hf >= 1) {
+		return nil, errors.New("the picture has no size")
+	}
+	if wf*hf > maxPixels {
+		return nil, fmt.Errorf("%.0fx%.0f px; the ceiling is %d pixels", wf, hf, maxPixels)
+	}
 	// Rounded, not ceilinged: the cut chose this zoom so that the width
 	// lands on a whole number of columns, and 120 columns of arithmetic
 	// that comes out 120.00000000000001 must not be a 121-pixel picture the
 	// terminal then scales.
-	w, h := int(math.Round(b.w()*s)), int(math.Round(b.h()*s))
-	if w < 1 || h < 1 {
-		return nil, errors.New("the picture has no size")
-	}
-	if w > maxPixels/h {
-		return nil, fmt.Errorf("%dx%d px; the ceiling is %d pixels", w, h, maxPixels)
-	}
+	w, h := int(math.Round(wf)), int(math.Round(hf))
 	p := &painter{dc: gg.NewContext(w, h), s: s, box: b, file: fontFile(face)}
 	// cairo's defaults, and graphviz's SVG named neither, so the strokes
 	// are laid the way the picture was laid before. gg mitres nothing —
