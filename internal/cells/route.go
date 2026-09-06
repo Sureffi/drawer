@@ -1,4 +1,4 @@
-// route.go — edges live on the grid.
+// route.go — one layout, drawn on the canvas.
 //
 // graphviz places; this routes. The old rasteriser projected graphviz's
 // beziers onto the cell grid after the fact, and every seam in that
@@ -19,6 +19,11 @@
 // The division holds unchanged: graphviz still answers the genuinely
 // hard question (which boxes go where so edges can behave), and
 // everything after that answer is derived in cell space, never carried.
+//
+// This file is one layout and the canvas is not: cells.go knows lines
+// and boxes and nothing about ranks. A different layout is a different
+// file here, on the same canvas, and the two drawings differ by their
+// layouts and not by their glyphs.
 
 package cells
 
@@ -137,10 +142,12 @@ func straighten(l *layout.Plain, cx, cy []int, byName map[string]int, horiz bool
 	}
 }
 
-// nodeBoxAt is nodeBox in cell space: the box a label needs, centred at
-// (cx, cy), clamped into the canvas.
-func nodeBoxAt(w, h, cx, cy int, label string) nbox {
-	bw := grid.Cells(label) + 2
+// nodeBoxAt is the box a label needs, centred at (cx, cy), clamped into
+// the canvas. The box a line aims at and the box on screen are one
+// rectangle rather than two that usually agree.
+func nodeBoxAt(w, h, cx, cy int, label string) Box {
+	lines := []string{label}
+	bw, _ := Size("", lines, 0)
 	if bw > w {
 		bw = w
 	}
@@ -151,8 +158,10 @@ func nodeBoxAt(w, h, cx, cy int, label string) nbox {
 	if x0+bw > w {
 		x0 = w - bw
 	}
+	b := Box{X: x0, W: bw, Round: true, Label: lines}
 	if h < 3 {
-		return nbox{x0, cy, bw, 1}
+		b.Y, b.H = cy, 1
+		return b
 	}
 	y0 := cy - 1
 	if y0 < 0 {
@@ -161,7 +170,8 @@ func nodeBoxAt(w, h, cx, cy int, label string) nbox {
 	if y0+2 >= h {
 		y0 = h - 3
 	}
-	return nbox{x0, y0, bw, 3}
+	b.Y, b.H = y0, 3
+	return b
 }
 
 // ---------- ports ----------
@@ -170,6 +180,15 @@ func nodeBoxAt(w, h, cx, cy int, label string) nbox {
 // several sharing a wall spread outward from the middle, one cell apart.
 // A port never lands on a corner — the corner glyphs have no wall to
 // admit a stroke, which is where arrows used to grow out of ┌.
+
+// port is where an edge meets a box: the cell just outside one side of
+// it, and the direction from there into the box — which is the way an
+// arrowhead there would point.
+type port struct {
+	x, y  int
+	d     Dir
+	horiz bool
+}
 
 type portKey struct {
 	x0, y0 int
@@ -185,8 +204,8 @@ func newPorter() *porter { return &porter{used: map[portKey]bool{}} }
 // it, middle first, spreading outward. The aspect correction matters: a
 // row reads about twice a column, so a partner one rank away and a
 // little aside still deserves the flow-facing wall, not the side.
-func (pt *porter) claim(b nbox, tx, ty int, boxes []nbox) port {
-	cxx, cyy := b.x0+b.w/2, b.y0+b.h/2
+func (pt *porter) claim(b Box, tx, ty int, boxes []Box) port {
+	cxx, cyy := b.X+b.W/2, b.Y+b.H/2
 	dx, dy := tx-cxx, ty-cyy
 	var side int8 // 0 right, 1 left, 2 bottom, 3 top
 	if abs(dx) > 2*abs(dy) {
@@ -201,7 +220,7 @@ func (pt *porter) claim(b nbox, tx, ty int, boxes []nbox) port {
 	}
 	inAny := func(x, y int) bool {
 		for _, o := range boxes {
-			if o.has(x, y) {
+			if o.Has(x, y) {
 				return true
 			}
 		}
@@ -210,39 +229,39 @@ func (pt *porter) claim(b nbox, tx, ty int, boxes []nbox) port {
 	base := 0
 	switch side {
 	case 0, 1:
-		lo, hi := b.y0+1, b.y0+b.h-2
-		if b.h < 3 {
-			lo, hi = b.y0, b.y0
+		lo, hi := b.Y+1, b.Y+b.H-2
+		if b.H < 3 {
+			lo, hi = b.Y, b.Y
 		}
 		base = clamp(ty, lo, hi) - cyy
 	default:
-		base = clamp(tx, b.x0+1, b.x0+b.w-2) - cxx
+		base = clamp(tx, b.X+1, b.X+b.W-2) - cxx
 	}
 	mk := func(slot int) (port, bool) {
 		switch side {
 		case 0, 1:
-			lo, hi := b.y0+1, b.y0+b.h-2
-			if b.h < 3 {
-				lo, hi = b.y0, b.y0
+			lo, hi := b.Y+1, b.Y+b.H-2
+			if b.H < 3 {
+				lo, hi = b.Y, b.Y
 			}
 			y := cyy + slot
 			if y < lo || y > hi {
 				return port{}, false
 			}
 			if side == 0 {
-				return port{b.x0 + b.w, y, '◀', true}, true
+				return port{b.X + b.W, y, West, true}, true
 			}
-			return port{b.x0 - 1, y, '▶', true}, true
+			return port{b.X - 1, y, East, true}, true
 		default:
-			lo, hi := b.x0+1, b.x0+b.w-2
+			lo, hi := b.X+1, b.X+b.W-2
 			x := cxx + slot
 			if x < lo || x > hi {
 				return port{}, false
 			}
 			if side == 2 {
-				return port{x, b.y0 + b.h, '▲', false}, true
+				return port{x, b.Y + b.H, North, false}, true
 			}
-			return port{x, b.y0 - 1, '▼', false}, true
+			return port{x, b.Y - 1, South, false}, true
 		}
 	}
 	for _, off := range []int{0, 1, -1, 2, -2, 3, -3, 4, -4} {
@@ -250,7 +269,7 @@ func (pt *porter) claim(b nbox, tx, ty int, boxes []nbox) port {
 		if !ok || inAny(p.x, p.y) {
 			continue
 		}
-		k := portKey{b.x0, b.y0, side, int8(base + off)}
+		k := portKey{b.X, b.Y, side, int8(base + off)}
 		if pt.used[k] {
 			continue
 		}
@@ -270,36 +289,6 @@ const (
 	costTurn  = 12
 	costCross = 8
 )
-
-// directions indexed like the link bits: up, right, down, left
-var dxs = [4]int{0, 1, 0, -1}
-var dys = [4]int{-1, 0, 1, 0}
-
-func outDir(head rune) int {
-	switch head {
-	case '◀':
-		return 1
-	case '▶':
-		return 3
-	case '▲':
-		return 2
-	default:
-		return 0
-	}
-}
-
-func inDir(head rune) int {
-	switch head {
-	case '▶':
-		return 1
-	case '◀':
-		return 3
-	case '▼':
-		return 2
-	default:
-		return 0
-	}
-}
 
 type pqItem struct{ st, cost int }
 type pq []pqItem
@@ -322,50 +311,46 @@ func (q *pq) Pop() any {
 // calm on the reader's terms. A cell another edge already runs along
 // the same way is simply a wall: two strokes sharing a lane would fuse
 // into one line nobody drew. Returns nil when every route is blocked.
-func route(cv *canvas, boxes []nbox, tp, hp port) []ipt {
-	W, H := cv.w, cv.h
-	if !cv.in(tp.x, tp.y) || !cv.in(hp.x, hp.y) {
+func route(cv *Canvas, boxes []Box, tp, hp port) []ipt {
+	W, H := cv.W(), cv.H()
+	if !cv.In(tp.x, tp.y) || !cv.In(hp.x, hp.y) {
 		return nil
 	}
-	goalD := inDir(hp.head)
+	goalD := hp.d
 	inBox := func(x, y int) bool {
 		for _, b := range boxes {
-			if b.has(x, y) {
+			if b.Has(x, y) {
 				return true
 			}
 		}
 		return false
 	}
-	blocked := func(x, y, d int) bool {
+	blocked := func(x, y int, d Dir) bool {
 		if x < 0 || y < 0 || x >= W || y >= H {
 			return true
 		}
 		if x == hp.x && y == hp.y {
 			return d != goalD // the goal admits only the arrow's direction
 		}
-		if inBox(x, y) {
+		if inBox(x, y) || cv.Held(x, y) {
 			return true
 		}
-		i := y*W + x
-		if cv.held[i] {
-			return true
-		}
-		if r := cv.c[i]; r != ' ' && r != 0 {
+		if cv.Rune(x, y) != ' ' {
 			return true // an arrowhead or a label already lives here
 		}
-		lb := cv.link[i]
-		if d == 1 || d == 3 {
-			return lb&(dirLeft|dirRight) != 0
+		m := cv.MaskAt(x, y)
+		if d == East || d == West {
+			return m.Horiz()
 		}
-		return lb&(dirUp|dirDown) != 0
+		return m.Vert()
 	}
-	crossAt := func(x, y, d int) int {
-		lb := cv.linksAt(x, y)
-		if d == 1 || d == 3 {
-			if lb&(dirUp|dirDown) != 0 {
+	crossAt := func(x, y int, d Dir) int {
+		m := cv.MaskAt(x, y)
+		if d == East || d == West {
+			if m.Vert() {
 				return costCross
 			}
-		} else if lb&(dirLeft|dirRight) != 0 {
+		} else if m.Horiz() {
 			return costCross
 		}
 		return 0
@@ -377,8 +362,8 @@ func route(cv *canvas, boxes []nbox, tp, hp port) []ipt {
 		dist[i] = inf
 		prev[i] = -1
 	}
-	pack := func(x, y, d int) int { return (y*W+x)*4 + d }
-	sd := pack(tp.x, tp.y, outDir(tp.head))
+	pack := func(x, y int, d Dir) int { return (y*W+x)*4 + int(d) }
+	sd := pack(tp.x, tp.y, tp.d.Opposite())
 	dist[sd] = 0
 	q := &pq{{sd, 0}}
 	goal := -1
@@ -387,18 +372,19 @@ func route(cv *canvas, boxes []nbox, tp, hp port) []ipt {
 		if it.cost > dist[it.st] {
 			continue
 		}
-		d := it.st & 3
+		d := Dir(it.st & 3)
 		x := (it.st >> 2) % W
 		y := (it.st >> 2) / W
 		if x == hp.x && y == hp.y && d == goalD {
 			goal = it.st
 			break
 		}
-		for nd := 0; nd < 4; nd++ {
-			if nd == (d+2)%4 {
+		for nd := North; nd <= West; nd++ {
+			if nd == d.Opposite() {
 				continue // no reversing in place
 			}
-			nx, ny := x+dxs[nd], y+dys[nd]
+			ndx, ndy := nd.Step()
+			nx, ny := x+ndx, y+ndy
 			if blocked(nx, ny, nd) {
 				continue
 			}
@@ -431,6 +417,8 @@ func route(cv *canvas, boxes []nbox, tp, hp port) []ipt {
 	return ps
 }
 
+type ipt struct{ x, y int }
+
 // elbow is the fallback when the search finds nothing: a direct L in
 // unit steps, overlaps accepted. A line that shares a lane is worse
 // than a routed one and better than an edge that silently is not there.
@@ -456,61 +444,73 @@ func elbow(tp, hp port) []ipt {
 	return ps
 }
 
-// commitRoute writes a path onto the canvas as link bits, joins the tail
-// to its wall, and ends the head in its arrow.
-func commitRoute(cv *canvas, ps []ipt, tp, hp port, directed bool) {
+// commitRoute writes a path onto the canvas as arms, joins the tail to
+// the wall it leaves, and ends the head in its arrow.
+//
+// A segment with a box at either end lays nothing. A routed path never
+// has one — the search walks around walls — but the fallback elbow goes
+// straight through whatever is in the way, and a stroke laid inside a
+// node punches a hole in its wall on the way in and out. The line
+// passing behind the box is the honest picture of a lane that was not
+// there; a wall with a gap in it is not.
+func commitRoute(cv *Canvas, boxes []Box, ps []ipt, tp, hp port, directed bool) {
+	inBox := func(p ipt) bool {
+		for _, b := range boxes {
+			if b.Has(p.x, p.y) {
+				return true
+			}
+		}
+		return false
+	}
 	for i := 0; i+1 < len(ps); i++ {
 		a, b := ps[i], ps[i+1]
+		if inBox(a) || inBox(b) {
+			continue
+		}
+		var d Dir
 		switch {
 		case b.x > a.x:
-			cv.connect(a.x, a.y, dirRight)
-			cv.connect(b.x, b.y, dirLeft)
+			d = East
 		case b.x < a.x:
-			cv.connect(a.x, a.y, dirLeft)
-			cv.connect(b.x, b.y, dirRight)
+			d = West
 		case b.y > a.y:
-			cv.connect(a.x, a.y, dirDown)
-			cv.connect(b.x, b.y, dirUp)
+			d = South
 		default:
-			cv.connect(a.x, a.y, dirUp)
-			cv.connect(b.x, b.y, dirDown)
+			d = North
 		}
+		cv.Line(a.x, a.y, d, Pencil{})
+		cv.Line(b.x, b.y, d.Opposite(), Pencil{})
 	}
-	cv.attachTail(tp)
-	// the port cell itself carries the wall-ward bit, or the stroke
-	// under a ┬ starts one cell adrift of the border it grew from
-	cv.connect(tp.x, tp.y, arrowBit(tp.head))
+	attach(cv, tp)
 	if !directed {
 		// no head to draw: the stroke simply reaches the far wall too
-		cv.attachTail(hp)
-		cv.connect(hp.x, hp.y, arrowBit(hp.head))
+		attach(cv, hp)
 		return
 	}
-	cv.set(hp.x, hp.y, hp.head)
+	cv.Head(hp.x, hp.y, hp.d, 0)
 }
 
-// arrowBit is the link bit pointing the way an arrowhead rune points.
-func arrowBit(head rune) uint8 {
-	switch head {
-	case '▲':
-		return dirUp
-	case '▼':
-		return dirDown
-	case '◀':
-		return dirLeft
-	default:
-		return dirRight
-	}
+// attach joins a port to the wall it faces. The port sits one cell
+// outside the box, which is where an arrowhead goes; at a head the
+// arrowhead is the attachment and reads fine, but a tail has no
+// arrowhead, so without this the stroke merely began beside the box —
+// and where the port fell on a border row the cell it began beside was
+// a corner, which admits nothing from the side. The line dead-ended one
+// cell short of the node it came from, and nothing said so.
+func attach(cv *Canvas, p port) {
+	dx, dy := p.d.Step()
+	cv.Line(p.x, p.y, p.d, Pencil{})
+	cv.Line(p.x+dx, p.y+dy, p.d.Opposite(), Pencil{})
 }
 
-// ---------- labels in the stroke ----------
+// ---------- labels ----------
 
 // placeInline writes a label inside its own line — ── bytes ──▶ — with a
 // blank shoulder each side. A word floating beside three edges belongs
 // to whichever one the reader guesses; a word interrupting a stroke
 // belongs to that stroke. graphviz already spaced the ranks for the
 // label's width, so the straight run is usually there to spend.
-func placeInline(cv *canvas, ps []ipt, label string) bool {
+func placeInline(cv *Canvas, ps []ipt, label string) bool {
 	need := grid.Cells(label)
 	if need == 0 {
 		return false
@@ -546,7 +546,7 @@ func placeInline(cv *canvas, ps []ipt, label string) bool {
 	// stroke, and the label slides along its own run instead
 	clear := func(x0 int) bool {
 		for k := 0; k < need; k++ {
-			if cv.linksAt(x0+k, y)&(dirUp|dirDown) != 0 {
+			if cv.MaskAt(x0+k, y).Vert() {
 				return false
 			}
 		}
@@ -562,9 +562,31 @@ func placeInline(cv *canvas, ps []ipt, label string) bool {
 	if !placed {
 		return false
 	}
-	putStr(cv, x0, y, label)
-	cv.hold(x0, y, need, 1)
+	cv.Text(x0, y, label, 0)
+	cv.Hold(x0, y, need, 1)
 	return true
+}
+
+// floatLabel puts a label where graphviz put it. graphviz already
+// reserved room for the text when it laid the graph out, and the old
+// guess — the midpoint of the spline — threw that answer away. Cells
+// already spoken for are left alone and the label is nudged; a label
+// that cannot be placed cleanly is dropped rather than allowed to
+// damage the drawing it annotates.
+func floatLabel(cv *Canvas, e layout.Spline, sx, sy func(float64) int) {
+	if e.Label == "" {
+		return
+	}
+	n := grid.Cells(e.Label)
+	x0, y0 := sx(e.LX)-n/2, sy(e.LY)
+	for _, dy := range []int{0, -1, 1, -2, 2} {
+		for _, dx := range []int{0, 1, -1, 2, -2, 3, -3, 4, -4} {
+			if cv.Free(x0+dx, y0+dy, n) {
+				cv.Text(x0+dx, y0+dy, e.Label, 0)
+				return
+			}
+		}
+	}
 }
 
 // ---------- self-loops ----------
@@ -573,18 +595,17 @@ func placeInline(cv *canvas, ps []ipt, label string) bool {
 // into the border it leaves and returns to. It needs an interior column
 // on each side and two rows of air; a box too narrow or too high up
 // gets no loop — absent beats meaningless.
-func routeSelfLoop(cv *canvas, b nbox) {
-	if b.y0 < 2 || b.w < 4 {
+func routeSelfLoop(cv *Canvas, b Box) {
+	if b.Y < 2 || b.W < 4 {
 		return
 	}
-	lx, rx := b.x0+1, b.x0+b.w-2
-	top := b.y0 - 2
-	hrun(cv, lx, rx, top)
-	vrun(cv, top, b.y0-1, lx)
-	vrun(cv, top, b.y0-1, rx)
-	cv.set(rx, b.y0-1, '▼')
-	cv.port[b.y0*cv.w+lx] = true
-	cv.connect(lx, b.y0, dirUp)
+	lx, rx := b.X+1, b.X+b.W-2
+	top := b.Y - 2
+	cv.Stroke(lx, top, rx, top, Pencil{})
+	cv.Stroke(lx, top, lx, b.Y-1, Pencil{})
+	cv.Stroke(rx, top, rx, b.Y-1, Pencil{})
+	cv.Head(rx, b.Y-1, South, 0)
+	cv.Line(lx, b.Y, North, Pencil{})
 }
 
 // ---------- composition root ----------
@@ -619,15 +640,20 @@ func Draw(l *layout.Plain, w, h int) []string {
 	snapAxis(cy)
 	straighten(l, cx, cy, byName, horiz)
 
-	boxes := make(map[string]nbox, len(l.Nodes))
-	boxList := make([]nbox, 0, len(l.Nodes))
+	boxes := make(map[string]Box, len(l.Nodes))
+	boxList := make([]Box, 0, len(l.Nodes))
 	for i, n := range l.Nodes {
 		b := nodeBoxAt(w, h, cx[i], cy[i], n.Label)
 		boxes[n.Name] = b
 		boxList = append(boxList, b)
 	}
 
-	cv := newCanvas(w, h)
+	// The boxes go down first, walls and all: an edge that reaches one
+	// merges into its wall, which is a thing arms do and glyphs cannot.
+	cv := New(w, h)
+	for _, n := range l.Nodes {
+		cv.Box(boxes[n.Name])
+	}
 	pt := newPorter()
 
 	// straight edges first: they own the direct lanes, and everything
@@ -671,24 +697,28 @@ func Draw(l *layout.Plain, w, h int) []string {
 		if !tok || !hok {
 			continue
 		}
-		tp := pt.claim(tb, hb.x0+hb.w/2, hb.y0+hb.h/2, boxList)
-		hp := pt.claim(hb, tb.x0+tb.w/2, tb.y0+tb.h/2, boxList)
+		tp := pt.claim(tb, hb.X+hb.W/2, hb.Y+hb.H/2, boxList)
+		hp := pt.claim(hb, tb.X+tb.W/2, tb.Y+tb.H/2, boxList)
 		ps := route(cv, boxList, tp, hp)
 		if ps == nil {
 			ps = elbow(tp, hp)
 		}
-		commitRoute(cv, ps, tp, hp, l.Directed)
+		commitRoute(cv, boxList, ps, tp, hp, l.Directed)
 		if e.Label != "" && !placeInline(cv, ps, e.Label) {
 			floated = append(floated, e)
 		}
 	}
-	for _, n := range l.Nodes {
-		drawNode(cv, n.Label, boxes[n.Name])
-	}
 	for _, e := range floated {
-		drawEdgeLabel(cv, *e, sx, sy)
+		floatLabel(cv, *e, sx, sy)
 	}
-	return cv.rows()
+	return cv.Rows()
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 // clamp pins v into [lo, hi].
