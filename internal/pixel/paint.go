@@ -67,6 +67,11 @@ const (
 	// real one, and still only 128MB of RGBA. Past it there is no picture
 	// and the glyphs draw.
 	maxPixels = 32 << 20
+	// maxFontBytes is the ceiling on a font file a theme names, which the
+	// painter reads whole. Measured, the largest font on this box is
+	// NotoSerifCJK-Bold.ttc at 27MB, so this is twice the biggest real one.
+	// Past it there is no face and the picture is set in Go Mono.
+	maxFontBytes = 64 << 20
 	// The air graphviz's SVG writer puts round a drawing when the source
 	// named no pad of its own. Measured: a 367.44 x 36pt bounding box is
 	// written onto a 375.44 x 44pt canvas.
@@ -674,16 +679,45 @@ func fontFile(name string) string {
 		return ""
 	}
 	if filepath.IsAbs(name) {
-		if _, err := os.Stat(name); err != nil {
+		if !isFont(name) {
 			return ""
 		}
 		return name
 	}
 	path, err := findfont.Find(name)
-	if err != nil {
+	if err != nil || !isFont(path) {
 		return ""
 	}
 	return path
+}
+
+// isFont says whether a path is a file a face could be read from: a regular
+// file, within the ceiling. That a file exists is not enough to read it —
+// os.Stat is as happy with a fifo, a character device and a three-gigabyte
+// file as with a font. Measured on this box, a theme naming /dev/zero never
+// returned at all and was past ten gigabytes of memory at fifteen seconds,
+// where the same picture had drawn in 24ms; a three-gigabyte file peaked at
+// 2.8GB before it was found not to be a font. The painter carries no
+// deadline of its own, so a read that does not end is a hook that never
+// answers.
+func isFont(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && st.Mode().IsRegular() && st.Size() <= maxFontBytes
+}
+
+// readFont is a font file in memory, nil where there is nothing safe to
+// read. The guard is repeated here, where the memory is actually taken,
+// because this is the only place that matters if a caller ever arrives with
+// a path fontFile did not resolve.
+func readFont(path string) []byte {
+	if !isFont(path) {
+		return nil
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 // font is the face a span is set in: the theme's file where it named one
@@ -745,8 +779,8 @@ func face(k faceKey) font.Face {
 			ttf = goMono[2]
 		}
 		if k.file != "" {
-			b, err := os.ReadFile(k.file)
-			if err != nil {
+			b := readFont(k.file)
+			if b == nil {
 				fonts[k.fontKey] = nil
 				return nil
 			}

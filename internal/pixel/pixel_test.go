@@ -452,6 +452,44 @@ func TestPixelFontnameIsAFileOrGoMono(t *testing.T) {
 	}
 }
 
+// A fontname has to name a regular file small enough to read into memory,
+// and the picture is set in Go Mono where it does not. That a path exists
+// is not enough: os.Stat is as happy with a fifo, a character device and a
+// three-gigabyte file as with a font, and the painter reads what it is
+// handed, whole, with no deadline over it — measured, a theme naming
+// /dev/zero never returned and was past ten gigabytes at fifteen seconds.
+func TestPixelAFontnameIsAFileThatCanBeRead(t *testing.T) {
+	dir := t.TempDir()
+	// Sparse, so the box is asked for a name and a size and not for the
+	// disk to go with them.
+	huge := filepath.Join(dir, "huge.ttf")
+	f, err := os.Create(huge)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(maxFontBytes + 1); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	notAFile := filepath.Join(dir, "elsewhere.ttf")
+	if err := os.Mkdir(notAFile, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{huge, notAFile} {
+		if got := fontFile(name); got != "" {
+			t.Errorf("%q was taken for a font file and resolved to %q", filepath.Base(name), got)
+		}
+		if readFont(name) != nil {
+			t.Errorf("%q was read for a face", filepath.Base(name))
+		}
+	}
+	// and the picture still draws, in the type this binary carries
+	p := &painter{s: 1, file: huge}
+	if p.font(&pen{size: 12}) == nil {
+		t.Error("a fontname nobody can read left the picture with no face at all")
+	}
+}
+
 // ---------- edge labels on their lines ----------
 
 // rewritten parses a source and puts its edge labels on their edges, for a
