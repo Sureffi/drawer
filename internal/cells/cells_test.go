@@ -13,6 +13,7 @@
 package cells
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -1135,6 +1136,331 @@ func TestRanksStandTwoOrThreeCellsApart(t *testing.T) {
 	for i := 1; i < len(lefts); i++ {
 		if gap := lefts[i] - lefts[i-1] - 5; gap < 2 || gap > 3 {
 			t.Errorf("left-right ranks stand %d columns apart, want 2 or 3:\n%s", gap, strings.Join(across, "\n"))
+		}
+	}
+}
+
+// LANES. An arrowhead never sits on a junction. A head is where one line
+// ends; a line running through the same cell would make the head belong
+// to two edges at once, and a reader has no way to say which. So no line
+// ever passes across a head: the cells either side of a head, on the axis
+// its own line does not use, are never both line.
+func TestAnArrowheadNeverSitsOnAJunction(t *testing.T) {
+	srcs := []string{
+		corpusTB, corpusLR,
+		"digraph { rankdir=TB; a -> b; a -> c; a -> d; b -> e; c -> e; d -> e; e -> a }",
+		"digraph { rankdir=LR; p -> q; q -> r; r -> p; p -> r; q -> p }",
+	}
+	for _, src := range srcs {
+		g := gridOf(drawn(t, src+"\n", 120))
+		for y := range g {
+			for x, r := range g[y] {
+				var a, b rune
+				var axis string
+				switch r {
+				case '▶', '◀': // its own line runs across, so a crosser runs down
+					a, b, axis = at(g, x, y-1), at(g, x, y+1), downRunes
+				case '▲', '▼':
+					a, b, axis = at(g, x-1, y), at(g, x+1, y), acrossRunes
+				default:
+					continue
+				}
+				if strings.ContainsRune(axis, a) && strings.ContainsRune(axis, b) {
+					t.Errorf("a line runs through the arrowhead at %d,%d:\n%s",
+						x, y, strings.Join(plain(drawn(t, src+"\n", 120)), "\n"))
+				}
+			}
+		}
+	}
+}
+
+// LANES. Where two edges cross, the cell is a crossing glyph and never a
+// corner or a tee: `┼` where both are light, and the light-and-heavy
+// crossing of its own weight where one of them is not. A corner there
+// would be two edges turned into one bent line.
+func TestACrossingIsACrossingAndNeverACorner(t *testing.T) {
+	const crossings = "┼╋┽┾┿╀╁╂╃╄╅╆╇╈╉╊╪╫╬"
+	srcs := []string{
+		"digraph { rankdir=LR; a -> b; a -> c; b -> d; c -> d; a -> d; b -> c }",
+		"digraph { rankdir=TB; a -> b; a -> c; b -> d; c -> d; a -> d; b -> c; c -> b }",
+		"digraph { rankdir=TB; a -> b; a -> c; b -> d [style=bold]; c -> d; a -> d; b -> c }",
+	}
+	found := false
+	for _, src := range srcs {
+		g := gridOf(drawn(t, src+"\n", 120))
+		for y := range g {
+			for x, r := range g[y] {
+				n := strings.ContainsRune(downRunes, at(g, x, y-1))
+				s := strings.ContainsRune(downRunes, at(g, x, y+1))
+				e := strings.ContainsRune(acrossRunes, at(g, x+1, y))
+				w := strings.ContainsRune(acrossRunes, at(g, x-1, y))
+				if !(n && s && e && w) {
+					continue
+				}
+				// Four line neighbours and no box under it: this is either
+				// a crossing or a corner that ate one.
+				if strings.ContainsRune("╭╮╰╯┌┐└┘", r) {
+					t.Errorf("two lines met as a corner %q at %d,%d:\n%s", r, x, y,
+						strings.Join(plain(drawn(t, src+"\n", 120)), "\n"))
+				}
+				if strings.ContainsRune(crossings, r) {
+					found = true
+				}
+			}
+		}
+	}
+	if !found {
+		t.Error("no crossing drawn at all; this law is not reachable from these sources")
+	}
+}
+
+// LANES. Two edges between the same pair, one each way, are two lines
+// with two heads pointing opposite ways. Sharing the corridor would draw
+// one line with a head at each end, which is what `dir=both` means and
+// not what the graph said.
+func TestOppositeDirectionsNeverShareACorridor(t *testing.T) {
+	heads := func(j string) int {
+		n := 0
+		for _, r := range "▶◀▲▼" {
+			n += strings.Count(j, string(r))
+		}
+		return n
+	}
+	// One head per edge. Two edges folded into one corridor would draw
+	// one line, and one line can only carry one head at each end.
+	for _, c := range []struct {
+		src string
+		n   int
+	}{
+		{"digraph { rankdir=LR; a -> b; b -> a }", 2},
+		{"digraph { rankdir=TB; a -> b; b -> a }", 2},
+		{"digraph { rankdir=LR; a -> b; b -> a; a -> b }", 3},
+		{"digraph { rankdir=LR; a -> b; b -> c; c -> b; b -> a }", 4},
+	} {
+		j := joined(drawn(t, c.src+"\n", 120))
+		if n := heads(j); n != c.n {
+			t.Errorf("%s wants %d heads, drew %d:\n%s", c.src, c.n, n, j)
+		}
+		// And never one bare run with a head at each end: that is what
+		// `dir=both` draws, and neither of these graphs said it.
+		if bothEnds.MatchString(j) {
+			t.Errorf("%s drew one corridor with a head at each end:\n%s", c.src, j)
+		}
+	}
+}
+
+// bothEnds is one unbroken run of line with an arrowhead at each end —
+// the shape two opposite edges make when they share a corridor, and the
+// shape `dir=both` means.
+var bothEnds = regexp.MustCompile(`◀[─━┄╌]+▶|▶[─━┄╌]+◀`)
+
+// BOXES. A box is its label with one cell of air each side, and the
+// walls outside that. Not two cells, not none: this is the width every
+// column is measured from.
+func TestABoxIsItsLabelAndACellOfAirEachSide(t *testing.T) {
+	for _, w := range []string{"a", "node", "a longer name", "日本語"} {
+		src := `digraph { rankdir=LR; "` + w + `" -> "tail" }` + "\n"
+		rows := plain(drawn(t, src, 200))
+		seen := false
+		for _, r := range rows {
+			i := strings.Index(r, w)
+			if i < 0 {
+				continue
+			}
+			seen = true
+			left := []rune(r[:i])
+			right := []rune(r[i+len(w):])
+			if len(left) < 2 || left[len(left)-1] != ' ' ||
+				!strings.ContainsRune("│├┤", left[len(left)-2]) {
+				t.Errorf("%q has no cell of air and a wall on its left: %q", w, r)
+			}
+			if len(right) < 2 || right[0] != ' ' || !strings.ContainsRune("│├┤", right[1]) {
+				t.Errorf("%q has no cell of air and a wall on its right: %q", w, r)
+			}
+		}
+		if !seen {
+			t.Errorf("label %q never drew:\n%s", w, strings.Join(rows, "\n"))
+		}
+	}
+}
+
+// BOXES. Every shape is some box. The round family — ellipse, circle and
+// the rest, and the default, which is ellipse — draws with rounded
+// corners; everything else is square. A shape this rung has never heard
+// of still draws, because a graph that will not draw is the one failure
+// this rung does not have.
+func TestEveryShapeIsSomeBox(t *testing.T) {
+	for _, c := range []struct {
+		shape  string
+		corner rune
+	}{
+		{"", '╭'}, {"ellipse", '╭'}, {"circle", '╭'}, {"oval", '╭'},
+		{"doublecircle", '╭'}, {"diamond", '╭'},
+		{"box", '┌'}, {"square", '┌'}, {"hexagon", '┌'}, {"cylinder", '┌'},
+		{"nothing_graphviz_has_ever_drawn", '┌'},
+	} {
+		src := `digraph { rankdir=LR; n [shape="` + c.shape + `", label="shape"]; n -> other }` + "\n"
+		rows := plain(drawn(t, src, 120))
+		if !strings.ContainsRune(rows[0], c.corner) {
+			t.Errorf("shape %q drew its top-left corner as %q, want %q:\n%s",
+				c.shape, string([]rune(rows[0])[0]), string(c.corner), strings.Join(rows, "\n"))
+		}
+	}
+}
+
+// EDGES. The line is drawn in the weight the graph asked for: dashed for
+// dashed and dotted, heavy for bold and for any pen two points or wider,
+// light for everything else. The style is the line's own, not the
+// drawing's — one heavy edge among light ones stays the only heavy one.
+func TestTheLineIsDrawnInTheWeightTheGraphAsked(t *testing.T) {
+	j := joined(drawn(t, `digraph { rankdir=LR
+	  a -> b [style=dashed]
+	  b -> c [style=dotted]
+	  c -> d [style=bold]
+	  d -> e [penwidth=3]
+	  e -> f
+	}`+"\n", 200))
+	for _, c := range []struct{ want, why string }{
+		{"┄", "dashed and dotted draw a dashed line"},
+		{"━", "bold and a wide pen draw a heavy line"},
+		{"─", "everything else draws a light line"},
+	} {
+		if !strings.Contains(j, c.want) {
+			t.Errorf("%s: no %q anywhere:\n%s", c.why, c.want, j)
+		}
+	}
+	// Four light cells is the plain edge and nothing else in this graph
+	// has them, so the weights did not spread.
+	if n := strings.Count(j, "┄"); n < 4 {
+		t.Errorf("only %d dashed cells; the dashed edges are not dashed:\n%s", n, j)
+	}
+	if n := strings.Count(j, "━"); n < 4 {
+		t.Errorf("only %d heavy cells; the heavy edges are not heavy:\n%s", n, j)
+	}
+}
+
+// EDGES. Colour rides the line, the head and the border, and structure
+// nobody coloured is dim. A pen named on an edge paints the whole run
+// including the arrowhead — a head left in the default pen belongs to a
+// different edge as far as the eye is concerned.
+func TestColourRidesTheLineTheHeadAndTheBorder(t *testing.T) {
+	rows := drawn(t, `digraph { rankdir=LR
+	  a [color="#ff0000"]
+	  a -> b [color="#00ff00"]
+	}`+"\n", 100)
+	const red, green = "\x1b[38;2;255;0;0m", "\x1b[38;2;0;255;0m"
+	j := strings.Join(rows, "\n")
+	if !strings.Contains(j, red) {
+		t.Errorf("a node's own pen never reached its border:\n%q", j)
+	}
+	if !strings.Contains(j, green) {
+		t.Errorf("an edge's own pen never reached its line:\n%q", j)
+	}
+	// The head is inside the edge's own run: between the escape that sets
+	// green and the next escape that changes the pen.
+	i := strings.Index(j, green)
+	run := j[i+len(green):]
+	if k := strings.Index(run, "\x1b"); k >= 0 {
+		run = run[:k]
+	}
+	if !strings.Contains(run, "▶") {
+		t.Errorf("the arrowhead is not in its edge's pen: run %q\n%q", run, j)
+	}
+	// And a graph that named no colour spends one escape on being dim.
+	if plain := joined(drawn(t, "digraph { rankdir=LR; a -> b }\n", 100)); strings.Contains(plain, "\x1b") {
+		t.Errorf("plain rows still carry escapes: %q", plain)
+	}
+	if lit := strings.Join(drawn(t, "digraph { rankdir=LR; a -> b }\n", 100), "\n"); !strings.Contains(lit, "\x1b[2m") {
+		t.Errorf("structure nobody coloured is not dim: %q", lit)
+	}
+}
+
+// SIZE. The drawing is its own rows: what comes back is the cells that
+// were drawn on and nothing else — no blank row above or below, no
+// trailing air, never padded out to the region it was given.
+func TestTheDrawingIsItsOwnRowsAndNotTheWindows(t *testing.T) {
+	g, err := layout.Read(t.Context(), "digraph { rankdir=LR; a -> b }\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := Draw(g, 200, 200)
+	if len(rows) != 3 {
+		t.Fatalf("a two-box drawing is three rows, got %d:\n%s", len(rows), joined(rows))
+	}
+	for i, r := range plain(rows) {
+		if strings.TrimSpace(r) == "" {
+			t.Errorf("row %d is blank", i)
+		}
+		if strings.TrimRight(r, " ") != r {
+			t.Errorf("row %d ends in air: %q", i, r)
+		}
+	}
+}
+
+// SIZE. A graph too wide for the window is turned rather than cut: the
+// same graph comes back down the page, inside the width. This is the
+// flip the stroke rungs make, made here.
+func TestTooWideForTheWindowIsTurned(t *testing.T) {
+	const src = "digraph { rankdir=LR; alpha -> beta -> gamma -> delta -> epsilon }\n"
+	wide := plain(drawn(t, src, 200))
+	if len(wide) != 3 {
+		t.Fatalf("with room the chain is one box-row, got %d:\n%s", len(wide), strings.Join(wide, "\n"))
+	}
+	narrow := plain(drawn(t, src, 30))
+	for i, r := range narrow {
+		if n := runewidth.StringWidth(r); n > 30 {
+			t.Errorf("row %d is %d cells in a 30-cell window: %q", i, n, r)
+		}
+	}
+	if len(narrow) <= 3 {
+		t.Errorf("the chain was not turned down the page:\n%s", strings.Join(narrow, "\n"))
+	}
+	for _, w := range []string{"alpha", "beta", "gamma", "delta", "epsilon"} {
+		if !strings.Contains(strings.Join(narrow, "\n"), w) {
+			t.Errorf("turning the drawing lost %q:\n%s", w, strings.Join(narrow, "\n"))
+		}
+	}
+}
+
+// SIZE. What will not fit any way up draws nothing, so the caller shows
+// the source under a notice. A drawing that is short says so by not
+// being there; it never comes back cut.
+func TestWhatWillNotFitDrawsNothing(t *testing.T) {
+	g, err := layout.Read(t.Context(), "digraph { rankdir=LR; alpha -> beta -> gamma -> delta }\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows := Draw(g, 8, 100); rows != nil {
+		t.Errorf("eight columns drew something:\n%s", joined(rows))
+	}
+	if rows := Draw(g, 200, 2); rows != nil {
+		t.Errorf("two rows drew something:\n%s", joined(rows))
+	}
+}
+
+// TEXT. A cluster's contents stand a cell inside its frame, so the frame
+// and a box wall never read as one thick stroke.
+func TestAClusterInsetsItsMembersOneCell(t *testing.T) {
+	src := `digraph { rankdir=LR
+	  subgraph cluster_one { label="group"; a; b }
+	  a -> b
+	}` + "\n"
+	rows := plain(drawn(t, src, 120))
+	j := strings.Join(rows, "\n")
+	for y, r := range rows {
+		run := []rune(r)
+		for x, c := range run {
+			if c != '┌' && c != '└' {
+				continue
+			}
+			// The cell just inside the frame's corner is air, never a wall.
+			dy := 1
+			if c == '└' {
+				dy = -1
+			}
+			if in := at(gridOf(rows), x+1, y+dy); in != ' ' {
+				t.Errorf("the frame's corner at %d,%d has %q against it, not air:\n%s", x, y, in, j)
+			}
 		}
 	}
 }
