@@ -500,7 +500,8 @@ func (p *painter) text(op layout.Op, st *pen) {
 		return
 	}
 	p.dc.SetFontFace(f)
-	w, _ := p.dc.MeasureString(op.Text)
+	run := notdef(f, op.Text)
+	w, _ := p.dc.MeasureString(run)
 	px, py := p.x(op.Pt[0]), p.y(op.Pt[1])
 	switch op.Align {
 	case "c":
@@ -509,7 +510,7 @@ func (p *painter) text(op layout.Op, st *pen) {
 		px -= w
 	}
 	p.dc.SetColor(st.colour)
-	p.dc.DrawString(op.Text, px, py)
+	p.dc.DrawString(run, px, py)
 	// Underline is the one font bit with a mark of its own to draw; the
 	// rest — superscript, subscript, strikethrough — are set as ordinary
 	// type and lose only their decoration.
@@ -518,6 +519,38 @@ func (p *painter) text(op layout.Op, st *pen) {
 		p.dc.DrawRectangle(px, py+size*0.12, w, math.Max(size/14, 1))
 		p.dc.Fill()
 	}
+}
+
+// notdef is a run with every rune the face has no glyph for standing in the
+// one glyph that says so.
+//
+// Left alone the two halves of setting a run disagree: the measurement pays
+// the advance of a rune it cannot draw and the drawing skips both the glyph
+// and its space, so "AB日CD" and "ABCD" paint as the same four letters and
+// the survivors sit half a glyph off their own centre. A reader cannot see
+// that a character was dropped, which is the one thing worse than seeing
+// that it was.
+//
+// Measured on Go Mono: `日`, `本` and `☃` have no glyph in it and U+FFFD
+// has, so the box is there to draw. A face from a theme's own file may have
+// neither, and then the run is set as it came and the picture still draws.
+func notdef(f font.Face, s string) string {
+	missing := func(r rune) bool {
+		_, ok := f.GlyphAdvance(r)
+		return !ok
+	}
+	if !strings.ContainsFunc(s, missing) || missing('\uFFFD') {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if missing(r) {
+			r = '\uFFFD'
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // gradient is the fill a C op carries when it is not flat. graphviz gives

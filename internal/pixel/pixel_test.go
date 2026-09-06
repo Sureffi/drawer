@@ -345,6 +345,24 @@ func TestPixelAPolygonsOutlineIsMitredAndClosed(t *testing.T) {
 	}
 }
 
+// A rune the carried face has no glyph for is set as U+FFFD and not
+// dropped. gg draws nothing at all for a missing rune — neither the glyph
+// nor its advance — while the measurement that centres the run pays for it,
+// so a dropped rune costs the reader the character and slides what is left
+// off its own centre. A label that lost a character has to say so.
+func TestPixelAMissingGlyphIsSetAsOne(t *testing.T) {
+	f := face(faceKey{fontKey{"", false, false}, 12})
+	if f == nil {
+		t.Fatal("Go Mono is not in this binary")
+	}
+	if got := notdef(f, "AB日CD"); got != "AB\ufffdCD" {
+		t.Errorf("a run with an ideograph in it came out %q", got)
+	}
+	if got := notdef(f, "päivää"); got != "päivää" {
+		t.Errorf("a run the face can set was rewritten to %q", got)
+	}
+}
+
 // The picture stands on graphviz's own canvas: the bounding box, plus the
 // air the graph asked for with `pad`, and where it asked for none the 4pt
 // its SVG writer would have added — a stroke on the boundary would

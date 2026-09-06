@@ -224,9 +224,9 @@ with nothing but `claude`.
   is still unverified where it matters; if it is wrong the width falls to
   `COLUMNS` and then 100, and pixels do not reach the terminal.
 - The pixels rung sets its type in Go Mono, and a script Go Mono has no
-  glyph for draws as nothing at all: `日本` and `☃` come out as empty space
-  in a box graphviz sized for them. The glyph rungs still draw them, being
-  the terminal's own text.
+  glyph for is set in U+FFFD, the replacement character: `日本` and `☃` come
+  out as one mark each, in a box graphviz sized for them. The glyph rungs
+  still draw them, being the terminal's own text.
 - Pictures already drawn repaint at the next reply, not at the switch. A
   theme file that changes the type changes the layout, and a picture that
   no longer fits its old cut is left as it was.
