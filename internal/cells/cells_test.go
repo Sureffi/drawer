@@ -1087,11 +1087,68 @@ func TestMultiLineLabelGrowsItsBox(t *testing.T) {
 // the oracle's corpus under `own/` so the reader is asked the same
 // question of a real drawing. A law without a fixture is not a law.
 
-// acrossRunes and downRunes are the glyphs a run of line continues
-// through. They are how a test asks "is this cell part of a line running
-// this way", which is the only question a reader ever asks of one.
-const acrossRunes = "─━┄┅┈┉╌╍═┌┐└┘╭╮╰╯├┤┬┴┼┏┓┗┛┣┫┳┻╋┽┾┿╀╁╂"
-const downRunes = "│┃┆┇┊┋╎╏║┌┐└┘╭╮╰╯├┤┬┴┼┏┓┗┛┣┫┳┻╋┽┾┿╀╁╂"
+// armed is every glyph this rung draws, with the sides it can carry a
+// line on: the arms of every cell the vocabulary draws as that glyph,
+// taken together. It is how a law below asks the one question a reader
+// asks of a cell — does a line leave here, that way — without a table of
+// runes written out by hand and drifting from the one that draws them.
+var armed = func() map[rune][4]bool {
+	out := map[rune][4]bool{}
+	add := func(m Mask) {
+		if m == 0 {
+			return
+		}
+		for _, g := range []rune{Glyph(m), Glyph(m.Round())} {
+			a := out[g]
+			for d := North; d <= West; d++ {
+				a[d] = a[d] || m.Has(d)
+			}
+			out[g] = a
+		}
+	}
+	for _, n := range styles {
+		for _, e := range styles {
+			for _, s := range styles {
+				for _, w := range styles {
+					var m Mask
+					// `on` and not a zero style: Light is 0, so an arm
+					// is there because the table says it is.
+					for _, c := range []struct {
+						d  Dir
+						s  Style
+						on bool
+					}{{North, n.s, n.on}, {East, e.s, e.on}, {South, s.s, s.on}, {West, w.s, w.on}} {
+						if c.on {
+							m = m.With(c.d, c.s)
+						}
+					}
+					add(m)
+				}
+			}
+		}
+	}
+	return out
+}()
+
+// runeIndex is where a word starts in a row, counted in cells rather
+// than bytes: a row of box drawing is three bytes to the glyph, and a
+// byte index into one names a cell nobody meant.
+func runeIndex(row []rune, word string) int {
+	w := []rune(word)
+	for i := 0; i+len(w) <= len(row); i++ {
+		if string(row[i:i+len(w)]) == word {
+			return i
+		}
+	}
+	return -1
+}
+
+// arm reports whether the cell at x,y can carry a line leaving it on side
+// d. Air, a letter and an arrowhead all answer no: an arrowhead is where
+// a line stops, not a cell a line goes on through.
+func arm(g [][]rune, x, y int, d Dir) bool {
+	return armed[at(g, x, y)][d]
+}
 
 // at reads one cell of a drawing, air off the end.
 func at(g [][]rune, x, y int) rune {
@@ -1155,17 +1212,16 @@ func TestAnArrowheadNeverSitsOnAJunction(t *testing.T) {
 		g := gridOf(drawn(t, src+"\n", 120))
 		for y := range g {
 			for x, r := range g[y] {
-				var a, b rune
-				var axis string
+				var through bool
 				switch r {
 				case '▶', '◀': // its own line runs across, so a crosser runs down
-					a, b, axis = at(g, x, y-1), at(g, x, y+1), downRunes
+					through = arm(g, x, y-1, South) && arm(g, x, y+1, North)
 				case '▲', '▼':
-					a, b, axis = at(g, x-1, y), at(g, x+1, y), acrossRunes
+					through = arm(g, x-1, y, East) && arm(g, x+1, y, West)
 				default:
 					continue
 				}
-				if strings.ContainsRune(axis, a) && strings.ContainsRune(axis, b) {
+				if through {
 					t.Errorf("a line runs through the arrowhead at %d,%d:\n%s",
 						x, y, strings.Join(plain(drawn(t, src+"\n", 120)), "\n"))
 				}
@@ -1190,10 +1246,10 @@ func TestACrossingIsACrossingAndNeverACorner(t *testing.T) {
 		g := gridOf(drawn(t, src+"\n", 120))
 		for y := range g {
 			for x, r := range g[y] {
-				n := strings.ContainsRune(downRunes, at(g, x, y-1))
-				s := strings.ContainsRune(downRunes, at(g, x, y+1))
-				e := strings.ContainsRune(acrossRunes, at(g, x+1, y))
-				w := strings.ContainsRune(acrossRunes, at(g, x-1, y))
+				n := arm(g, x, y-1, South)
+				s := arm(g, x, y+1, North)
+				e := arm(g, x+1, y, West)
+				w := arm(g, x-1, y, East)
 				if !(n && s && e && w) {
 					continue
 				}
