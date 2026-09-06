@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"image/color"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -285,6 +286,62 @@ func TestPixelFilledShapeIsFilledAndStroked(t *testing.T) {
 	edge := at(b.Dx()/2, int(top))
 	if edge != (color.NRGBA{R: 0xff, A: 0xff}) {
 		t.Errorf("the outline of a filled box is %v, want the pen", edge)
+	}
+}
+
+// A closed polygon's outline is mitred at its corners and closed at its
+// seam. gg's stroker does neither: it strokes a closed path as an open
+// polyline, so the seam gets two flat caps and grows a square spur, and it
+// rounds every corner, so a point stops short of what it was pointing at. A
+// miter reaches (w/2)/sin(θ/2) past a corner where a round join reaches w/2,
+// and an arrowhead's corner is sharp enough for that to be the difference
+// between touching a node and missing it.
+func TestPixelAPolygonsOutlineIsMitredAndClosed(t *testing.T) {
+	// An arrowhead's own shape, pointing down the page: 10pt of half-width
+	// over 30pt of length is a half-angle of 18.4 degrees, so a 6pt pen
+	// mitres 9.5pt past the point where a round join would reach 3.
+	d := &layout.Drawing{W: 100, H: 100, Pad: "0", Objects: []layout.Object{{
+		Name: "head",
+		Draw: []layout.Op{
+			{Op: "c", Color: "#000000"},
+			{Op: "C", Color: "#000000"},
+			{Op: "S", Style: "setlinewidth(6)"},
+			{Op: "P", Points: [][2]float64{{40, 50}, {60, 50}, {50, 20}}},
+		},
+	}}}
+	im, err := paint(t.Context(), d, "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inked := func(x, y float64) bool {
+		_, _, _, a := im.At(int(x*pxPerPt), int((100-y)*pxPerPt)).RGBA()
+		return a > 0x7fff
+	}
+	if !inked(50, 13) {
+		t.Error("the point stops short of its miter, 7pt past the corner")
+	}
+	if inked(50, 9) {
+		t.Error("the point runs past its miter, 11pt past the corner")
+	}
+	// A spur grows at the first vertex alone, so the tell is that the
+	// picture stops being symmetric about the head's own axis.
+	b := im.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		lo, hi := -1, -1
+		for x := b.Min.X; x < b.Max.X; x++ {
+			if _, _, _, a := im.At(x, y).RGBA(); a > 0x7fff {
+				if lo < 0 {
+					lo = x
+				}
+				hi = x
+			}
+		}
+		if lo < 0 {
+			continue
+		}
+		if axis := 50 * pxPerPt; math.Abs(float64(lo+hi)/2-axis) > 1 {
+			t.Fatalf("row %d runs from %d to %d, off the head's axis at %.1f: the seam grew a spur", y, lo, hi, axis)
+		}
 	}
 }
 

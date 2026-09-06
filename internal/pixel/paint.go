@@ -36,6 +36,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -147,10 +148,13 @@ func paint(ctx context.Context, d *layout.Drawing, face string, zoom float64) (*
 	// terminal then scales.
 	w, h := int(math.Round(wf)), int(math.Round(hf))
 	p := &painter{dc: gg.NewContext(w, h), s: s, box: b, file: fontFile(face)}
-	// cairo's defaults, and graphviz's SVG named neither, so the strokes
-	// are laid the way the picture was laid before. gg mitres nothing —
-	// round is the only join its rasteriser has — and on strokes a point or
-	// two wide the two are the same pixels.
+	// A stroke ends flat, which is cairo's own cap and what graphviz's SVG
+	// asked for by naming none. The join is the one thing gg cannot follow:
+	// its rasteriser mitres nothing, and round is the nearest it has. On a
+	// spline or a polyline that is a difference nobody can see, because a
+	// flattened curve turns by a fraction of a degree at a time; on a
+	// polygon's corners it shows at any pen wider than a hair, so a
+	// polygon's outline is laid by hand instead — see strokeClosed.
 	p.dc.SetLineCap(gg.LineCapButt)
 	p.dc.SetLineJoin(gg.LineJoinRound)
 	// The graph's own background is a trap: graphviz writes it whether or
@@ -254,16 +258,16 @@ func (p *painter) ops(list []layout.Op) {
 		case "p", "P":
 			p.polyline(op.Points)
 			p.dc.ClosePath()
-			p.ink(&st, op.Op == "P")
+			p.ink(&st, op.Op == "P", op.Points)
 		case "L":
 			p.polyline(op.Points)
-			p.ink(&st, false)
+			p.ink(&st, false, nil)
 		case "b", "B":
 			p.bezier(op.Points)
-			p.ink(&st, op.Op == "B")
+			p.ink(&st, op.Op == "B", nil)
 		case "e", "E":
 			p.ellipse(op.Rect)
-			p.ink(&st, op.Op == "E")
+			p.ink(&st, op.Op == "E", nil)
 		case "T":
 			p.text(op, &st)
 		}
@@ -295,8 +299,13 @@ func (st *pen) style(s string) bool {
 }
 
 // ink lays the path that was just built: a filled shape takes the fill and
-// then its outline, an outline takes the pen alone.
-func (p *painter) ink(st *pen, fill bool) {
+// then its outline, an outline takes the pen alone. closed is the polygon's
+// own points where the path is a closed polygon and nil otherwise — that
+// outline is laid by hand, because gg's stroker has no corner sharp enough
+// for an arrowhead. A dashed polygon goes through the stroker anyway: the
+// dashes are gg's to lay, and a cluster's dashed border has no sharp corner
+// to lose.
+func (p *painter) ink(st *pen, fill bool, closed [][2]float64) {
 	if fill && (st.fill.A > 0 || st.grad != nil) {
 		if st.grad != nil {
 			p.dc.SetFillStyle(st.grad)
@@ -310,10 +319,130 @@ func (p *painter) ink(st *pen, fill bool) {
 		return
 	}
 	p.dc.SetColor(st.colour)
+	if closed != nil && st.dash == nil {
+		p.strokeClosed(closed, st.width*p.s)
+		return
+	}
 	p.dc.SetLineWidth(st.width * p.s)
 	p.dc.SetDash(scaled(st.dash, p.s)...)
 	p.dc.Stroke()
 }
+
+// strokeClosed lays a closed polygon's outline: mitred at every corner, and
+// the seam is a corner like the rest of them.
+//
+// gg has neither. Its rasteriser strokes a closed path as an open polyline
+// — the two ends meet at the first vertex and each gets a flat cap — and it
+// rounds every turn, and both show. Measured on corpus/edges.dot against
+// the picture rsvg drew from the same graph: the seam grew a square spur on
+// every head wider than a hairline, and the tip of the `penwidth=4` head
+// stopped four pixels short of the node it points at, because a round join
+// reaches half a pen width past the vertex where a miter reaches
+// (w/2)/sin(θ/2) — 4.5pt at an arrowhead's nineteen degrees.
+//
+// So the outline is filled rather than stroked: a quad along every segment
+// and a wedge at every corner, each wound the same way, which under the
+// nonzero rule gg fills by is their union. Every piece is convex whatever
+// the polygon is, so a shape that folds into itself costs nothing to think
+// about. The miter limit is cairo's ten — past that the corner is so sharp
+// that its point would fly off on its own, and cairo bevels it too.
+func (p *painter) strokeClosed(pts [][2]float64, w float64) {
+	q := make([][2]float64, 0, len(pts))
+	for _, pt := range pts {
+		v := [2]float64{p.x(pt[0]), p.y(pt[1])}
+		if n := len(q); n > 0 && same(q[n-1], v) {
+			continue
+		}
+		q = append(q, v)
+	}
+	for len(q) > 1 && same(q[0], q[len(q)-1]) {
+		q = q[:len(q)-1]
+	}
+	if len(q) < 2 || w <= 0 {
+		return
+	}
+	hw := w / 2
+	p.dc.ClearPath()
+	for i, a := range q {
+		b := q[(i+1)%len(q)]
+		dx, dy, ok := unit(b[0]-a[0], b[1]-a[1])
+		if !ok {
+			continue
+		}
+		nx, ny := -dy*hw, dx*hw
+		p.piece([][2]float64{
+			{a[0] + nx, a[1] + ny}, {b[0] + nx, b[1] + ny},
+			{b[0] - nx, b[1] - ny}, {a[0] - nx, a[1] - ny},
+		})
+	}
+	for i := range q {
+		p.corner(q[(i+len(q)-1)%len(q)], q[i], q[(i+1)%len(q)], hw)
+	}
+	p.dc.Fill()
+}
+
+// corner is the join at v, between the segment arriving from a and the one
+// leaving for b: the bevel that closes the gap the two offsets leave on the
+// outside of the turn, and the miter that fills its point.
+func (p *painter) corner(a, v, b [2]float64, hw float64) {
+	d0x, d0y, ok0 := unit(v[0]-a[0], v[1]-a[1])
+	d1x, d1y, ok1 := unit(b[0]-v[0], b[1]-v[1])
+	if !ok0 || !ok1 {
+		return
+	}
+	// The gap opens on the outside of the turn, and which side that is is
+	// the sign of the turn itself. Straight through, or doubled back on
+	// itself, there is no gap and no join.
+	cross := d0x*d1y - d0y*d1x
+	if math.Abs(cross) < 1e-9 {
+		return
+	}
+	s := hw
+	if cross > 0 {
+		s = -hw
+	}
+	p0 := [2]float64{v[0] - d0y*s, v[1] + d0x*s}
+	p1 := [2]float64{v[0] - d1y*s, v[1] + d1x*s}
+	p.piece([][2]float64{v, p0, p1})
+	t := ((p1[0]-p0[0])*d1y - (p1[1]-p0[1])*d1x) / cross
+	m := [2]float64{p0[0] + t*d0x, p0[1] + t*d0y}
+	if math.Hypot(m[0]-v[0], m[1]-v[1]) > 10*hw {
+		return
+	}
+	p.piece([][2]float64{p0, m, p1})
+}
+
+// piece adds one convex patch of an outline, wound the way its neighbours
+// are: the nonzero rule counts the turns a path makes round a point, so two
+// patches wound against each other would cancel where they overlap instead
+// of joining there.
+func (p *painter) piece(pts [][2]float64) {
+	area := 0.0
+	for i, a := range pts {
+		b := pts[(i+1)%len(pts)]
+		area += a[0]*b[1] - b[0]*a[1]
+	}
+	if area < 0 {
+		slices.Reverse(pts)
+	}
+	p.dc.MoveTo(pts[0][0], pts[0][1])
+	for _, pt := range pts[1:] {
+		p.dc.LineTo(pt[0], pt[1])
+	}
+	p.dc.ClosePath()
+}
+
+// unit is a direction, false where there is no direction to have.
+func unit(x, y float64) (float64, float64, bool) {
+	l := math.Hypot(x, y)
+	if l < 1e-9 {
+		return 0, 0, false
+	}
+	return x / l, y / l, true
+}
+
+// same is two points a rasteriser could not tell apart.
+func same(a, b [2]float64) bool { return math.Hypot(a[0]-b[0], a[1]-b[1]) < 1e-9 }
 
 // polyline builds a run of points, and polygons close it afterwards.
 func (p *painter) polyline(pts [][2]float64) {
