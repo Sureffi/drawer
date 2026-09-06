@@ -112,15 +112,28 @@ func (r run) muxLine() string {
 		return "no"
 	}
 	pane := "pane " + r.mux.Pane
-	switch r.mux.Passthrough() {
-	case "on":
+	was, err := r.mux.Passthrough()
+	switch {
+	case err != nil:
+		// Not "unknown": a tmux that cannot be asked is a tmux that cannot
+		// be told either, and a picture down this wire is a picture gone.
+		return "yes: " + pane + ", allow-passthrough could not be asked about: " + err.Error() +
+			" — no picture can cross this wire"
+	case was == "on":
 		return "yes: " + pane + ", allow-passthrough on"
-	case "":
-		return "yes: " + pane + ", allow-passthrough unknown: tmux would not answer"
 	default:
-		return "yes: " + pane + ", allow-passthrough off: drawer sets it on for this pane, " +
-			"and this pane only, when it draws a picture"
+		return "yes: " + pane + ", allow-passthrough " + quotedOpt(was) +
+			": drawer sets it on for this pane, and this pane only, when it draws a picture"
 	}
+}
+
+// quotedOpt names an option value a reader has to be able to tell from a
+// value nobody set.
+func quotedOpt(v string) string {
+	if v == "" {
+		return "unset"
+	}
+	return v
 }
 
 // runDoctor is the -doctor door: what this binary sees, one fact per line.

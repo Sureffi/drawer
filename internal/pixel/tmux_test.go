@@ -94,22 +94,34 @@ func TestNoMultiplexerIsNothingToDo(t *testing.T) {
 	if note, through := none.Allow(); note != "" || !through {
 		t.Errorf("Allow with no tmux said %q, through=%v; want nothing in the way", note, through)
 	}
-	if got := none.Passthrough(); got != "" {
-		t.Errorf("Passthrough answered with no tmux: %q", got)
+	if got, err := none.Passthrough(); got != "" || err != nil {
+		t.Errorf("Passthrough answered with no tmux: %q, %v", got, err)
 	}
 }
 
 // A tmux that will not answer is a wire this process knows is closed: the
 // note says so and the answer is false, which is what sends the rung above
-// back to the glyphs rather than leaving a reader rows of nothing. No
-// server is listening on this socket, which is exactly the shape of a tmux
-// that went away mid-session.
+// back to the glyphs rather than leaving a reader rows of nothing.
+//
+// Two ways for tmux not to answer, and they used to read apart. run() gave
+// back the same empty string for "exited 0 and said nothing" and for "never
+// ran at all", and Allow read the empty one as "the option is not set" and
+// went on — so on a box with no tmux on the PATH the wire read as open, the
+// box went out, and the pixels had nowhere to come from. The PATH case is
+// the one that ships: a GUI process's PATH routinely has no /opt/homebrew/bin
+// in it.
 func TestAllowSaysSoWhenTheWireIsClosed(t *testing.T) {
-	note, through := (&Tmux{Socket: "/nowhere/tmux-does-not-exist", Pane: "%0"}).Allow()
-	if through {
-		t.Error("a tmux that answers nothing was read as a wire the picture can cross")
-	}
-	if !strings.Contains(note, "allow-passthrough") || !strings.Contains(note, "%0") {
-		t.Errorf("the note does not say what happened, or to which pane: %q", note)
+	for _, c := range []struct{ name, path string }{
+		{"no server on that socket", os.Getenv("PATH")},
+		{"no tmux on the PATH at all", ""},
+	} {
+		t.Setenv("PATH", c.path)
+		note, through := (&Tmux{Socket: "/nowhere/tmux-does-not-exist", Pane: "%0"}).Allow()
+		if through {
+			t.Errorf("%s: was read as a wire the picture can cross", c.name)
+		}
+		if !strings.Contains(note, "allow-passthrough") || !strings.Contains(note, "%0") {
+			t.Errorf("%s: the note does not say what happened, or to which pane: %q", c.name, note)
+		}
 	}
 }

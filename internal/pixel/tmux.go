@@ -58,14 +58,20 @@ func (t *Tmux) wrap(esc string) string {
 const tmuxTimeout = 2 * time.Second
 
 // Passthrough is whether this pane lets a passthrough through: "on", "off",
-// or empty where tmux would not answer. -A asks for the value in force
-// rather than the one set on the pane, because an option nobody set on the
-// pane reads as empty while the server's own answer is the one that counts.
-func (t *Tmux) Passthrough() string {
+// or whatever else tmux says. -A asks for the value in force rather than
+// the one set on the pane, because an option nobody set on the pane reads
+// as empty while the server's own answer is the one that counts.
+//
+// The error is the other answer, and it is not the same as an empty one: a
+// tmux that could not be asked at all — no server on that socket, no tmux
+// on the PATH — knows nothing about this pane, and reading its silence as
+// "no option set" is how a closed wire came to read as an open one.
+func (t *Tmux) Passthrough() (string, error) {
 	if t == nil {
-		return ""
+		return "", nil
 	}
-	return strings.TrimSpace(t.run("show", "-p", "-t", t.Pane, "-A", "-v", "allow-passthrough"))
+	out, err := t.run("show", "-p", "-t", t.Pane, "-A", "-v", "allow-passthrough")
+	return strings.TrimSpace(out), err
 }
 
 // Allow turns the pane's passthrough on where it is not on already,
@@ -90,41 +96,62 @@ func (t *Tmux) Allow() (string, bool) {
 		return "", true
 	}
 	pane := " for pane " + t.Pane
-	switch was := t.Passthrough(); was {
-	case "on":
-		return "", true
-	case "":
-		// tmux would not say. Ask for it anyway rather than deciding from
-		// an answer nobody gave.
-		if out := t.allow(); out != "" {
-			return "tmux: allow-passthrough could not be read or set" + pane + ": " + out, false
-		}
-		return "tmux: allow-passthrough could not be read" + pane + "; set on for it anyway", true
-	default:
-		if out := t.allow(); out != "" {
-			return "tmux: allow-passthrough is " + was + pane + " and would not be set: " + out, false
-		}
-		return "tmux: allow-passthrough was " + was + "; set on" + pane +
-			" (this pane only, until it closes)", true
+	was, err := t.Passthrough()
+	if err != nil {
+		// A tmux nobody could ask is a wire nobody can post a picture
+		// through. It read as open once — run() gave back the same empty
+		// string for "exited 0, said nothing" and for "never ran at all",
+		// and a box with no tmux on the PATH went out expecting pixels
+		// that had nowhere to come from.
+		return "tmux: allow-passthrough could not be asked about" + pane +
+			": " + reason(was, err), false
 	}
+	if was == "on" {
+		return "", true
+	}
+	if out, err := t.allow(); err != nil {
+		return "tmux: allow-passthrough is " + quoted(was) + pane +
+			" and would not be set: " + reason(out, err), false
+	}
+	return "tmux: allow-passthrough was " + quoted(was) + "; set on" + pane +
+		" (this pane only, until it closes)", true
+}
+
+// quoted names a value a reader has to be able to tell from nothing at all.
+func quoted(v string) string {
+	if v == "" {
+		return "unset"
+	}
+	return v
+}
+
+// reason is what to put in the note: what tmux said, or where it failed
+// when it said nothing.
+func reason(out string, err error) string {
+	if out != "" {
+		return out
+	}
+	return err.Error()
 }
 
 // allow is the one write this package makes to anything but a tty: what
-// tmux said about it, and nothing where it worked.
-func (t *Tmux) allow() string {
-	return strings.TrimSpace(t.run("set", "-p", "-t", t.Pane, "allow-passthrough", "on"))
+// tmux said about it, and the error where it could not be told at all.
+func (t *Tmux) allow() (string, error) {
+	out, err := t.run("set", "-p", "-t", t.Pane, "allow-passthrough", "on")
+	return strings.TrimSpace(out), err
 }
 
 // run is one tmux command against this server. The socket is addressed
 // directly rather than through TMUX, so the answer is about this server
-// whatever environment the command inherits. Output and error read the
-// same: what tmux said, or nothing at all.
-func (t *Tmux) run(args ...string) string {
+// whatever environment the command inherits.
+//
+// Two answers, and they are not one: what tmux said, and whether it ran at
+// all. A tmux that exited 0 and printed nothing is an answer of nothing; a
+// tmux that is not on the PATH is no answer, and the two read the same
+// until the error is carried out with the output.
+func (t *Tmux) run(args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), tmuxTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "tmux", append([]string{"-S", t.Socket}, args...)...).CombinedOutput()
-	if err != nil && len(out) == 0 {
-		return ""
-	}
-	return string(out)
+	return string(out), err
 }
