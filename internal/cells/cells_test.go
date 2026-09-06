@@ -1138,3 +1138,44 @@ func TestRanksStandTwoOrThreeCellsApart(t *testing.T) {
 		}
 	}
 }
+
+// BOXES. A head that stops against a cluster's frame meets the frame and
+// never the frame's own name. An edge into a cluster stops one cell
+// outside it and the reader walks in across the border; a head landing
+// against a letter of the name points at the name instead, so the name
+// gives way to the lines and takes the stretch of edge that none of them
+// crosses.
+func TestNoHeadEverLandsOnAClustersName(t *testing.T) {
+	for _, src := range []string{
+		`digraph { subgraph cluster_a { label="inside"; m1 -> m2 }; start -> m1; m2 -> done }`,
+		`digraph { subgraph cluster_o { label="outer"; subgraph cluster_i { label="inner"; i1 -> i2 }; o1 -> i1 }; start -> o1; i2 -> done }`,
+		`digraph { rankdir=LR; subgraph cluster_f { label="far"; m1 -> m2 }; a -> m1; a -> z; z -> m1; m2 -> end }`,
+	} {
+		rows := plain(drawn(t, src+"\n", 160))
+		g := gridOf(rows)
+		for y := range g {
+			for x, r := range g[y] {
+				var tx, ty int
+				switch r {
+				case '▶':
+					tx, ty = x+1, y
+				case '◀':
+					tx, ty = x-1, y
+				case '▼':
+					tx, ty = x, y+1
+				case '▲':
+					tx, ty = x, y-1
+				default:
+					continue
+				}
+				// Whatever a head points at is a wall, a frame's own line,
+				// or the blank a frame keeps around its name. A letter is
+				// none of those.
+				if c := at(g, tx, ty); c != ' ' && !InAlphabet(c) {
+					t.Errorf("the head at %d,%d points at %q:\n%s", x, y, c,
+						strings.Join(rows, "\n"))
+				}
+			}
+		}
+	}
+}

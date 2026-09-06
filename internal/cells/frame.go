@@ -16,6 +16,8 @@
 package cells
 
 import (
+	"strings"
+
 	"github.com/sureffi/drawer/internal/grid"
 	"github.com/sureffi/drawer/internal/layout"
 )
@@ -134,10 +136,12 @@ func titleRoom(title string) int {
 		return 0
 	}
 	if plainTitle(title) {
-		if w := (3*n+7)/2 + 2; w > n+6 {
+		// Two cells past what the name needs, so a line coming up to the
+		// edge has somewhere to meet it that the name is not standing on.
+		if w := (3*n+7)/2 + 2; w > n+10 {
 			return w
 		}
-		return n + 6
+		return n + 10
 	}
 	return n + 6
 }
@@ -155,33 +159,120 @@ func plainTitle(title string) bool {
 	return true
 }
 
+// inEdge says whether a cluster's name goes into its top edge. A name may
+// be set into the edge only while enough edge is left to read as an edge
+// and while every rune of it is writing; past that it stands on the air
+// row inside, which is where graph-easy puts one and where a reader looks
+// for it second.
+func inEdge(b Box) bool {
+	n := grid.Cells(b.Title)
+	return n > 0 && plainTitle(b.Title) && 2*(b.W-2) >= 3*(n+2) && b.W >= n+6
+}
+
+// drawFrame draws a cluster's frame, and its name where the name stands
+// inside it. A name that goes into the top edge is left until every line
+// is down — see nameFrame — because the edge is the one part of a frame
+// that lines cross, and a name written where one crosses is a name with a
+// stroke through it and a head pointing at a letter of it.
 func drawFrame(cv *Canvas, b Box) {
 	x1, y1 := b.X+b.W-1, b.Y+b.H-1
 	cv.Stroke(b.X, b.Y, x1, b.Y, b.Pencil)
 	cv.Stroke(b.X, y1, x1, y1, b.Pencil)
 	cv.Stroke(b.X, b.Y, b.X, y1, b.Pencil)
 	cv.Stroke(x1, b.Y, x1, y1, b.Pencil)
-	if n := grid.Cells(b.Title); n > 0 {
-		// A name may be set into the edge only while enough edge is left
-		// to read as an edge and while every rune of it is writing; past
-		// that it stands on the air row inside, which is where graph-easy
-		// puts one and where a reader looks for it second. A name inside
-		// keeps a ring of air round it, so no line ever comes close
-		// enough for a reader to give the words to that line instead.
-		if plainTitle(b.Title) && 2*(b.W-2) >= 3*(n+2) && b.W >= n+6 {
-			cv.Blank(b.X+2, b.Y, n+2)
-			cv.Text(b.X+3, b.Y, b.Title, b.Ink)
-		} else if b.W > n+4 {
-			cv.Text(b.X+2, b.Y+1, b.Title, b.Ink)
-			cv.Hold(b.X+1, b.Y+1, n+2, 1)
-			cv.Hold(b.X+1, b.Y+2, n+2, 1)
-		}
+	if n := grid.Cells(b.Title); n > 0 && !inEdge(b) && b.W > n+4 {
+		// A name inside keeps a ring of air round it, so no line ever
+		// comes close enough for a reader to give the words to that
+		// line instead.
+		cv.Text(b.X+2, b.Y+1, b.Title, b.Ink)
+		cv.Hold(b.X+1, b.Y+1, n+2, 1)
+		cv.Hold(b.X+1, b.Y+2, n+2, 1)
 	}
 	cv.Hold(b.X, b.Y, b.W, 1)
 	cv.Hold(b.X, y1, b.W, 1)
 	cv.Hold(b.X, b.Y, 1, b.H)
 	cv.Hold(x1, b.Y, 1, b.H)
 }
+
+// nameFrame sets a cluster's name into its top edge, once every line is
+// down. The name takes the stretch of edge that the fewest lines cross:
+// a line crossing the top edge leaves an arm on it pointing into or out
+// of the frame, and a name written over that arm swallows the crossing
+// and puts an arrowhead against a letter. Where no stretch is clear the
+// least-crossed one is used, which is where the name went before any of
+// this and is no worse than it was.
+func nameFrame(cv *Canvas, b Box) {
+	if !inEdge(b) {
+		return
+	}
+	n := grid.Cells(b.Title)
+	// A line crosses the top edge at x when it leaves an arm on the edge
+	// itself, and also when it only comes up to it: an edge that has to
+	// stop outside a frame lays nothing on the frame at all, and the head
+	// sitting one cell off it is the whole of the crossing.
+	busy := func(x, y int) bool {
+		return cv.MaskAt(x, y) != 0 || strings.ContainsRune("▲▼◀▶", cv.Rune(x, y))
+	}
+	crosses := func(x int) bool {
+		return cv.MaskAt(x, b.Y).Has(North) || cv.MaskAt(x, b.Y).Has(South) ||
+			busy(x, b.Y-1) || busy(x, b.Y+1)
+	}
+	// A crossing on one of the name's own letters is the bad one: the
+	// head ends up against a rune of the name. A crossing on the blank
+	// the name keeps each side of itself is only a head against a gap in
+	// the edge, which is what a frame looks like anywhere a line meets
+	// it. So the letters are weighed heavily and the two blanks lightly.
+	// A cell of edge before the name is the shape a framed drawing has
+	// always had, so that place is tried first and the one against the
+	// corner only where nothing else is clear.
+	var order []int
+	for x := b.X + 2; x+n+2 <= b.X+b.W-1; x++ {
+		order = append(order, x)
+	}
+	if b.X+1+n+2 <= b.X+b.W-1 {
+		order = append(order, b.X+1)
+	}
+	best, bestN := b.X+2, 1<<30
+	for _, x := range order {
+		c := 0
+		for i := 0; i < n+2; i++ {
+			if !crosses(x + i) {
+				continue
+			}
+			if i == 0 || i == n+1 {
+				c++
+			} else {
+				c += hitLetter
+			}
+		}
+		if c < bestN {
+			best, bestN = x, c
+			if c == 0 {
+				break
+			}
+		}
+	}
+	// A name that cannot find a stretch of edge without a line coming up
+	// to one of its own letters goes on the air row inside instead, where
+	// there is nothing to point at it. That is the second place a reader
+	// looks for a cluster's name, so nothing is lost but the top edge.
+	if bestN >= hitLetter {
+		for x := b.X + 1; x+n+2 <= b.X+b.W-1; x++ {
+			if !cv.Free(x, b.Y+1, n+2) {
+				continue
+			}
+			cv.Text(x+1, b.Y+1, b.Title, b.Ink)
+			cv.Hold(x, b.Y+1, n+2, 1)
+			return
+		}
+	}
+	cv.Blank(best, b.Y, n+2)
+	cv.Text(best+1, b.Y, b.Title, b.Ink)
+}
+
+// hitLetter is what a crossing on one of the name's own letters costs,
+// against 1 for one on the blank it keeps each side.
+const hitLetter = 16
 
 // enclosing is the clusters round each node, outermost first.
 func enclosing(g *layout.Graph) [][]int {

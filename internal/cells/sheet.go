@@ -239,6 +239,14 @@ func attempt(g *layout.Graph, sl slots, extra gaps, width, maxRows int) ([]strin
 		}
 	}
 	short := routeAll(cv, g, sl, boxes, frames, enclosing(g), t)
+	// The names last: a name in a top edge takes the stretch of it that
+	// the fewest lines cross, and which those are is not known until
+	// every line is down.
+	for i := range frames {
+		if bs[i].ok {
+			nameFrame(cv, frames[i])
+		}
+	}
 	return trimLeft(cv.Rows()), short
 }
 
