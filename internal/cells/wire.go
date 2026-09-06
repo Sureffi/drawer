@@ -189,7 +189,7 @@ func routeAll(cv *Canvas, g *layout.Graph, sl slots, boxes, frames []Box, encl [
 	// a drawing half of which is not there yet — nor can the room for one
 	// be taken from an edge that still has to be routed.
 	for _, l := range labelled {
-		if !placeLabel(cv, l.ps, l.label) {
+		if !placeLabel(cv, t, l.ps, l.label) {
 			short++
 		}
 	}
@@ -376,7 +376,7 @@ func segments(ps Route) []segment {
 // side — a word interrupting a stroke belongs to that stroke, and nothing
 // else can claim it. Failing that it stands beside the line, which is
 // where graph-easy sets one.
-func placeLabel(cv *Canvas, ps Route, label string) bool {
+func placeLabel(cv *Canvas, t *terrain, ps Route, label string) bool {
 	need := grid.Cells(label)
 	if need == 0 {
 		return true
@@ -390,11 +390,11 @@ func placeLabel(cv *Canvas, ps Route, label string) bool {
 		}
 	}
 	for _, s := range segs {
-		if beside(cv, ps, s, label, need) {
+		if beside(cv, t, ps, s, label, need) {
 			return true
 		}
 	}
-	return nudge(cv, ps, label, need)
+	return nudge(cv, t, ps, label, need)
 }
 
 // bridgeable says whether a label may be set into its own line. A reader
@@ -441,13 +441,19 @@ func safeText(cv *Canvas, label string, x, y int) bool {
 // the edge going the other way. The cells looked at here are the same ones
 // the reader looks at, and a spot that touches anybody else's line is not
 // a spot.
-func mine(cv *Canvas, ps Route, x, y, n int) bool {
+func mine(cv *Canvas, t *terrain, ps Route, x, y, n int) bool {
 	own := make(map[ipt]bool, len(ps))
 	for _, p := range ps {
 		own[p] = true
 	}
 	touched := false
 	look := func(cx, cy int) bool {
+		// A wall is not a line and a box's own label is not a label of
+		// anything else: a reader never walks either, so a box beside a
+		// label is no reason to move the label.
+		if t.blocked(cx, cy) {
+			return true
+		}
 		// Writing next to writing is one label wrapped over two rows, as
 		// far as a reader is concerned, so a spot beside somebody else's
 		// words is not a spot either.
@@ -509,9 +515,9 @@ func inLine(cv *Canvas, s segment, label string, need int) bool {
 
 // beside sets the label next to its line: above a run across the page, or
 // two cells out from one down it, which is where a reader looks for it.
-func beside(cv *Canvas, ps Route, s segment, label string, need int) bool {
+func beside(cv *Canvas, t *terrain, ps Route, s segment, label string, need int) bool {
 	put := func(x, y int) bool {
-		if !cv.Free(x, y, need) || !mine(cv, ps, x, y, need) || !safeText(cv, label, x, y) {
+		if !cv.Free(x, y, need) || !mine(cv, t, ps, x, y, need) || !safeText(cv, label, x, y) {
 			return false
 		}
 		cv.Text(x, y, label, 0)
@@ -556,12 +562,12 @@ func beside(cv *Canvas, ps Route, s segment, label string, need int) bool {
 // nothing else's. A label that will not go anywhere clean is left off, and
 // the attempt says it was short, so the drawing is made again with more
 // room rather than damaged here.
-func nudge(cv *Canvas, ps Route, label string, need int) bool {
+func nudge(cv *Canvas, t *terrain, ps Route, label string, need int) bool {
 	for _, p := range ps {
 		for _, dy := range []int{-1, 1, -2, 2, 0} {
 			for _, dx := range []int{0, 2, -1 - need, 1, -2, -need, 3} {
 				x, y := p.x+dx, p.y+dy
-				if cv.Free(x, y, need) && mine(cv, ps, x, y, need) && safeText(cv, label, x, y) {
+				if cv.Free(x, y, need) && mine(cv, t, ps, x, y, need) && safeText(cv, label, x, y) {
 					cv.Text(x, y, label, 0)
 					cv.Hold(x, y, need, 1)
 					return true

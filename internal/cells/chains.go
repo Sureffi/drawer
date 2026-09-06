@@ -524,8 +524,20 @@ func attempt(g *layout.Graph, sl slots, extra gaps, width, maxRows int) ([]strin
 			rowH[sl.row[i]] = bh[i]
 		}
 	}
-	bs := bounds(g, sl)
-	gapX, gapY := spacing(g, sl, extra, bs, loops)
+	room := make([]int, len(g.Nodes))
+	wide := make([]int, len(g.Nodes))
+	for i, n := range loops {
+		if n > 0 {
+			room[i] = (n+1)/2 + 2
+		}
+	}
+	for _, e := range g.Edges {
+		if e.Tail == e.Head {
+			wide[e.Tail] = max(wide[e.Tail], grid.Cells(e.Label))
+		}
+	}
+	bs := bounds(g, sl, room)
+	gapX, gapY := spacing(g, sl, extra, bs, room, wide)
 	// A frame carries its cluster's name, so it has to be wide enough to
 	// hold it. The room comes out of the last column the frame covers,
 	// which is the one place widening cannot push a frame over anything
@@ -534,7 +546,7 @@ func attempt(g *layout.Graph, sl slots, extra gaps, width, maxRows int) ([]strin
 		if !b.ok {
 			continue
 		}
-		w := 2*b.left + 2*b.right
+		w := b.offL() + b.offR()
 		for c := b.col0; c <= b.col1; c++ {
 			w += colW[c]
 			if c > b.col0 {
@@ -592,7 +604,7 @@ func attempt(g *layout.Graph, sl slots, extra gaps, width, maxRows int) ([]strin
 // spacing is the air between the slots: a base along each axis, whatever
 // the ladder is paying on top of it, and room in the gap for the widest
 // label that has to ride through it.
-func spacing(g *layout.Graph, sl slots, extra gaps, bs []bound, loops []int) ([]int, []int) {
+func spacing(g *layout.Graph, sl slots, extra gaps, bs []bound, room []int, wide []int) ([]int, []int) {
 	flow, cross := 3, 4 // top-down: ranks stack in rows, lanes spread in columns
 	if sl.horiz {
 		flow, cross = 6, 2 // left-right: ranks march in columns, lanes stack in rows
@@ -615,8 +627,56 @@ func spacing(g *layout.Graph, sl slots, extra gaps, bs []bound, loops []int) ([]
 			gapY[i] = flow
 		}
 	}
+	// What each slot column and row wants outside itself: the air a
+	// node's hoops and their words need, and a ring for every frame that
+	// starts or ends there. A gap carries both of its neighbours' wants
+	// and a cell between them.
+	beforeX := make([]int, sl.nCol)
+	afterX := make([]int, sl.nCol)
+	beforeY := make([]int, sl.nRow)
+	afterY := make([]int, sl.nRow)
+	for v := range g.Nodes {
+		if room[v] > 0 {
+			beforeY[sl.row[v]] = max(beforeY[sl.row[v]], room[v])
+			afterY[sl.row[v]] = max(afterY[sl.row[v]], room[v])
+		}
+		if wide[v] > 0 {
+			beforeX[sl.col[v]] = max(beforeX[sl.col[v]], wide[v]+2)
+			afterX[sl.col[v]] = max(afterX[sl.col[v]], wide[v]+2)
+		}
+	}
+	for _, b := range bs {
+		if !b.ok {
+			continue
+		}
+		beforeX[b.col0] = max(beforeX[b.col0], b.offL())
+		afterX[b.col1] = max(afterX[b.col1], b.offR())
+		beforeY[b.row0] = max(beforeY[b.row0], b.offT())
+		afterY[b.row1] = max(afterY[b.row1], b.offB())
+	}
+	fit := func(gap, before, after []int) {
+		for i := range gap {
+			n := 1
+			if i > 0 {
+				n += after[i-1]
+			}
+			if i < len(before) {
+				n += before[i]
+			}
+			if n > gap[i] {
+				gap[i] = n
+			}
+		}
+	}
+	fit(gapX, beforeX, afterX)
+	fit(gapY, beforeY, afterY)
 	// A label rides its own line, so the gap it rides through has to be
 	// long enough to hold it with a shoulder each side.
+	need := func(g []int, i, n int) {
+		if i >= 0 && i < len(g) && n > g[i] {
+			g[i] = n
+		}
+	}
 	for _, e := range g.Edges {
 		n := grid.Cells(e.Label)
 		if n == 0 || e.Tail == e.Head {
@@ -627,74 +687,15 @@ func spacing(g *layout.Graph, sl slots, extra gaps, bs []bound, loops []int) ([]
 			if a > b {
 				a, b = b, a
 			}
-			if b-a == 1 && gapX[b] < n+6 {
-				gapX[b] = n + 6
+			if b-a == 1 {
+				need(gapX, b, n+6)
 			}
 			continue
 		}
 		// Down the page a label stands beside its line rather than in it,
 		// so the room it needs is across the flow.
-		c := sl.col[e.Tail] + 1
-		if c < len(gapX) && gapX[c] < n+4 {
-			gapX[c] = n + 4
-		}
-	}
-	// A frame needs room outside the boxes it holds, and so does whatever
-	// stands beside it: the gap between two slots carries every frame that
-	// ends on one side of it and every frame that starts on the other.
-	need := func(g []int, i, n int) {
-		if n > g[i] {
-			g[i] = n
-		}
-	}
-	for _, b := range bs {
-		if !b.ok {
-			continue
-		}
-		need(gapX, b.col0, 2*b.left+1)
-		need(gapX, b.col1+1, 2*b.right+1)
-		need(gapY, b.row0, 2*b.top+1)
-		need(gapY, b.row1+1, 2*b.bottom+1)
-	}
-	// Two frames back to back need both their rings and a cell between.
-	for i := range bs {
-		if !bs[i].ok {
-			continue
-		}
-		for j := range bs {
-			if i == j || !bs[j].ok {
-				continue
-			}
-			if bs[i].col1+1 == bs[j].col0 {
-				need(gapX, bs[j].col0, 2*bs[i].right+2*bs[j].left+1)
-			}
-			if bs[i].row1+1 == bs[j].row0 {
-				need(gapY, bs[j].row0, 2*bs[i].bottom+2*bs[j].top+1)
-			}
-		}
-	}
-	// A hoop stands off the wall it leaves, one cell further for each hoop
-	// already there, and its words stand off the end of it. Both are room
-	// this node's own gaps have to find, on top of any frame's.
-	for v, n := range loops {
-		if n == 0 {
-			continue
-		}
-		room := (n+1)/2 + 2
-		gapY[sl.row[v]] += room
-		gapY[sl.row[v]+1] += room
-		wide := 0
-		for _, e := range g.Edges {
-			if e.Tail == e.Head && e.Tail == v {
-				if c := grid.Cells(e.Label); c > wide {
-					wide = c
-				}
-			}
-		}
-		if wide > 0 {
-			need(gapX, sl.col[v], wide+3)
-			need(gapX, sl.col[v]+1, wide+3)
-		}
+		need(gapX, sl.col[e.Tail], n+4)
+		need(gapX, sl.col[e.Tail]+1, n+4)
 	}
 	return gapX, gapY
 }
@@ -793,14 +794,15 @@ func trimLeft(rows []string) []string {
 // one for the line — and a cluster inside another needs that room twice.
 type bound struct {
 	col0, row0, col1, row1   int
-	left, right, top, bottom int
+	left, right, top, bottom int // frames stacked outside this one's contents
+	padL, padR, padT, padB   int // air inside the frame the contents need
 	ok                       bool
 }
 
 // bounds is where every cluster's frame goes, in slots. Placing put each
 // cluster's members in a rectangle of their own, so this is only the
 // reading of it — and the depth counts, which come from the outside in.
-func bounds(g *layout.Graph, sl slots) []bound {
+func bounds(g *layout.Graph, sl slots, room []int) []bound {
 	out := make([]bound, len(g.Clusters))
 	for i, c := range g.Clusters {
 		b := bound{col0: 1 << 30, row0: 1 << 30, col1: -1, row1: -1}
@@ -810,6 +812,25 @@ func bounds(g *layout.Graph, sl slots) []bound {
 			b.ok = true
 		}
 		b.left, b.right, b.top, b.bottom = 1, 1, 1, 1
+		// A hoop hangs outside the box it belongs to and inside the frame
+		// its node stands in, so the frame has to stand off by that much.
+		for _, v := range c.Members {
+			if room[v] == 0 {
+				continue
+			}
+			if sl.col[v] == b.col0 {
+				b.padL = max(b.padL, room[v])
+			}
+			if sl.col[v] == b.col1 {
+				b.padR = max(b.padR, room[v])
+			}
+			if sl.row[v] == b.row0 {
+				b.padT = max(b.padT, room[v])
+			}
+			if sl.row[v] == b.row1 {
+				b.padB = max(b.padB, room[v])
+			}
+		}
 		out[i] = b
 	}
 	// A cluster's frame stands outside its children's, so a side shared
@@ -822,19 +843,31 @@ func bounds(g *layout.Graph, sl slots) []bound {
 		}
 		if out[p].col0 == out[i].col0 {
 			out[p].left = max(out[p].left, out[i].left+1)
+			out[p].padL = max(out[p].padL, out[i].padL)
 		}
 		if out[p].col1 == out[i].col1 {
 			out[p].right = max(out[p].right, out[i].right+1)
+			out[p].padR = max(out[p].padR, out[i].padR)
 		}
 		if out[p].row0 == out[i].row0 {
 			out[p].top = max(out[p].top, out[i].top+1)
+			out[p].padT = max(out[p].padT, out[i].padT)
 		}
 		if out[p].row1 == out[i].row1 {
 			out[p].bottom = max(out[p].bottom, out[i].bottom+1)
+			out[p].padB = max(out[p].padB, out[i].padB)
 		}
 	}
 	return out
 }
+
+// offL and its three sisters are how far outside its contents each side
+// of a frame is drawn: the air a hoop needs, then a ring for every frame
+// standing outside this one on that side.
+func (b bound) offL() int { return b.padL + 2*b.left }
+func (b bound) offR() int { return b.padR + 2*b.right }
+func (b bound) offT() int { return b.padT + 2*b.top }
+func (b bound) offB() int { return b.padB + 2*b.bottom }
 
 // frameRects turns the slot bounds into the rectangles the frames are
 // drawn as, once the columns and rows have their real sizes.
@@ -844,10 +877,10 @@ func frameRects(g *layout.Graph, bs []bound, xs, ys, colW, rowH []int) []Box {
 		if !b.ok {
 			continue
 		}
-		x0 := xs[b.col0] - 2*b.left
-		y0 := ys[b.row0] - 2*b.top
-		x1 := xs[b.col1] + colW[b.col1] - 1 + 2*b.right
-		y1 := ys[b.row1] + rowH[b.row1] - 1 + 2*b.bottom
+		x0 := xs[b.col0] - b.offL()
+		y0 := ys[b.row0] - b.offT()
+		x1 := xs[b.col1] + colW[b.col1] - 1 + b.offR()
+		y1 := ys[b.row1] + rowH[b.row1] - 1 + b.offB()
 		c := g.Clusters[i]
 		out[i] = Box{X: x0, Y: y0, W: x1 - x0 + 1, H: y1 - y0 + 1,
 			Pencil: Pencil{Style: styleOf(c.Style, 0), Pen: ParsePen(c.Pen)},
