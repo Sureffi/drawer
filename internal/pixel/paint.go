@@ -173,11 +173,36 @@ func paint(ctx context.Context, d *layout.Drawing, face string, zoom float64) (*
 	// thing that says "pasted in". bgcolor is the attribute itself, absent
 	// where the source set none.
 	if bg := strings.TrimSpace(d.BGColor); bg != "" && bg != "transparent" && bg != "none" {
-		p.ops(d.Draw)
+		p.ground(d.Draw)
 	}
 	p.objects(d)
 	p.ops(d.LDraw)
 	return p.dc.Image().(*image.RGBA), nil
+}
+
+// ground paints the graph's background over the whole canvas.
+//
+// The shape is the canvas and not the polygon in the list, because that
+// polygon is the bare bounding box wherever the source named no pad — where
+// graphviz's SVG writer wrote a background over the padded canvas instead.
+// Measured, a `bgcolor=white` picture under a theme that names no pad came
+// out with a 4pt transparent frame the old picture had filled.
+//
+// The colour is the list's, though: the attribute arrives as the model
+// wrote it — `white`, `#1a1b26`, a gradient — and only the drawing list
+// carries what graphviz resolved that to. A pen of no colour, so the ground
+// is filled and not also outlined.
+func (p *painter) ground(list []layout.Op) {
+	for _, op := range list {
+		if op.Op != "C" {
+			continue
+		}
+		st := pen{fill: hexColour(op.Color), grad: p.gradient(op)}
+		p.dc.ClearPath()
+		p.dc.DrawRectangle(0, 0, float64(p.dc.Width()), float64(p.dc.Height()))
+		p.ink(&st, true, nil)
+		return
+	}
 }
 
 // painter is one picture being painted: where the points go, and what the

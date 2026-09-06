@@ -229,9 +229,12 @@ func hasFace(list []layout.Op, face string) bool {
 // model asked for one. graphviz writes a background op either way — white,
 // when nobody asked — so the answer is in the pixels, at the corner where
 // nothing else is ever drawn.
+//
+// Under any theme, which is why the theme that names no pad is here too:
+// there the canvas is 4pt wider than the polygon graphviz wrote the
+// background as, and the corner is the pixel that says so.
 func TestPixelBackgroundIsTheTerminalsUnlessSet(t *testing.T) {
-	th := mustTheme(t, theme.ClaudeDOT())
-	corner := func(src string) color.NRGBA {
+	corner := func(th *theme.Theme, src string) color.NRGBA {
 		t.Helper()
 		d, err := RenderThemed(t.Context(), th, src, 0, "")
 		if err != nil {
@@ -244,11 +247,13 @@ func TestPixelBackgroundIsTheTerminalsUnlessSet(t *testing.T) {
 		b := im.Bounds()
 		return color.NRGBAModel.Convert(im.At(b.Min.X, b.Min.Y)).(color.NRGBA)
 	}
-	if c := corner("digraph { a -> b }"); c.A != 0 {
-		t.Errorf("a graph that asked for no background stands on %v; want the terminal's own ground", c)
-	}
-	if c := (corner("digraph { bgcolor=white; a -> b }")); c != (color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}) {
-		t.Errorf("the model's white background came out %v", c)
+	for _, th := range []*theme.Theme{mustTheme(t, theme.ClaudeDOT()), mustTheme(t, "")} {
+		if c := corner(th, "digraph { a -> b }"); c.A != 0 {
+			t.Errorf("a graph that asked for no background stands on %v; want the terminal's own ground", c)
+		}
+		if c := (corner(th, "digraph { bgcolor=white; a -> b }")); c != (color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}) {
+			t.Errorf("the model's white background came out %v", c)
+		}
 	}
 }
 
