@@ -171,7 +171,7 @@ func (r run) sessionContext() string {
 	case rungPixels:
 		can = "as graphviz's own picture, so everything dot draws, draws"
 	case rungOctants, rungBraille:
-		can = "in strokes: clusters, node shapes, multi-line labels and dashed edges draw; record and HTML labels print their markup, and node colours are not painted"
+		can = "in strokes, painted in the colours the graph asks for: clusters, node shapes, multi-line labels and dashed edges draw; record and HTML labels print their markup, and a filled node draws its outline, not a block of paint"
 	default:
 		can = "in box-drawing characters: boxes with one-line labels and routed edges; clusters and node shapes do not draw"
 	}
