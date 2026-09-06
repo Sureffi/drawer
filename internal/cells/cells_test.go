@@ -1517,6 +1517,11 @@ func columns(rows []string) []string {
 // walls outside that. Not two cells, not none: this is the width every
 // column is measured from.
 func TestABoxIsItsLabelAndACellOfAirEachSide(t *testing.T) {
+	// One box to a column here, on purpose: a column comes out as wide as
+	// its widest box, so a box sharing a column with a longer one is wider
+	// than its own label — that is nodeBox's choice, stated there, and the
+	// second half of this law asks for it below. The air each side is what
+	// never varies.
 	for _, w := range []string{"a", "node", "a longer name", "日本語"} {
 		src := `digraph { rankdir=LR; "` + w + `" -> "tail" }` + "\n"
 		rows := plain(drawn(t, src, 200))
@@ -1539,6 +1544,27 @@ func TestABoxIsItsLabelAndACellOfAirEachSide(t *testing.T) {
 		}
 		if !seen {
 			t.Errorf("label %q never drew:\n%s", w, strings.Join(rows, "\n"))
+		}
+	}
+	// And in a column, every box in it comes out one width — the widest
+	// one's. A column of walls that line up reads as a column, and every
+	// extra cell of wall is a place for an edge to attach.
+	rows := plain(drawn(t, `digraph { rankdir=LR; a -> z; "a longer name" -> z }`+"\n", 200))
+	var tops []int
+	for _, r := range rows {
+		if i := strings.Index(r, "╭"); i >= 0 {
+			if j := strings.Index(r[i:], "╮"); j > 0 {
+				tops = append(tops, j)
+			}
+		}
+	}
+	if len(tops) < 2 {
+		t.Fatalf("want two boxes in one column:\n%s", strings.Join(rows, "\n"))
+	}
+	for _, n := range tops[1:] {
+		if n != tops[0] {
+			t.Errorf("boxes in one column came out %v cells wide, want one width:\n%s",
+				tops, strings.Join(rows, "\n"))
 		}
 	}
 }
