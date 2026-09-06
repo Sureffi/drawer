@@ -72,7 +72,7 @@ var ladder = []gaps{{0, 0}, {1, 1}, {2, 2}, {4, 3}, {8, 5}}
 // nodes it joined are not joined, and says it with the same confidence
 // as the rest of the picture; there is nothing on the page for a reader
 // to notice. The source under a notice is the honest answer, and it is
-// the same answer the other rungs give.
+// the same answer the pixels rung gives.
 func Draw(g *layout.Graph, width, maxRows int) []string {
 	if g == nil || len(g.Nodes) == 0 {
 		return nil

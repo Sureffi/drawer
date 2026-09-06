@@ -7,7 +7,7 @@
 // width — so a renderer reading it is drawing graphviz's picture rather
 // than a picture of its own.
 //
-// Two rungs read it: the strokes quantise it into sub-cell dots, the
+// Both rungs read it: the cells rung quantises it onto the grid, the
 // pixels rung paints it. So the types live here, beside the door that
 // makes them, and neither rung has to reach across for the other's.
 //

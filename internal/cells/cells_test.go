@@ -1455,7 +1455,7 @@ func TestTheDrawingIsItsOwnRowsAndNotTheWindows(t *testing.T) {
 
 // SIZE. A graph too wide for the window is turned rather than cut: the
 // same graph comes back down the page, inside the width. This is the
-// flip the stroke rungs make, made here.
+// flip the pixels rung makes, made here.
 func TestTooWideForTheWindowIsTurned(t *testing.T) {
 	const src = "digraph { rankdir=LR; alpha -> beta -> gamma -> delta -> epsilon }\n"
 	wide := plain(drawn(t, src, 200))

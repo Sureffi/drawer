@@ -42,7 +42,7 @@
 //
 // Where tmux will not answer — no client attached, no tmux on the PATH — the
 // answer is empty and TERM, tmux's own, stands. That names no terminal and
-// lands on the glyph rungs, which is the safe direction: a wrong pixel rung
+// lands on the glyph rung, which is the safe direction: a wrong pixel rung
 // is tofu, a wrong glyph rung is still a drawing.
 
 package term

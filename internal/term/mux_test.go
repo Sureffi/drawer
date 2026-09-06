@@ -117,7 +117,7 @@ func TestTmuxSocketIsTheFirstFieldOfTMUX(t *testing.T) {
 // inherited — a shell wrapper's shape — and without WaitDelay Wait reads
 // that pipe until the child is done, which measured on eefabb0 as 20 s for
 // a 2 s deadline. The name that comes back is TERM, tmux's own, which names
-// no terminal and lands on the glyph rungs: the safe direction.
+// no terminal and lands on the glyph rung: the safe direction.
 func TestATmuxHoldingThePipeIsNotAnAnswer(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "tmux"),
@@ -163,7 +163,7 @@ func wedgedTmux(t *testing.T) {
 // draws, and a name asked for on a clock of its own is time the drawing
 // does not get: 150 ms of context is 150 ms of tmux, and a context already
 // over asks nothing at all. TERM stands in both, which names no terminal
-// and lands on the glyph rungs — the safe direction.
+// and lands on the glyph rung — the safe direction.
 func TestTheNameIsAskedOnWhatTheCallerHasLeft(t *testing.T) {
 	wedgedTmux(t)
 	t.Setenv("TERM", "tmux-256color")

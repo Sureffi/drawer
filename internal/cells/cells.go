@@ -35,8 +35,7 @@ import (
 //
 // Black is not a colour: #000000 is what graphviz writes when nobody
 // said, so it stays the default pen — and the default pen draws
-// structure dim, as the stroke rungs have always drawn it. Structure
-// recedes, content stands.
+// structure dim. Structure recedes, content stands.
 //
 // Measured on the rig: a 24-bit foreground arrives exact outside a tmux
 // pane and snapped to the xterm-256 cube inside one, and a line one step

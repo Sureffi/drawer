@@ -177,7 +177,7 @@ func (r run) doctor(ctx context.Context, w io.Writer, cols int, from term.WidthF
 	}
 	fmt.Fprintln(w, "placeholders:", placeholders)
 	// The rung is what will be drawn, not what the terminal could show:
-	// drawBlock falls from pixels to the strokes where the picture cannot
+	// drawBlock falls from pixels to the glyphs where the picture cannot
 	// cross the wire, and the doctor falls with it.
 	if pick := r.pickRung(); pick == rungPixels && !r.mux.Through(ctx) {
 		fmt.Fprintf(w, "rung: %s (asked: %s; pixels, but the tmux wire is closed)\n", rungCells, r.rung)

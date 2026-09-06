@@ -1,8 +1,8 @@
 // label.go — an edge label sits on its line, and the line stops for it.
 //
 // graphviz places an edge label beside the midpoint of its edge, and the
-// picture reads as a caption near a line. The glyph rungs put the label on
-// the line and cut the stroke around it; so does this rung, by rewriting the
+// picture reads as a caption near a line. The glyph rung puts the label on
+// the line and cuts the line around it; so does this rung, by rewriting the
 // graph before layout: a labelled edge becomes two edges through a plain
 // node that carries the label. dot does the same inside itself for a
 // labelled edge — the label is a virtual node on the edge's rank chain — so

@@ -65,7 +65,7 @@ func TestACancelledContextIsAnErrorNotAWait(t *testing.T) {
 
 // A drawing answers for the things in it by name, and a name it does not
 // carry is nothing rather than the first thing it does carry: the pixels
-// rung walks it by name, the strokes read it the same way, and both would
+// rung walks it by name, the cells rung reads it the same way, and both would
 // otherwise draw the wrong object without a word. Its size comes off `bb`,
 // which every rung divides by, so a layout with no bounding box is an error
 // and not a zero-sized picture.

@@ -52,7 +52,7 @@ type Picture struct {
 // cut to whole columns so kitty scales nothing on the axis that has to
 // line up with text.
 //
-// Two layouts, as the glyph rungs try: as written, and top-down, because
+// Two layouts, as the glyph rung tries: as written, and top-down, because
 // rows scroll where columns run out. As written wins outright when it
 // fits at the cell's own type, and is the only layout made. Otherwise
 // each is squeezed into the width and the one that keeps more of its

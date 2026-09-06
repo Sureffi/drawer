@@ -932,7 +932,7 @@ func TestPixelLabelsHalveRanksepAsDotDoes(t *testing.T) {
 }
 
 // A picture wider than the window is laid out top-down as well, as the
-// glyph rungs do — rows scroll, columns run out — and the orientation that
+// glyph rung does — rows scroll, columns run out — and the orientation that
 // keeps more of its type is the picture: top-down when that fits at the
 // cell's own type and as written does not, top-down when both are squeezed
 // and it is squeezed less, and as written when top-down is too tall for
