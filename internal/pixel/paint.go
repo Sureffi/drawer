@@ -396,12 +396,12 @@ func (p *painter) strokeClosed(pts [][2]float64, w float64) {
 	q := make([][2]float64, 0, len(pts))
 	for _, pt := range pts {
 		v := [2]float64{p.x(pt[0]), p.y(pt[1])}
-		if n := len(q); n > 0 && same(q[n-1], v) {
+		if n := len(q); n > 0 && samePoint(q[n-1], v) {
 			continue
 		}
 		q = append(q, v)
 	}
-	for len(q) > 1 && same(q[0], q[len(q)-1]) {
+	for len(q) > 1 && samePoint(q[0], q[len(q)-1]) {
 		q = q[:len(q)-1]
 	}
 	if len(q) < 2 || w <= 0 {
@@ -487,8 +487,8 @@ func unit(x, y float64) (float64, float64, bool) {
 	return x / l, y / l, true
 }
 
-// same is two points a rasteriser could not tell apart.
-func same(a, b [2]float64) bool { return math.Hypot(a[0]-b[0], a[1]-b[1]) < 1e-9 }
+// samePoint is two points a rasteriser could not tell apart.
+func samePoint(a, b [2]float64) bool { return math.Hypot(a[0]-b[0], a[1]-b[1]) < 1e-9 }
 
 // polyline builds a run of points, and polygons close it afterwards.
 func (p *painter) polyline(pts [][2]float64) {
