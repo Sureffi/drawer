@@ -116,7 +116,7 @@ const budget = 300000
 // routeAll routes every edge onto the canvas and answers how much of the
 // graph did not arrive — the labels included, because a label that was not
 // drawn is an edge the reader cannot name.
-func routeAll(cv *Canvas, g *layout.Graph, sl slots, boxes []Box, t *terrain) int {
+func routeAll(cv *Canvas, g *layout.Graph, sl slots, boxes, frames []Box, encl [][]int, t *terrain) int {
 	order := make([]int, len(g.Edges))
 	for i := range order {
 		order[i] = i
@@ -159,10 +159,15 @@ func routeAll(cv *Canvas, g *layout.Graph, sl slots, boxes []Box, t *terrain) in
 		if e.Tail == e.Head {
 			tp, hp, ps = selfLoop(cv, t, pt, tb, e.Tail, hoops)
 		} else {
-			var ok bool
-			tp, ok = pt.claim(cv, t, tb, hb.X+hb.W/2, hb.Y+hb.H/2)
+			// A node inside a frame the other end is not inside cannot
+			// have the line come to it: a frame cuts a line in two. The
+			// edge stops outside the frame instead, with a corridor of
+			// blanks kept clear behind it, which is exactly what a reader
+			// walks when it looks for the box an end meant.
+			ok := true
+			tp, ok = reachOut(cv, t, pt, tb, frames, outside(encl[e.Tail], encl[e.Head]), hb.X+hb.W/2, hb.Y+hb.H/2)
 			if ok {
-				hp, ok = pt.claim(cv, t, hb, tb.X+tb.W/2, tb.Y+tb.H/2)
+				hp, ok = reachOut(cv, t, pt, hb, frames, outside(encl[e.Head], encl[e.Tail]), tb.X+tb.W/2, tb.Y+tb.H/2)
 			}
 			if ok {
 				ps = scoutEdge(cv, t, tp, hp, budget)
@@ -515,4 +520,93 @@ func clamp(v, lo, hi int) int {
 		return hi
 	}
 	return v
+}
+
+// outside is the frame an end has to get out of to reach the other end:
+// the outermost cluster round one that is not round the other. Nothing
+// where the two share every frame they are in.
+func outside(a, b []int) int {
+	in := map[int]bool{}
+	for _, c := range b {
+		in[c] = true
+	}
+	for _, c := range a {
+		if !in[c] {
+			return c
+		}
+	}
+	return -1
+}
+
+// reachOut claims a port, and where the edge has to leave a frame, claims
+// it outside that frame with a corridor of blanks behind it.
+//
+// The corridor is the reader's own rule turned into geometry: an end walks
+// straight outward across blanks and frames until it meets a box, and it
+// stops at the first thing it finds. So the run from the port to the wall
+// is kept empty and the reading is the one the drawing meant.
+func reachOut(cv *Canvas, t *terrain, pt *porter, b Box, frames []Box, fr, tx, ty int) (port, bool) {
+	if fr < 0 || fr >= len(frames) {
+		p, ok := pt.claim(cv, t, b, tx, ty)
+		return p, ok
+	}
+	f := frames[fr]
+	for _, side := range sideOrder(b, tx, ty) {
+		dx, dy := side.Step()
+		var end int
+		switch side {
+		case East:
+			end = f.X + f.W - 1
+		case West:
+			end = f.X
+		case South:
+			end = f.Y + f.H - 1
+		default:
+			end = f.Y
+		}
+		for _, c := range slotsOn(b, side, tx, ty) {
+			if pt.used[c] {
+				continue
+			}
+			var run []ipt
+			x, y := c.x, c.y
+			blocked := false
+			for {
+				if t.blocked(x, y) && !t.isRing(x, y) {
+					blocked = true
+					break
+				}
+				if !t.isRing(x, y) {
+					if cv.Held(x, y) || cv.MaskAt(x, y) != 0 || cv.Rune(x, y) != ' ' {
+						blocked = true
+						break
+					}
+					run = append(run, ipt{x, y})
+				}
+				if (dx != 0 && x == end) || (dy != 0 && y == end) {
+					break
+				}
+				x, y = x+dx, y+dy
+				if !cv.In(x, y) {
+					blocked = true
+					break
+				}
+			}
+			if blocked {
+				continue
+			}
+			px, py := x+dx, y+dy
+			if !cv.In(px, py) || t.blocked(px, py) || cv.Held(px, py) ||
+				cv.MaskAt(px, py) != 0 || cv.Rune(px, py) != ' ' {
+				continue
+			}
+			for _, p := range run {
+				cv.Hold(p.x, p.y, 1, 1)
+			}
+			pt.used[c] = true
+			pt.used[ipt{px, py}] = true
+			return port{px, py, side.Opposite()}, true
+		}
+	}
+	return port{}, false
 }

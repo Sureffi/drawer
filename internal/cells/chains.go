@@ -29,32 +29,34 @@ import (
 
 // ---------- chains ----------
 
-// links is the graph as the placer needs it: unique successors and
+// links is a graph as the placer needs it: unique successors and
 // predecessors, self-loops and repeats taken out, because a chain is about
 // shape and a second edge between the same pair is not a second shape.
+// What it is a graph *of* is not always the nodes — inside a cluster the
+// items are that cluster's own nodes and the clusters nested in it, and
+// the placer never has to know the difference.
 type links struct {
 	succ, pred [][]int
 }
 
-func linksOf(g *layout.Graph) links {
-	n := len(g.Nodes)
+func linksOver(n int, edges [][2]int) links {
 	l := links{succ: make([][]int, n), pred: make([][]int, n)}
 	seen := map[[2]int]bool{}
-	for _, e := range g.Edges {
-		if e.Tail == e.Head || seen[[2]int{e.Tail, e.Head}] {
+	for _, e := range edges {
+		if e[0] == e[1] || e[0] < 0 || e[1] < 0 || seen[e] {
 			continue
 		}
-		seen[[2]int{e.Tail, e.Head}] = true
-		l.succ[e.Tail] = append(l.succ[e.Tail], e.Head)
-		l.pred[e.Head] = append(l.pred[e.Head], e.Tail)
+		seen[e] = true
+		l.succ[e[0]] = append(l.succ[e[0]], e[1])
+		l.pred[e[1]] = append(l.pred[e[1]], e[0])
 	}
 	return l
 }
 
-// reach is the length of the longest run of nodes leading away from each
+// reach is the length of the longest run of items leading away from each
 // one. It is what decides which successor a chain follows: the branch with
 // the most left in it gets the straight line, and the short branches bend
-// off it. A cycle stops at the node it came back to.
+// off it. A cycle stops at the item it came back to.
 func reach(l links) []int {
 	n := len(l.succ)
 	out := make([]int, n)
@@ -83,12 +85,11 @@ func reach(l links) []int {
 	return out
 }
 
-// chainsOf cuts the graph into paths, longest first. Every node is in
+// chainsOf cuts a graph into paths, longest first. Every item is in
 // exactly one, which is what lets a chain own a lane.
-func chainsOf(g *layout.Graph, l links) [][]int {
-	n := len(g.Nodes)
+func chainsOf(n int, l links) [][]int {
 	r := reach(l)
-	// The order chains are started in: a node nothing points at first,
+	// The order chains are started in: an item nothing points at first,
 	// then the one with the most graph left in front of it.
 	order := make([]int, n)
 	for i := range order {
@@ -139,13 +140,13 @@ func chainsOf(g *layout.Graph, l links) [][]int {
 
 // ---------- placing ----------
 
-// spot is where a node stands on the slot grid: how far along the flow,
+// spot is where a thing stands on the slot grid: how far along the flow,
 // and which lane across it.
 type spot struct{ f, c int }
 
 // place lays the chains out, and the order it takes them in is the whole
 // of why the picture is tidy: the longest chain first, then — from its
-// last node back to its first — every chain hanging off it, recursively.
+// last item back to its first — every chain hanging off it, recursively.
 // A subtree is finished before the next one is started, so the lanes come
 // out in the order a reader would draw them and a tree crosses nowhere.
 //
@@ -153,11 +154,14 @@ type spot struct{ f, c int }
 // so it never has to be reached backwards, and takes the first free lane
 // at or past the lane the walk has got to. The lane only ever moves
 // forward, which is what keeps two subtrees from interleaving.
-func place(g *layout.Graph, l links, chains [][]int) []spot {
-	at := make([]spot, len(g.Nodes))
-	done := make([]bool, len(g.Nodes))
+//
+// An item is not always one slot: a cluster is laid out on its own grid
+// first and stands in this one as a rectangle the size of it.
+func place(n int, l links, chains [][]int, fw, cw []int) []spot {
+	at := make([]spot, n)
+	done := make([]bool, n)
 	used := map[spot]bool{}
-	chainOf := make([]int, len(g.Nodes))
+	chainOf := make([]int, n)
 	laid := make([]bool, len(chains))
 	for i, ch := range chains {
 		for _, v := range ch {
@@ -166,27 +170,45 @@ func place(g *layout.Graph, l links, chains [][]int) []spot {
 	}
 	cursor := 0
 	lay := func(chain []int) {
-		f0 := 0
-		lane := cursor
+		// Where along the flow the chain starts, and how far each of its
+		// items is from that start once the ones before it have taken
+		// their own depth.
+		off := make([]int, len(chain))
+		d := 0
+		for i, v := range chain {
+			off[i] = d
+			d += fw[v]
+		}
+		f0, lane := 0, cursor
 		for i, v := range chain {
 			for _, p := range l.pred[v] {
 				if !done[p] {
 					continue
 				}
-				if at[p].f+1-i > f0 {
-					f0 = at[p].f + 1 - i
+				if at[p].f+fw[p]-off[i] > f0 {
+					f0 = at[p].f + fw[p] - off[i]
 				}
 				if i == 0 && at[p].c > lane {
 					lane = at[p].c
 				}
 			}
 		}
+		wide := 0
+		for _, v := range chain {
+			if cw[v] > wide {
+				wide = cw[v]
+			}
+		}
 		for {
 			free := true
-			for i := range chain {
-				if used[spot{f0 + i, lane}] {
-					free = false
-					break
+			for i, v := range chain {
+				for a := 0; a < fw[v] && free; a++ {
+					for b := 0; b < wide; b++ {
+						if used[spot{f0 + off[i] + a, lane + b}] {
+							free = false
+							break
+						}
+					}
 				}
 			}
 			if free {
@@ -195,11 +217,15 @@ func place(g *layout.Graph, l links, chains [][]int) []spot {
 			lane++
 		}
 		for i, v := range chain {
-			at[v] = spot{f0 + i, lane}
-			used[at[v]] = true
+			at[v] = spot{f0 + off[i], lane}
 			done[v] = true
+			for a := 0; a < fw[v]; a++ {
+				for b := 0; b < cw[v]; b++ {
+					used[spot{at[v].f + a, at[v].c + b}] = true
+				}
+			}
 		}
-		cursor = lane + 1
+		cursor = lane + wide
 	}
 	var walk func(int)
 	walk = func(ci int) {
@@ -224,10 +250,97 @@ func place(g *layout.Graph, l links, chains [][]int) []spot {
 	return at
 }
 
+// ---------- clusters ----------
+
+// tree is the source's clusters as a family: who is inside whom, and what
+// stands directly in each. The graph itself is the root, numbered -1.
+type tree struct {
+	kids  map[int][]int // cluster -> the clusters directly inside it
+	own   map[int][]int // cluster -> the nodes directly inside it
+	owner []int         // node -> the item it belongs to at its parent's level
+}
+
+func treeOf(g *layout.Graph) tree {
+	t := tree{kids: map[int][]int{}, own: map[int][]int{}}
+	for i := range g.Clusters {
+		t.kids[g.Clusters[i].Parent] = append(t.kids[g.Clusters[i].Parent], i)
+	}
+	for i, n := range g.Nodes {
+		t.own[n.Cluster] = append(t.own[n.Cluster], i)
+	}
+	return t
+}
+
+// blockAt lays out everything under one cluster on a grid of its own: the
+// nodes standing directly in it, and the clusters nested in it, each laid
+// out first and standing here as one rectangle. The answer is where every
+// node under it ended up, relative to the block's own corner, and how big
+// the block came out.
+//
+// A cluster is a rectangle of slots, so nothing that is not a member can
+// land inside one — which is the whole of what a frame has to promise.
+func blockAt(g *layout.Graph, t tree, c int) (map[int]spot, int, int) {
+	nodes := t.own[c]
+	kids := t.kids[c]
+	// items: the nodes first, then the child clusters.
+	inner := make([]map[int]spot, len(kids))
+	fw := make([]int, len(nodes)+len(kids))
+	cw := make([]int, len(nodes)+len(kids))
+	item := map[int]int{} // node -> item index at this level
+	for i, v := range nodes {
+		fw[i], cw[i] = 1, 1
+		item[v] = i
+	}
+	for j, k := range kids {
+		var w, h int
+		inner[j], w, h = blockAt(g, t, k)
+		fw[len(nodes)+j], cw[len(nodes)+j] = w, h
+		for v := range inner[j] {
+			item[v] = len(nodes) + j
+		}
+	}
+	n := len(fw)
+	if n == 0 {
+		return map[int]spot{}, 0, 0
+	}
+	var edges [][2]int
+	for _, e := range g.Edges {
+		a, aok := item[e.Tail]
+		b, bok := item[e.Head]
+		if !aok || !bok {
+			continue
+		}
+		edges = append(edges, [2]int{a, b})
+	}
+	l := linksOver(n, edges)
+	at := place(n, l, chainsOf(n, l), fw, cw)
+	out := make(map[int]spot, len(item))
+	for i, v := range nodes {
+		out[v] = at[i]
+	}
+	for j := range kids {
+		base := at[len(nodes)+j]
+		for v, s := range inner[j] {
+			out[v] = spot{base.f + s.f, base.c + s.c}
+		}
+	}
+	var maxF, maxC int
+	for i := 0; i < n; i++ {
+		if at[i].f+fw[i] > maxF {
+			maxF = at[i].f + fw[i]
+		}
+		if at[i].c+cw[i] > maxC {
+			maxC = at[i].c + cw[i]
+		}
+	}
+	return out, maxF, maxC
+}
+
 // compact drops the flow columns and lanes nobody stands in, and moves the
 // grid to the origin. Placing leaves holes — a chain that had to start far
 // along the flow leaves everything before it empty — and a hole is a column
-// of blank cells in the finished drawing.
+// of blank cells in the finished drawing. Renumbering keeps the order, so
+// a cluster's members stay the block they were placed as.
 func compact(at []spot) {
 	renumber := func(get func(*spot) *int) {
 		seen := map[int]bool{}
@@ -342,8 +455,11 @@ func Draw(g *layout.Graph, width, maxRows int) []string {
 	for _, flip := range orientations(g) {
 		h := *g
 		h.Horiz, h.Reverse = flip.horiz, flip.reverse
-		l := linksOf(&h)
-		at := place(&h, l, chainsOf(&h, l))
+		spots, _, _ := blockAt(&h, treeOf(&h), -1)
+		at := make([]spot, len(h.Nodes))
+		for i := range at {
+			at[i] = spots[i]
+		}
 		compact(at)
 		sl := orient(&h, at)
 		for _, extra := range ladder {
@@ -395,7 +511,8 @@ func attempt(g *layout.Graph, sl slots, extra gaps, width, maxRows int) ([]strin
 			rowH[sl.row[i]] = bh[i]
 		}
 	}
-	gapX, gapY := spacing(g, sl, extra)
+	bs := bounds(g, sl)
+	gapX, gapY := spacing(g, sl, extra, bs)
 	xs := make([]int, sl.nCol)
 	x := 0
 	for i := range colW {
@@ -417,6 +534,12 @@ func attempt(g *layout.Graph, sl slots, extra gaps, width, maxRows int) ([]strin
 	}
 
 	cv := New(total, deep)
+	frames := frameRects(g, bs, xs, ys, colW, rowH)
+	for i := range frames {
+		if bs[i].ok {
+			drawFrame(cv, frames[i])
+		}
+	}
 	boxes := make([]Box, len(g.Nodes))
 	for i := range g.Nodes {
 		boxes[i] = nodeBox(g.Nodes[i], xs[sl.col[i]], ys[sl.row[i]], colW[sl.col[i]], rowH[sl.row[i]])
@@ -425,14 +548,19 @@ func attempt(g *layout.Graph, sl slots, extra gaps, width, maxRows int) ([]strin
 		drawNode(cv, boxes[i], g.Nodes[i])
 	}
 	t := newTerrain(total, deep, boxes)
-	short := routeAll(cv, g, sl, boxes, t)
+	for i := range frames {
+		if bs[i].ok {
+			t.ring(frames[i])
+		}
+	}
+	short := routeAll(cv, g, sl, boxes, frames, enclosing(g), t)
 	return trimLeft(cv.Rows()), short
 }
 
 // spacing is the air between the slots: a base along each axis, whatever
 // the ladder is paying on top of it, and room in the gap for the widest
 // label that has to ride through it.
-func spacing(g *layout.Graph, sl slots, extra gaps) ([]int, []int) {
+func spacing(g *layout.Graph, sl slots, extra gaps, bs []bound) ([]int, []int) {
 	flow, cross := 3, 4 // top-down: ranks stack in rows, lanes spread in columns
 	if sl.horiz {
 		flow, cross = 6, 2 // left-right: ranks march in columns, lanes stack in rows
@@ -477,6 +605,40 @@ func spacing(g *layout.Graph, sl slots, extra gaps) ([]int, []int) {
 		c := sl.col[e.Tail] + 1
 		if c < len(gapX) && gapX[c] < n+4 {
 			gapX[c] = n + 4
+		}
+	}
+	// A frame needs room outside the boxes it holds, and so does whatever
+	// stands beside it: the gap between two slots carries every frame that
+	// ends on one side of it and every frame that starts on the other.
+	need := func(g []int, i, n int) {
+		if n > g[i] {
+			g[i] = n
+		}
+	}
+	for _, b := range bs {
+		if !b.ok {
+			continue
+		}
+		need(gapX, b.col0, 2*b.left+1)
+		need(gapX, b.col1+1, 2*b.right+1)
+		need(gapY, b.row0, 2*b.top+1)
+		need(gapY, b.row1+1, 2*b.bottom+1)
+	}
+	// Two frames back to back need both their rings and a cell between.
+	for i := range bs {
+		if !bs[i].ok {
+			continue
+		}
+		for j := range bs {
+			if i == j || !bs[j].ok {
+				continue
+			}
+			if bs[i].col1+1 == bs[j].col0 {
+				need(gapX, bs[j].col0, 2*bs[i].right+2*bs[j].left+1)
+			}
+			if bs[i].row1+1 == bs[j].row0 {
+				need(gapY, bs[j].row0, 2*bs[i].bottom+2*bs[j].top+1)
+			}
 		}
 	}
 	return gapX, gapY
@@ -566,4 +728,129 @@ func trimLeft(rows []string) []string {
 		out[i] = b.String()
 	}
 	return out
+}
+
+// ---------- frames ----------
+
+// bound is one cluster's rectangle on the slot grid, and how many frames
+// have to fit between it and whatever is outside it on each side. A
+// cluster's frame stands two cells clear of its contents — one for air,
+// one for the line — and a cluster inside another needs that room twice.
+type bound struct {
+	col0, row0, col1, row1   int
+	left, right, top, bottom int
+	ok                       bool
+}
+
+// bounds is where every cluster's frame goes, in slots. Placing put each
+// cluster's members in a rectangle of their own, so this is only the
+// reading of it — and the depth counts, which come from the outside in.
+func bounds(g *layout.Graph, sl slots) []bound {
+	out := make([]bound, len(g.Clusters))
+	for i, c := range g.Clusters {
+		b := bound{col0: 1 << 30, row0: 1 << 30, col1: -1, row1: -1}
+		for _, v := range c.Members {
+			b.col0, b.col1 = min(b.col0, sl.col[v]), max(b.col1, sl.col[v])
+			b.row0, b.row1 = min(b.row0, sl.row[v]), max(b.row1, sl.row[v])
+			b.ok = true
+		}
+		b.left, b.right, b.top, b.bottom = 1, 1, 1, 1
+		out[i] = b
+	}
+	// A cluster's frame stands outside its children's, so a side shared
+	// with a child is one ring further out. The list is written parents
+	// first, so counting backwards counts from the inside.
+	for i := len(out) - 1; i >= 0; i-- {
+		p := g.Clusters[i].Parent
+		if p < 0 || !out[i].ok || !out[p].ok {
+			continue
+		}
+		if out[p].col0 == out[i].col0 {
+			out[p].left = max(out[p].left, out[i].left+1)
+		}
+		if out[p].col1 == out[i].col1 {
+			out[p].right = max(out[p].right, out[i].right+1)
+		}
+		if out[p].row0 == out[i].row0 {
+			out[p].top = max(out[p].top, out[i].top+1)
+		}
+		if out[p].row1 == out[i].row1 {
+			out[p].bottom = max(out[p].bottom, out[i].bottom+1)
+		}
+	}
+	return out
+}
+
+// frameRects turns the slot bounds into the rectangles the frames are
+// drawn as, once the columns and rows have their real sizes.
+func frameRects(g *layout.Graph, bs []bound, xs, ys, colW, rowH []int) []Box {
+	out := make([]Box, len(bs))
+	for i, b := range bs {
+		if !b.ok {
+			continue
+		}
+		x0 := xs[b.col0] - 2*b.left
+		y0 := ys[b.row0] - 2*b.top
+		x1 := xs[b.col1] + colW[b.col1] - 1 + 2*b.right
+		y1 := ys[b.row1] + rowH[b.row1] - 1 + 2*b.bottom
+		c := g.Clusters[i]
+		out[i] = Box{X: x0, Y: y0, W: x1 - x0 + 1, H: y1 - y0 + 1,
+			Pencil: Pencil{Style: styleOf(c.Style, 0), Pen: ParsePen(c.Pen)},
+			Ink:    ParsePen(c.FontPen), Title: c.Label}
+	}
+	return out
+}
+
+// drawFrame lays a cluster's frame: four walls, and its name set into the
+// top edge where there is room for it and on the air row under the edge
+// where there is not. Only the ring is spoken for — everything inside a
+// frame belongs to what the frame is round.
+func drawFrame(cv *Canvas, b Box) {
+	x1, y1 := b.X+b.W-1, b.Y+b.H-1
+	cv.Stroke(b.X, b.Y, x1, b.Y, b.Pencil)
+	cv.Stroke(b.X, y1, x1, y1, b.Pencil)
+	cv.Stroke(b.X, b.Y, b.X, y1, b.Pencil)
+	cv.Stroke(x1, b.Y, x1, y1, b.Pencil)
+	if n := grid.Cells(b.Title); n > 0 {
+		// A name may be set into the edge only while enough edge is left
+		// to read as an edge; past that it stands on the air row inside,
+		// which is where graph-easy puts one and where a reader looks
+		// for it second.
+		if 2*(b.W-2) >= 3*(n+2) && b.W >= n+6 {
+			cv.Blank(b.X+2, b.Y, n+2)
+			cv.Text(b.X+3, b.Y, b.Title, b.Ink)
+		} else if b.W > n+2 {
+			cv.Text(b.X+2, b.Y+1, b.Title, b.Ink)
+			cv.Hold(b.X+2, b.Y+1, n, 1)
+		}
+	}
+	cv.Hold(b.X, b.Y, b.W, 1)
+	cv.Hold(b.X, y1, b.W, 1)
+	cv.Hold(b.X, b.Y, 1, b.H)
+	cv.Hold(x1, b.Y, 1, b.H)
+}
+
+// enclosing is the clusters round each node, outermost first.
+func enclosing(g *layout.Graph) [][]int {
+	out := make([][]int, len(g.Nodes))
+	for i, n := range g.Nodes {
+		for c := n.Cluster; c >= 0; c = g.Clusters[c].Parent {
+			out[i] = append([]int{c}, out[i]...)
+		}
+	}
+	return out
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

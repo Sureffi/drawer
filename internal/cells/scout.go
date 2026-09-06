@@ -41,6 +41,7 @@ type ipt struct{ x, y int }
 type terrain struct {
 	w, h    int
 	solid   []bool // inside a box: a line there is a hole in a wall
+	ringm   []bool // a cluster frame's own line
 	rowWall []bool // a row that is some box's top or bottom edge
 	colWall []bool // a column that is some box's left or right edge
 }
@@ -48,6 +49,7 @@ type terrain struct {
 func newTerrain(w, h int, boxes []Box) *terrain {
 	t := &terrain{w: w, h: h,
 		solid:   make([]bool, w*h),
+		ringm:   make([]bool, w*h),
 		rowWall: make([]bool, h),
 		colWall: make([]bool, w),
 	}
@@ -73,16 +75,44 @@ func newTerrain(w, h int, boxes []Box) *terrain {
 	return t
 }
 
-// open carves a hole in the solid: a cluster's frame is a box the drawing
-// needs, and the cells its own members stand in are not walls.
-func (t *terrain) open(b Box) {
-	for y := b.Y; y < b.Y+b.H; y++ {
-		for x := b.X; x < b.X+b.W; x++ {
-			if x >= 0 && y >= 0 && x < t.w && y < t.h {
-				t.solid[y*t.w+x] = false
-			}
+// ring walls off a cluster's frame and nothing else. A line may not cross
+// a frame — a reader takes a line stopped at a border as a line that ended
+// there, so an edge drawn through one is an edge cut in half — and
+// everything inside the frame is exactly what the frame is round.
+func (t *terrain) ring(b Box) {
+	mark := func(x, y int) {
+		if x >= 0 && y >= 0 && x < t.w && y < t.h {
+			t.solid[y*t.w+x] = true
+			t.ringm[y*t.w+x] = true
 		}
 	}
+	for x := b.X; x < b.X+b.W; x++ {
+		mark(x, b.Y)
+		mark(x, b.Y+b.H-1)
+	}
+	for y := b.Y; y < b.Y+b.H; y++ {
+		mark(b.X, y)
+		mark(b.X+b.W-1, y)
+	}
+	if b.Y >= 0 && b.Y < t.h {
+		t.rowWall[b.Y] = true
+	}
+	if b.Y+b.H-1 >= 0 && b.Y+b.H-1 < t.h {
+		t.rowWall[b.Y+b.H-1] = true
+	}
+	if b.X >= 0 && b.X < t.w {
+		t.colWall[b.X] = true
+	}
+	if b.X+b.W-1 >= 0 && b.X+b.W-1 < t.w {
+		t.colWall[b.X+b.W-1] = true
+	}
+}
+
+// isRing says whether a cell is some frame's own line. A reader walks a
+// line's end outward across blanks and frames alike, so a corridor kept
+// clear for one may pass through a frame and still be read.
+func (t *terrain) isRing(x, y int) bool {
+	return x >= 0 && y >= 0 && x < t.w && y < t.h && t.ringm[y*t.w+x]
 }
 
 func (t *terrain) blocked(x, y int) bool {
