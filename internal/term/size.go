@@ -87,10 +87,10 @@ func Size() (cols int, g Geom, from WidthFrom) {
 // there is a /proc and says the same thing.
 //
 // Under tmux TERM is tmux's own and names no terminal at all, so the answer
-// is the terminal behind it, read from the mark that terminal left in the
-// environment — mux.go says which marks, how they were measured, and what
-// they cannot answer. The name that comes back is that terminal's own TERM,
-// so everything downstream reads one kind of name and no rung has to know
+// is the terminal behind it — asked of tmux, which knows which client is
+// attached to this pane; mux.go says how, and why a mark in the environment
+// is not that. The name that comes back is that client's own TERM, so
+// everything downstream reads one kind of name and no rung has to know
 // there was a multiplexer.
 func Name() string {
 	if Tmux() {
