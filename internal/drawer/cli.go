@@ -111,6 +111,13 @@ func (r run) muxLine(ctx context.Context) string {
 	if r.mux == nil {
 		return "no"
 	}
+	if r.mux.Pane == "" {
+		// Nothing is asked and nothing is written: a pane nobody named is a
+		// pane this binary will not set an option on, so the answer is the
+		// same one the hook would reach without running tmux at all.
+		return "yes, and TMUX_PANE names no pane: nothing can be asked or set here" +
+			" — no picture can cross this wire"
+	}
 	pane := "pane " + r.mux.Pane
 	was, err := r.mux.Passthrough(ctx)
 	switch {

@@ -21,6 +21,7 @@ package pixel
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"strings"
 	"time"
@@ -44,6 +45,16 @@ type Tmux struct {
 	was   string // what it said
 	err   error  // or why it could not be asked at all
 }
+
+// errNoPane is a tmux this process cannot name a pane in. TMUX_PANE is set
+// in every pane tmux owns, but a shell that inherited TMUX and not it — a
+// tmux run from a script, a login shell started by hand inside one — leaves
+// TMUX set and the pane unknown. Measured: `tmux set -p -t "" allow-passthrough
+// on` does not fail there, it lands on whatever pane tmux happens to pick,
+// and it picked one in another session. So an unnamed pane is an error and
+// not an empty answer: this is somebody else's tmux, and the one write
+// drawer makes in it goes to the pane claude is in or to no pane at all.
+var errNoPane = errors.New("TMUX_PANE names no pane to ask about")
 
 // Multiplexer is the tmux this process is under, or nil.
 func Multiplexer() *Tmux {
@@ -95,8 +106,13 @@ func (t *Tmux) Passthrough(ctx context.Context) (string, error) {
 		return "", nil
 	}
 	if !t.asked {
-		out, err := t.run(ctx, "show", "-p", "-t", t.Pane, "-A", "-v", "allow-passthrough")
-		t.was, t.err, t.asked = strings.TrimSpace(out), err, true
+		t.asked = true
+		if t.Pane == "" {
+			t.err = errNoPane
+		} else {
+			out, err := t.run(ctx, "show", "-p", "-t", t.Pane, "-A", "-v", "allow-passthrough")
+			t.was, t.err = strings.TrimSpace(out), err
+		}
 	}
 	return t.was, t.err
 }
@@ -123,7 +139,7 @@ func (t *Tmux) Allow(ctx context.Context) (string, bool) {
 	if t == nil {
 		return "", true
 	}
-	pane := " for pane " + t.Pane
+	pane := t.paneIn()
 	was, err := t.Passthrough(ctx)
 	if err != nil {
 		// A tmux nobody could ask is a wire nobody can post a picture
@@ -146,6 +162,15 @@ func (t *Tmux) Allow(ctx context.Context) (string, bool) {
 		" (this pane only, until it closes)", true
 }
 
+// paneIn names the pane a note is about, and says so where there is none to
+// name.
+func (t *Tmux) paneIn() string {
+	if t.Pane == "" {
+		return " for a pane TMUX_PANE did not name"
+	}
+	return " for pane " + t.Pane
+}
+
 // quoted names a value a reader has to be able to tell from nothing at all.
 func quoted(v string) string {
 	if v == "" {
@@ -166,6 +191,9 @@ func reason(out string, err error) string {
 // allow is the one write this package makes to anything but a tty: what
 // tmux said about it, and the error where it could not be told at all.
 func (t *Tmux) allow(ctx context.Context) (string, error) {
+	if t.Pane == "" {
+		return "", errNoPane
+	}
 	out, err := t.run(ctx, "set", "-p", "-t", t.Pane, "allow-passthrough", "on")
 	return strings.TrimSpace(out), err
 }

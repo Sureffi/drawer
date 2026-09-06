@@ -236,3 +236,30 @@ func TestTheDoctorReadsTheSameMemory(t *testing.T) {
 		t.Errorf("tmux was run %v; want one show", got)
 	}
 }
+
+// TMUX set and TMUX_PANE unset is a tmux this process cannot name a pane
+// in, and the option it would otherwise write is pane-scoped. Measured:
+// `tmux set -p -t "" allow-passthrough on` does not fail — it lands on
+// whatever pane tmux picks, and it picked one in another session, which is
+// drawer writing a setting into a window nobody here is looking at.
+//
+// So it is a closed wire: nothing is asked, nothing is set, the note says
+// which pane it was about, and the rung above falls to the glyphs.
+func TestAnUnnamedPaneIsNotAPaneToWriteTo(t *testing.T) {
+	log := countingTmux(t)
+	mux := &Tmux{Socket: "/nowhere", Pane: ""}
+	note, through := mux.Allow(t.Context())
+	if through {
+		t.Errorf("a tmux with no pane to name was read as a wire a picture can cross")
+	}
+	if !strings.Contains(note, "TMUX_PANE") {
+		t.Errorf("the note does not say what was missing: %q", note)
+	}
+	if got := asked(t, log); got != nil {
+		t.Errorf("tmux was run %v; want nothing run at all", got)
+	}
+	// the escape is still wrapped: the passthrough is a shape, not a pane
+	if got := mux.wrap("\x1bX"); got != "\x1bPtmux;\x1b\x1bX\x1b\\" {
+		t.Errorf("wrap needs a pane it does not have: %q", got)
+	}
+}
