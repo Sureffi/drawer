@@ -636,7 +636,7 @@ func Draw(l *layout.Plain, w, h int) []string {
 	for i := range order {
 		order[i] = i
 	}
-	cost := func(e layout.Edge) (int, int) {
+	cost := func(e layout.Spline) (int, int) {
 		a, aok := byName[e.Tail]
 		b, bok := byName[e.Head]
 		if !aok || !bok {
@@ -657,7 +657,7 @@ func Draw(l *layout.Plain, w, h int) []string {
 		return la < lb
 	})
 
-	var floated []*layout.Edge // labels that found no straight run to ride
+	var floated []*layout.Spline // labels that found no straight run to ride
 	for _, ei := range order {
 		e := &l.Edges[ei]
 		if e.Tail != "" && e.Tail == e.Head {

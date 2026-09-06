@@ -85,9 +85,9 @@ type Node struct {
 	Label string
 }
 
-// Edge is an edge as graphviz routed it: its two ends, the spline as a
+// Spline is an edge as graphviz routed it: its two ends, the curve as a
 // list of points, and where the label goes when it carries one.
-type Edge struct {
+type Spline struct {
 	Tail, Head string
 	Pts        [][2]float64
 	Label      string
@@ -101,7 +101,7 @@ type Edge struct {
 type Plain struct {
 	W, H  float64
 	Nodes []Node
-	Edges []Edge
+	Edges []Spline
 	// horiz is the axis the ranks run along, read from the rankdir the
 	// layout was made with. It used to be re-derived from where the nodes
 	// landed, and a top-down tree wider than it was tall read as
@@ -249,7 +249,7 @@ func parsePlain(s string) *Plain {
 				continue
 			}
 			n, _ := strconv.Atoi(f[3])
-			e := Edge{Tail: f[1], Head: f[2]}
+			e := Spline{Tail: f[1], Head: f[2]}
 			i := 4
 			for k := 0; k < n && i+1 < len(f); k++ {
 				e.Pts = append(e.Pts, [2]float64{Atof(f[i]), Atof(f[i+1])})
