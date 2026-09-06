@@ -220,6 +220,30 @@ func asked(t *testing.T, log string) []string {
 	return strings.Fields(string(b))
 }
 
+// captured stands a file where os.Stdout was and hands back what was
+// written to it. These doors print by name to os.Stdout, and a law that let
+// them would put a theme and a context line into go test's own output —
+// which is a law shouting over the report it is part of.
+func captured(t *testing.T) func() string {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "stdout-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	was := os.Stdout
+	os.Stdout = f
+	t.Cleanup(func() { os.Stdout = was })
+	return func() string {
+		os.Stdout = was
+		f.Close()
+		b, err := os.ReadFile(f.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+}
+
 // -version and -show-theme need neither the terminal nor the multiplexer:
 // one prints a linker variable and the other prints a theme. Building the
 // run asks tmux which terminal is behind this pane, and that is a fork and
@@ -230,6 +254,9 @@ func asked(t *testing.T, log string) []string {
 // The boundary is the point, so a door that does need the terminal stands
 // beside them: -context reads the rung it is describing, so it builds the
 // run and asks.
+//
+// This is also the one law that goes in through Main, so the ordering it
+// asserts is the ordering the binary has and not one a caller arranged.
 func TestTheDoorsThatNeedNoTerminalRunNoTmux(t *testing.T) {
 	for _, c := range []struct {
 		door string
@@ -247,8 +274,14 @@ func TestTheDoorsThatNeedNoTerminalRunNoTmux(t *testing.T) {
 		t.Setenv("DRAWER_THEME", "")
 		t.Setenv("DRAWER_TEE", "")
 		t.Setenv("DRAWER_RENDER", "")
-		if code := Main([]string{c.door}); code != 0 {
+		out := captured(t)
+		code := Main([]string{c.door})
+		said := out()
+		if code != 0 {
 			t.Errorf("%s exited %d", c.door, code)
+		}
+		if said == "" {
+			t.Errorf("%s printed nothing", c.door)
 		}
 		if got := asked(t, log); len(got) != c.runs {
 			t.Errorf("%s ran tmux %v; want %d times", c.door, got, c.runs)

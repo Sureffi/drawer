@@ -4,10 +4,15 @@
 // arguments and makes its answer the exit status, so every door below can
 // be reached from a law as readily as from a shell.
 //
-// Main itself has no law of its own: the flag set is named from os.Args[0]
-// and exits on a bad flag, so -h prints what it always printed and a law
-// that called it would take the test binary down with it. Every door below
-// it stands on its own, and that is where the laws are.
+// The doors that print a string are called through Main in a law:
+// cli_test.go stands -version, -show-theme and -context up that way and
+// reads what came out, which is how the ordering below — the two doors that
+// answer before there is a run to answer from — is held rather than
+// described. The doors that cannot be called that way are the ones the flag
+// set ends: it is named from os.Args[0] and parses with ExitOnError, so -h
+// and a flag nobody recognises exit the process themselves, and a law that
+// asked for either would take the test binary down with it. Every door
+// stands on its own besides, and that is where the rest of the laws are.
 
 package drawer
 
