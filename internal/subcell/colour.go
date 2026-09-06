@@ -23,7 +23,10 @@
 // before this file chose a form. Outside tmux a 24-bit foreground arrives
 // exactly; inside tmux CC snaps it to the xterm-256 cube itself, which is
 // the same picture one step coarser. So 24-bit is emitted, and where the
-// wire quantises the quantiser is downstream of here.
+// wire quantises the quantiser is downstream of here. That reading is CC
+// 2.1.261, and the pixels rung's image id still rides in a 256-colour
+// foreground on purpose: pixel/cut.go carries the older reading and says
+// why an id may not spend the step a stroke can.
 
 package subcell
 
