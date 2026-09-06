@@ -371,6 +371,81 @@ func TestPixelAMissingGlyphIsSetAsOne(t *testing.T) {
 	}
 }
 
+// A pen with alpha 00 strokes nothing. That is how graphviz says "no pen":
+// `transparent` arrives resolved as #fffffe00, on a shape it still asks to
+// be filled and stroked, so a transparent outline is a shape that is filled
+// and not outlined.
+func TestPixelAnAlphaZeroPenStrokesNothing(t *testing.T) {
+	th := mustTheme(t, "")
+	src := `digraph { a [shape=box, style=filled, fillcolor="#00ff00", color=transparent, penwidth=4, label=""] }`
+	d, err := RenderThemed(t.Context(), th, src, 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	im, err := paint(t.Context(), d, th.Face(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := func(x, y int) color.NRGBA {
+		return color.NRGBAModel.Convert(im.At(x, y)).(color.NRGBA)
+	}
+	// The box is the whole drawing, so its outline runs one pad down from
+	// the top, and a 4pt pen would reach 2pt of it either side.
+	b := im.Bounds()
+	top := int(math.Round(svgPad * pxPerPt))
+	if out := at(b.Dx()/2, top-2); out.A != 0 {
+		t.Errorf("a transparent pen laid %v outside the shape", out)
+	}
+	if in := at(b.Dx()/2, top+2); in != (color.NRGBA{G: 0xff, A: 0xff}) {
+		t.Errorf("the inside of a shape with a transparent pen is %v, want the fill", in)
+	}
+}
+
+// A dashed stroke is 5 points on and 2 off and a dotted one 1 on and 5 off,
+// which is what graphviz's own SVG writer asked cairo for: a dashed edge is
+// dashed the way it was drawn before, and a dotted one is dots and not a
+// second kind of dash.
+func TestPixelDashesAreTheOnesGraphvizAsksFor(t *testing.T) {
+	for _, c := range []struct {
+		style string
+		want  []float64
+	}{
+		{"dashed", []float64{5, 2}},
+		{"dotted", []float64{1, 5}},
+		{"solid", nil},
+	} {
+		st := pen{dash: []float64{9, 9}}
+		st.style(c.style)
+		if !slices.Equal(st.dash, c.want) {
+			t.Errorf("%s strokes %v, want %v", c.style, st.dash, c.want)
+		}
+	}
+}
+
+// A fill graphviz hands over as a gradient is painted as one: a node filled
+// "yellow:green" runs yellow at one end and green at the other, and not
+// flat at the first stop.
+func TestPixelAGradientFillIsPaintedAsAGradient(t *testing.T) {
+	th := mustTheme(t, "")
+	src := `digraph { a [shape=box, style=filled, fillcolor="yellow:green", label=""] }`
+	d, err := RenderThemed(t.Context(), th, src, 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	im, err := paint(t.Context(), d, th.Face(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := im.Bounds()
+	at := func(x int) color.NRGBA {
+		return color.NRGBAModel.Convert(im.At(x, b.Dy()/2)).(color.NRGBA)
+	}
+	left, right := at(b.Dx()/4), at(b.Dx()*3/4)
+	if !(left.R > right.R && right.G >= left.G) {
+		t.Errorf("a yellow:green fill runs %v to %v; want yellow at one end and green at the other", left, right)
+	}
+}
+
 // The picture stands on graphviz's own canvas: the bounding box, plus the
 // air the graph asked for with `pad`, and where it asked for none the 4pt
 // its SVG writer would have added — a stroke on the boundary would
