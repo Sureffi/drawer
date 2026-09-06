@@ -63,7 +63,7 @@ func TestSendWrapsTheEscapeOnlyForTmux(t *testing.T) {
 		if err := os.WriteFile(tty, nil, 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if !Send(tty, []byte("not really a png"), 0x0100_0042, 12, 3, mux) {
+		if !Send(t.Context(), tty, []byte("not really a png"), 0x0100_0042, 12, 3, mux) {
 			t.Fatal("Send would not write")
 		}
 		b, err := os.ReadFile(tty)
@@ -92,10 +92,10 @@ func TestNoMultiplexerIsNothingToDo(t *testing.T) {
 	if got := none.wrap("\x1bX"); got != "\x1bX" {
 		t.Errorf("wrap changed an escape with no tmux: %q", got)
 	}
-	if note, through := none.Allow(); note != "" || !through {
+	if note, through := none.Allow(t.Context()); note != "" || !through {
 		t.Errorf("Allow with no tmux said %q, through=%v; want nothing in the way", note, through)
 	}
-	if got, err := none.Passthrough(); got != "" || err != nil {
+	if got, err := none.Passthrough(t.Context()); got != "" || err != nil {
 		t.Errorf("Passthrough answered with no tmux: %q, %v", got, err)
 	}
 }
@@ -117,7 +117,7 @@ func TestAllowSaysSoWhenTheWireIsClosed(t *testing.T) {
 		{"no tmux on the PATH at all", ""},
 	} {
 		t.Setenv("PATH", c.path)
-		note, through := (&Tmux{Socket: "/nowhere/tmux-does-not-exist", Pane: "%0"}).Allow()
+		note, through := (&Tmux{Socket: "/nowhere/tmux-does-not-exist", Pane: "%0"}).Allow(t.Context())
 		if through {
 			t.Errorf("%s: was read as a wire the picture can cross", c.name)
 		}
@@ -154,7 +154,7 @@ func TestATmuxHoldingThePipeStillAnswersInTime(t *testing.T) {
 	hangingTmux(t)
 	mux := &Tmux{Socket: "/nowhere", Pane: "%0"}
 	start := time.Now()
-	out, err := mux.run("show", "-p", "-t", "%0", "-A", "-v", "allow-passthrough")
+	out, err := mux.run(t.Context(), "show", "-p", "-t", "%0", "-A", "-v", "allow-passthrough")
 	if d := time.Since(start); d > tmuxTimeout {
 		t.Errorf("run() came back after %v; the deadline is %v", d, tmuxTimeout)
 	}
@@ -163,7 +163,7 @@ func TestATmuxHoldingThePipeStillAnswersInTime(t *testing.T) {
 	}
 	// and the whole door reads it as the closed wire it is
 	start = time.Now()
-	note, through := mux.Allow()
+	note, through := mux.Allow(t.Context())
 	if d := time.Since(start); d > tmuxTimeout {
 		t.Errorf("Allow came back after %v; the deadline is %v", d, tmuxTimeout)
 	}
@@ -206,11 +206,11 @@ func asked(t *testing.T, log string) []string {
 func TestThePassthroughIsAskedAboutOncePerProcess(t *testing.T) {
 	log := countingTmux(t)
 	mux := &Tmux{Socket: "/nowhere", Pane: "%0"}
-	note, through := mux.Allow()
+	note, through := mux.Allow(t.Context())
 	if !through || !strings.Contains(note, "set on") {
 		t.Fatalf("the first picture said %q, through=%v; want the pane turned on", note, through)
 	}
-	note, through = mux.Allow()
+	note, through = mux.Allow(t.Context())
 	if !through {
 		t.Errorf("a pane this process turned on read as closed")
 	}
@@ -228,7 +228,7 @@ func TestTheDoctorReadsTheSameMemory(t *testing.T) {
 	log := countingTmux(t)
 	mux := &Tmux{Socket: "/nowhere", Pane: "%0"}
 	for i := 0; i < 3; i++ {
-		if _, err := mux.Passthrough(); err != nil {
+		if _, err := mux.Passthrough(t.Context()); err != nil {
 			t.Fatalf("Passthrough: %v", err)
 		}
 	}

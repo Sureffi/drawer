@@ -90,12 +90,12 @@ const tmuxWaitDelay = tmuxTimeout / 4
 // Asked once, then remembered: a fork and a socket round-trip per drawn
 // picture is a cost a hook pays in front of CC's own painting, and the
 // value cannot move underneath a process that is the only one setting it.
-func (t *Tmux) Passthrough() (string, error) {
+func (t *Tmux) Passthrough(ctx context.Context) (string, error) {
 	if t == nil {
 		return "", nil
 	}
 	if !t.asked {
-		out, err := t.run("show", "-p", "-t", t.Pane, "-A", "-v", "allow-passthrough")
+		out, err := t.run(ctx, "show", "-p", "-t", t.Pane, "-A", "-v", "allow-passthrough")
 		t.was, t.err, t.asked = strings.TrimSpace(out), err, true
 	}
 	return t.was, t.err
@@ -119,12 +119,12 @@ func (t *Tmux) Passthrough() (string, error) {
 // The note is empty where it was already on and there was nothing to do,
 // because a note about nothing is noise — and a second picture in the same
 // process finds it on, because setting it is what this wrote down.
-func (t *Tmux) Allow() (string, bool) {
+func (t *Tmux) Allow(ctx context.Context) (string, bool) {
 	if t == nil {
 		return "", true
 	}
 	pane := " for pane " + t.Pane
-	was, err := t.Passthrough()
+	was, err := t.Passthrough(ctx)
 	if err != nil {
 		// A tmux nobody could ask is a wire nobody can post a picture
 		// through. It read as open once — run() gave back the same empty
@@ -137,7 +137,7 @@ func (t *Tmux) Allow() (string, bool) {
 	if was == "on" {
 		return "", true
 	}
-	if out, err := t.allow(); err != nil {
+	if out, err := t.allow(ctx); err != nil {
 		return "tmux: allow-passthrough is " + quoted(was) + pane +
 			" and would not be set: " + reason(out, err), false
 	}
@@ -165,8 +165,8 @@ func reason(out string, err error) string {
 
 // allow is the one write this package makes to anything but a tty: what
 // tmux said about it, and the error where it could not be told at all.
-func (t *Tmux) allow() (string, error) {
-	out, err := t.run("set", "-p", "-t", t.Pane, "allow-passthrough", "on")
+func (t *Tmux) allow(ctx context.Context) (string, error) {
+	out, err := t.run(ctx, "set", "-p", "-t", t.Pane, "allow-passthrough", "on")
 	return strings.TrimSpace(out), err
 }
 
@@ -178,8 +178,14 @@ func (t *Tmux) allow() (string, error) {
 // all. A tmux that exited 0 and printed nothing is an answer of nothing; a
 // tmux that is not on the PATH is no answer, and the two read the same
 // until the error is carried out with the output.
-func (t *Tmux) run(args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), tmuxTimeout)
+//
+// The deadline is derived from the caller's rather than started fresh. A
+// hook has one deadline for the whole of what it draws, and a question put
+// to somebody else's tmux on a clock of its own is time the drawing does
+// not get: measured, three of twenty fences came back as "ran out of time"
+// notices because tmux had spent the layout's budget.
+func (t *Tmux) run(ctx context.Context, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, tmuxTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "tmux", append([]string{"-S", t.Socket}, args...)...)
 	cmd.WaitDelay = tmuxWaitDelay

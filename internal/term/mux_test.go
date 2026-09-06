@@ -5,6 +5,7 @@
 package term
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,7 +19,7 @@ func stubTmux(t *testing.T, answer string) *string {
 	t.Helper()
 	was := askTmux
 	asked := new(string)
-	askTmux = func(socket string, args ...string) string {
+	askTmux = func(_ context.Context, socket string, args ...string) string {
 		*asked = socket + " " + strings.Join(args, " ")
 		return answer
 	}
@@ -61,7 +62,7 @@ func TestNameIsTheClientTmuxSaysIsAttached(t *testing.T) {
 			t.Setenv(k, c.env[k])
 		}
 		stubTmux(t, c.answer)
-		if got := Name(); got != c.want {
+		if got := Name(t.Context()); got != c.want {
 			t.Errorf("%s: the terminal is %q, want %q", c.name, got, c.want)
 		}
 	}
@@ -73,7 +74,7 @@ func TestTheTmuxQuestionIsScopedAndReadOnly(t *testing.T) {
 	t.Setenv("TMUX", "/tmp/tmux-1000/rig,9,0")
 	t.Setenv("TMUX_PANE", "%7")
 	asked := stubTmux(t, "alacritty")
-	Name()
+	Name(t.Context())
 	want := "/tmp/tmux-1000/rig display-message -p -t %7 #{client_termname}"
 	if *asked != want {
 		t.Errorf("tmux was asked %q,\n                    want %q", *asked, want)
@@ -86,7 +87,7 @@ func TestNothingIsAskedOutsideTmux(t *testing.T) {
 	t.Setenv("TERM", "xterm-kitty")
 	t.Setenv("TMUX", "")
 	asked := stubTmux(t, "alacritty")
-	if got := Name(); got != "xterm-kitty" {
+	if got := Name(t.Context()); got != "xterm-kitty" {
 		t.Errorf("the terminal is %q, want xterm-kitty", got)
 	}
 	if *asked != "" {
@@ -129,7 +130,7 @@ func TestATmuxHoldingThePipeIsNotAnAnswer(t *testing.T) {
 	t.Setenv("TMUX", "/nowhere,1,0")
 	t.Setenv("TMUX_PANE", "%0")
 	start := time.Now()
-	got := Name()
+	got := Name(t.Context())
 	if d := time.Since(start); d > muxTimeout {
 		t.Errorf("Name() came back after %v; the deadline is %v", d, muxTimeout)
 	}

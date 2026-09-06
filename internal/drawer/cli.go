@@ -107,12 +107,12 @@ func runVersion(w io.Writer) int {
 // picture that is missing and a picture that was dropped, which is the one
 // question a reader under tmux actually has. Read only — the doctor asks
 // what is, and the hook is what turns it on.
-func (r run) muxLine() string {
+func (r run) muxLine(ctx context.Context) string {
 	if r.mux == nil {
 		return "no"
 	}
 	pane := "pane " + r.mux.Pane
-	was, err := r.mux.Passthrough()
+	was, err := r.mux.Passthrough(ctx)
 	switch {
 	case err != nil:
 		// Not "unknown": a tmux that cannot be asked is a tmux that cannot
@@ -165,12 +165,12 @@ func (r run) doctor(ctx context.Context, w io.Writer, cols int, from term.WidthF
 		name = "unknown"
 	}
 	placeholders := "no"
-	if pixel.PlaceholdersHere() {
+	if pixel.Placeholders(r.term) {
 		placeholders = "yes"
 	}
 	fmt.Fprintln(w, "drawer:", version)
 	fmt.Fprintln(w, "terminal:", name)
-	fmt.Fprintln(w, "tmux:", r.muxLine())
+	fmt.Fprintln(w, "tmux:", r.muxLine(ctx))
 	fmt.Fprintf(w, "columns: %d (from %s)\n", cols, from)
 	if r.geom.OK() {
 		fmt.Fprintf(w, "cell: %dx%d px\n", r.geom.CellW, r.geom.CellH)

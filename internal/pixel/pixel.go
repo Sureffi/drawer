@@ -33,7 +33,6 @@ import (
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/sureffi/drawer/internal/layout"
-	"github.com/sureffi/drawer/internal/term"
 	"github.com/sureffi/drawer/internal/theme"
 )
 
@@ -63,18 +62,17 @@ type Raster struct {
 //
 // The name is the terminal's, resolved: term.Name answers with the terminal
 // behind tmux rather than tmux's own TERM, so this predicate never has to
-// know a multiplexer exists.
+// know a multiplexer exists. It is handed in rather than read here, because
+// under tmux reading it is a fork and a socket round-trip: the run asks
+// once and every predicate below it reads that one answer.
 func Placeholders(name string) bool {
 	return strings.Contains(name, "kitty") || strings.Contains(name, "ghostty")
 }
 
-// PlaceholdersHere asks it of the terminal this process is talking to.
-func PlaceholdersHere() bool { return Placeholders(term.Name()) }
-
-// Probe answers whether pixels are possible here: the terminal draws
+// Probe answers whether pixels are possible on the terminal named: it draws
 // placeholder cells and a rasteriser exists.
-func Probe() *Raster {
-	if !PlaceholdersHere() {
+func Probe(name string) *Raster {
+	if !Placeholders(name) {
 		return nil
 	}
 	return Find()

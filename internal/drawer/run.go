@@ -16,6 +16,8 @@
 package drawer
 
 import (
+	"context"
+
 	"github.com/sureffi/drawer/internal/pixel"
 	"github.com/sureffi/drawer/internal/term"
 )
@@ -40,8 +42,14 @@ type run struct {
 // under tmux it is also half of what the terminal's name is. The theme
 // arrives whole, because main is where -theme was read and where it was
 // found unreadable.
-func newRun(r rung, tee string, th *inForce) run {
-	return run{rung: r, term: term.Name(), mux: pixel.Multiplexer(), tee: tee, theme: th}
+//
+// This is the one place the name is asked for, and it is asked once: under
+// tmux the answer costs a fork and a socket round-trip, and every rung
+// below reads the name out of the run instead. The context is why the ask
+// is here and not earlier — the deadline has to exist before somebody
+// else's program is run against it.
+func newRun(ctx context.Context, r rung, tee string, th *inForce) run {
+	return run{rung: r, term: term.Name(ctx), mux: pixel.Multiplexer(), tee: tee, theme: th}
 }
 
 // probe asks the window how big it is. The columns come back, and where

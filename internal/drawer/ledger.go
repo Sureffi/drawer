@@ -95,7 +95,7 @@ func (r run) repaintPictures(ctx context.Context, tty string, ras *pixel.Raster)
 		return 0
 	}
 	n := 0
-	note, through := r.mux.Allow()
+	note, through := r.mux.Allow(ctx)
 	r.teeNote(note)
 	if !through {
 		return 0
@@ -109,7 +109,7 @@ func (r run) repaintPictures(ctx context.Context, tty string, ras *pixel.Raster)
 		if err != nil {
 			continue
 		}
-		if pixel.Send(tty, png, pixel.ImageID(p.Src, p.Cols, p.Rows), p.Cols, p.Rows, r.mux) {
+		if pixel.Send(ctx, tty, png, pixel.ImageID(p.Src, p.Cols, p.Rows), p.Cols, p.Rows, r.mux) {
 			n++
 		}
 	}

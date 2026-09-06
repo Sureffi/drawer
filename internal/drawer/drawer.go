@@ -83,7 +83,7 @@ func Main(args []string) int {
 		th = loaded // nil where it would not read: Claude Code's, as before
 	}
 
-	r := newRun(parseRung(*render), *hooktee, &inForce{th: th, file: file, readErr: readErr})
+	r := newRun(ctx, parseRung(*render), *hooktee, &inForce{th: th, file: file, readErr: readErr})
 	w, h := parseSize(*size, 100, 40)
 
 	switch {

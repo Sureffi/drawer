@@ -120,5 +120,5 @@ func pickRung(want rung, name string, geom term.Geom, raster func() bool) rung {
 }
 
 func (r run) pickRung() rung {
-	return pickRung(r.rung, r.term, r.geom, func() bool { return pixel.Probe() != nil })
+	return pickRung(r.rung, r.term, r.geom, func() bool { return pixel.Probe(r.term) != nil })
 }

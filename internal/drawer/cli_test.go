@@ -90,7 +90,7 @@ func TestTheDoctorDoorSaysTheWindowItWasHanded(t *testing.T) {
 		return 120, term.Geom{CellW: 9, CellH: 20}, term.FromTTY
 	}
 	var b strings.Builder
-	r := newRun(rungAuto, "/tmp/deltas.jsonl", &inForce{th: &theme.Theme{}})
+	r := newRun(t.Context(), rungAuto, "/tmp/deltas.jsonl", &inForce{th: &theme.Theme{}})
 	if code := r.runDoctor(t.Context(), &b, probe); code != 0 {
 		t.Fatalf("-doctor exited %d", code)
 	}
@@ -124,7 +124,7 @@ func TestDoctorSaysWhatAHookWouldSee(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("DRAWER_STATE", t.TempDir())
 	var b strings.Builder
-	newRun(rungAuto, "", &inForce{}).doctor(t.Context(), &b, 100, term.FromDefault)
+	newRun(t.Context(), rungAuto, "", &inForce{}).doctor(t.Context(), &b, 100, term.FromDefault)
 	said := strings.Split(strings.TrimSuffix(b.String(), "\n"), "\n")
 	want := []string{
 		"drawer: ",
@@ -171,7 +171,7 @@ func TestDoctorSaysWhichThemeCameOut(t *testing.T) {
 	}
 	for _, c := range cases {
 		var b strings.Builder
-		newRun(rungAuto, "", c.th).doctor(t.Context(), &b, 100, term.FromDefault)
+		newRun(t.Context(), rungAuto, "", c.th).doctor(t.Context(), &b, 100, term.FromDefault)
 		line := ""
 		for _, l := range strings.Split(b.String(), "\n") {
 			if strings.HasPrefix(l, "theme: ") {

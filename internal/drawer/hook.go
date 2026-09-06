@@ -135,7 +135,7 @@ func (r run) runHook(ctx context.Context) int {
 	// The first delta of a message is the first thing the hook hears after
 	// a theme switch; ledger.go says why, and what is repainted.
 	if in.Index == 0 && r.pickRung() == rungPixels {
-		r.repaintPictures(ctx, term.TTYOut(), pixel.Probe())
+		r.repaintPictures(ctx, term.TTYOut(), pixel.Probe(r.term))
 	}
 	st, done := takeTurn(in.MessageID, in.Index, turnPatience)
 	defer done()

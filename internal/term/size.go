@@ -17,6 +17,7 @@
 package term
 
 import (
+	"context"
 	"os"
 	"strconv"
 
@@ -91,10 +92,12 @@ func Size() (cols int, g Geom, from WidthFrom) {
 // attached to this pane; mux.go says how, and why a mark in the environment
 // is not that. The name that comes back is that client's own TERM, so
 // everything downstream reads one kind of name and no rung has to know
-// there was a multiplexer.
-func Name() string {
+// there was a multiplexer. The context is the run's: asking tmux is running
+// somebody else's program, and it is bounded by the same deadline the
+// drawing is.
+func Name(ctx context.Context) string {
 	if Tmux() {
-		if n := behindTmux(); n != "" {
+		if n := behindTmux(ctx); n != "" {
 			return n
 		}
 	}

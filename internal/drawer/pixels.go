@@ -23,7 +23,7 @@ import (
 
 // drawPixels is the pixels rung: the rows that show a picture, or nil.
 func (r run) drawPixels(ctx context.Context, src string, width int) []string {
-	ras := pixel.Probe()
+	ras := pixel.Probe(r.term)
 	if ras == nil || !r.geom.OK() {
 		return nil
 	}
@@ -37,12 +37,12 @@ func (r run) drawPixels(ctx context.Context, src string, width int) []string {
 	// before the escape goes out, say so where a note can be read, and fail
 	// open to the glyphs where the answer is no — eight blank rows are worse
 	// than a drawing in strokes.
-	note, through := r.mux.Allow()
+	note, through := r.mux.Allow(ctx)
 	r.teeNote(note)
 	if !through {
 		return nil
 	}
-	if !pixel.Send(term.TTYOut(), png, id, p.Cols, p.Rows, r.mux) {
+	if !pixel.Send(ctx, term.TTYOut(), png, id, p.Cols, p.Rows, r.mux) {
 		return nil
 	}
 	r.recordPicture(ctx, p)

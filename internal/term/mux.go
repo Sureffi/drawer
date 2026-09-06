@@ -37,7 +37,8 @@
 // which is that client's TERM — "xterm-kitty" from a kitty, "alacritty" from
 // an alacritty — so everything downstream reads one kind of name and nothing
 // downstream has to know a multiplexer exists. One exec per process, under
-// tmux only; Name is asked once by the run every door is built from.
+// tmux only; Name is asked once by the run every door is built from, and the
+// name is carried in the run from there rather than asked again.
 //
 // Where tmux will not answer — no client attached, no tmux on the PATH — the
 // answer is empty and TERM, tmux's own, stands. That names no terminal and
@@ -96,8 +97,14 @@ const muxWaitDelay = muxTimeout / 4
 // askTmux is the one command this file runs, as a variable so a law can
 // stand a tmux up without one. Read-only: display-message -p prints a
 // format and changes nothing.
-var askTmux = func(socket string, args ...string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), muxTimeout)
+//
+// The deadline is derived from the caller's, not from nothing: this is
+// another process on the far side of a socket, and a question asked on its
+// own clock is a question that can outlive the drawing it was asked for.
+// Two seconds is what tmux gets, and never more than what is left of the
+// process.
+var askTmux = func(ctx context.Context, socket string, args ...string) string {
+	ctx, cancel := context.WithTimeout(ctx, muxTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "tmux",
 		append([]string{"-S", socket}, args...)...)
@@ -113,10 +120,10 @@ var askTmux = func(socket string, args ...string) string {
 // attached to it, as tmux reports it. Empty where there is no pane to ask
 // about, no socket to ask on, or no client attached — and then TERM, tmux's
 // own, is still the best answer there is.
-func behindTmux() string {
+func behindTmux(ctx context.Context) string {
 	sock, pane := TmuxSocket(), TmuxPane()
 	if sock == "" || pane == "" {
 		return ""
 	}
-	return askTmux(sock, "display-message", "-p", "-t", pane, "#{client_termname}")
+	return askTmux(ctx, sock, "display-message", "-p", "-t", pane, "#{client_termname}")
 }

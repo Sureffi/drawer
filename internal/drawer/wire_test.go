@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -302,5 +303,72 @@ func TestHookDeltasTakeTurns(t *testing.T) {
 	done()
 	if waited := time.Since(start); waited < 50*time.Millisecond || waited > time.Second {
 		t.Errorf("a turn nobody takes was waited for %v, want about the patience", waited)
+	}
+}
+
+// wedgedTmux puts a tmux on the PATH that never answers and never exits: it
+// blocks opening a fifo nobody ever writes to. That is the worst tmux there
+// is — not slow, stopped — and it is what a hook has to stay quick against,
+// because CC is not painting while this process thinks.
+//
+// The PATH is the stub's own directory and nothing else, so there is no
+// rasteriser to find either: the pixels rung fails open to the strokes, and
+// the strokes are the drawing this law counts.
+func wedgedTmux(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	fifo := filepath.Join(dir, "never")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Skipf("no fifo to wedge a tmux on: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "tmux"),
+		[]byte("#!/bin/sh\nread x < "+fifo+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	t.Setenv("TERM", "xterm-kitty")
+	t.Setenv("TMUX", "/nowhere,1,0")
+	t.Setenv("TMUX_PANE", "%0")
+}
+
+// A hook process asks tmux which terminal is behind this pane once, and
+// carries the answer.
+//
+// It used to ask again for every predicate that wanted to know whether the
+// terminal draws placeholder cells: once for the run, once for the rung,
+// once for the repaint, and twice more for every fence in the delta. Each
+// of those was a fork, a socket, and — against a tmux that has stopped
+// answering — two seconds of the ten the whole delta has to draw in.
+// Measured on the rig: 7.5 s on the pixels path, and with twenty fences,
+// three of them came back as "ran out of time" notices because tmux had
+// spent the layout's budget.
+//
+// Four fences in one delta, against a tmux that never answers: one
+// two-second question, four drawings, none of them a notice. The bound is
+// six seconds against the two this costs, because a loaded CI box is not a
+// stopwatch.
+func TestATmuxThatNeverAnswersIsAskedOnce(t *testing.T) {
+	wedgedTmux(t)
+	ctx, cancel := context.WithTimeout(t.Context(), layoutTimeout)
+	defer cancel()
+	start := time.Now()
+	r := newRun(ctx, rungPixels, "", &inForce{})
+	var st fence.State
+	var b strings.Builder
+	for i := 0; i < 4; i++ {
+		src := "```dot\ndigraph{ a" + string(rune('0'+i)) + " -> b }\n```\n"
+		b.WriteString(fence.Stream(ctx, src, i == 3, &st, func(src string, indent int) []string {
+			return r.drawBlock(ctx, src, 100-indent)
+		}))
+	}
+	if d := time.Since(start); d > 6*time.Second {
+		t.Errorf("four fences took %v against a tmux that never answered", d)
+	}
+	out := b.String()
+	if n := strings.Count(out, "\n```\n"); n != 4 {
+		t.Errorf("%d fences came back, want 4:\n%s", n, out)
+	}
+	if strings.Contains(out, "no diagram") || strings.Contains(out, "digraph") {
+		t.Errorf("a fence came back as a notice over its own source:\n%s", out)
 	}
 }

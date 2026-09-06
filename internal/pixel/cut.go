@@ -178,7 +178,14 @@ func ThemeSig(th *theme.Theme) string {
 // out, which is the only shape that reaches the terminal at all. The cells
 // are not wrapped and never come near this function — they are text, and
 // they go home through CC's display wire.
-func Send(tty string, png []byte, id uint32, cols, rows int, mux *Tmux) bool {
+//
+// A picture whose deadline has already passed is not sent. The cells that
+// would name it are not going out either, so the escape would leave an
+// image in the terminal that nothing on screen ever points at.
+func Send(ctx context.Context, tty string, png []byte, id uint32, cols, rows int, mux *Tmux) bool {
+	if ctx.Err() != nil {
+		return false
+	}
 	sweepPictures()
 	f, err := os.CreateTemp("", "tty-graphics-protocol-graph-*.png")
 	if err != nil {
