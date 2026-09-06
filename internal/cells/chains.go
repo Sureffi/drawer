@@ -503,19 +503,28 @@ func attempt(g *layout.Graph, sl slots, extra gaps, width, maxRows int) ([]strin
 	colW := make([]int, sl.nCol)
 	rowH := make([]int, sl.nRow)
 	loops := make([]int, len(g.Nodes))
+	said := make([]int, len(g.Nodes)) // the ones carrying words
 	for _, e := range g.Edges {
-		if e.Tail == e.Head {
-			loops[e.Tail]++
+		if e.Tail != e.Head {
+			continue
+		}
+		loops[e.Tail]++
+		if e.Label != "" {
+			said[e.Tail]++
 		}
 	}
 	for i := range g.Nodes {
 		bw[i], bh[i] = boxSize(g.Nodes[i])
 		// A hoop takes two ports on one wall and each one inside it takes
 		// two more, so a node with self-loops needs wall to hang them on.
-		// Half go above and half below, and a three-row box has one cell
-		// of side wall, which is no wall at all.
-		if n := 2 + 2*((loops[i]+1)/2); n > bw[i] {
+		// The plain ones hang over the top and the bottom, which is width;
+		// the ones with words reach out of the side walls, which a
+		// three-row box has none of.
+		if n := 2 + 2*((loops[i]-said[i]+1)/2); n > bw[i] {
 			bw[i] = n
+		}
+		if n := 2 + 2*((said[i]+1)/2); n > bh[i] {
+			bh[i] = n
 		}
 		if bw[i] > colW[sl.col[i]] {
 			colW[sl.col[i]] = bw[i]
@@ -524,19 +533,19 @@ func attempt(g *layout.Graph, sl slots, extra gaps, width, maxRows int) ([]strin
 			rowH[sl.row[i]] = bh[i]
 		}
 	}
-	room := make([]int, len(g.Nodes))
-	wide := make([]int, len(g.Nodes))
-	for i, n := range loops {
-		if n > 0 {
+	room := make([]int, len(g.Nodes)) // rows a plain hoop needs above and below
+	wide := make([]int, len(g.Nodes)) // columns a hoop with words needs beside
+	for i := range loops {
+		if n := loops[i] - said[i]; n > 0 {
 			room[i] = (n+1)/2 + 2
 		}
 	}
 	for _, e := range g.Edges {
-		if e.Tail == e.Head {
-			wide[e.Tail] = max(wide[e.Tail], grid.Cells(e.Label))
+		if e.Tail == e.Head && e.Label != "" {
+			wide[e.Tail] = max(wide[e.Tail], grid.Cells(e.Label)+7)
 		}
 	}
-	bs := bounds(g, sl, room)
+	bs := bounds(g, sl, room, wide)
 	gapX, gapY := spacing(g, sl, extra, bs, room, wide)
 	// A frame carries its cluster's name, so it has to be wide enough to
 	// hold it. The room comes out of the last column the frame covers,
@@ -641,8 +650,8 @@ func spacing(g *layout.Graph, sl slots, extra gaps, bs []bound, room []int, wide
 			afterY[sl.row[v]] = max(afterY[sl.row[v]], room[v])
 		}
 		if wide[v] > 0 {
-			beforeX[sl.col[v]] = max(beforeX[sl.col[v]], wide[v]+2)
-			afterX[sl.col[v]] = max(afterX[sl.col[v]], wide[v]+2)
+			beforeX[sl.col[v]] = max(beforeX[sl.col[v]], wide[v])
+			afterX[sl.col[v]] = max(afterX[sl.col[v]], wide[v])
 		}
 	}
 	for _, b := range bs {
@@ -802,7 +811,7 @@ type bound struct {
 // bounds is where every cluster's frame goes, in slots. Placing put each
 // cluster's members in a rectangle of their own, so this is only the
 // reading of it — and the depth counts, which come from the outside in.
-func bounds(g *layout.Graph, sl slots, room []int) []bound {
+func bounds(g *layout.Graph, sl slots, room, wide []int) []bound {
 	out := make([]bound, len(g.Clusters))
 	for i, c := range g.Clusters {
 		b := bound{col0: 1 << 30, row0: 1 << 30, col1: -1, row1: -1}
@@ -815,14 +824,11 @@ func bounds(g *layout.Graph, sl slots, room []int) []bound {
 		// A hoop hangs outside the box it belongs to and inside the frame
 		// its node stands in, so the frame has to stand off by that much.
 		for _, v := range c.Members {
-			if room[v] == 0 {
-				continue
-			}
 			if sl.col[v] == b.col0 {
-				b.padL = max(b.padL, room[v])
+				b.padL = max(b.padL, wide[v])
 			}
 			if sl.col[v] == b.col1 {
-				b.padR = max(b.padR, room[v])
+				b.padR = max(b.padR, wide[v])
 			}
 			if sl.row[v] == b.row0 {
 				b.padT = max(b.padT, room[v])

@@ -159,7 +159,15 @@ func routeAll(cv *Canvas, g *layout.Graph, sl slots, boxes, frames []Box, encl [
 		var tp, hp port
 		var ps Route
 		if e.Tail == e.Head {
-			tp, hp, ps = selfLoop(cv, t, pt, tb, e.Tail, hoops)
+			// A loop with words on it needs a leg long enough to set
+			// them into, and a leg is long where it leaves a side wall
+			// rather than the top: out, along, and back in. One with no
+			// words wants the smallest hoop there is, over the top.
+			sides, minK := []Dir{North, South, East, West}, 0
+			if n := grid.Cells(e.Label); n > 0 {
+				sides, minK = []Dir{East, West, North, South}, n+5
+			}
+			tp, hp, ps = selfLoop(cv, t, pt, tb, e.Tail, hoops, sides, minK)
 		} else {
 			// A node inside a frame the other end is not inside cannot
 			// have the line come to it: a frame cuts a line in two. The
@@ -209,27 +217,34 @@ type laid struct {
 //
 // Where a node carries several, they nest: the first takes the two middle
 // ports and hops one cell out, and each after it takes the pair outside
-// that one and hops a cell further, so no two ever meet.
-func selfLoop(cv *Canvas, t *terrain, pt *porter, b Box, node int, hoops map[[2]int]int) (port, port, Route) {
-	for _, side := range []Dir{North, South, East, West} {
+// that one and hops a cell further, so no two ever meet. A loop that
+// carries a label reaches further out, and out of a side wall, so its own
+// leg is long enough to set the words into.
+func selfLoop(cv *Canvas, t *terrain, pt *porter, b Box, node int, hoops map[[2]int]int, sides []Dir, minK int) (port, port, Route) {
+	for _, side := range sides {
 		all := slotsIn(b, side)
-		j := hoops[[2]int{node, int(side)}]
-		lo, hi := len(all)/2-1-j, len(all)/2+j
-		if lo < 0 || hi >= len(all) {
-			continue
+		key := [2]int{node, int(side)}
+		for j := hoops[key]; j < len(all)/2; j++ {
+			lo, hi := len(all)/2-1-j, len(all)/2+j
+			a, z := all[lo], all[hi]
+			if pt.used[a] || pt.used[z] || cv.MaskAt(a.x, a.y) != 0 || cv.MaskAt(z.x, z.y) != 0 {
+				continue
+			}
+			// Each hoop inside another reaches two cells further, so
+			// their turns never land in the same column or row.
+			k := j + 1
+			if minK > 0 {
+				k = minK + 2*j
+			}
+			dx, dy := side.Step()
+			ps := hoop(a, z, dx, dy, k)
+			if !clearRun(cv, t, ps) {
+				continue
+			}
+			hoops[key] = j + 1
+			pt.used[a], pt.used[z] = true, true
+			return port{a.x, a.y, side.Opposite()}, port{z.x, z.y, side.Opposite()}, ps
 		}
-		a, z := all[lo], all[hi]
-		if pt.used[a] || pt.used[z] || cv.MaskAt(a.x, a.y) != 0 || cv.MaskAt(z.x, z.y) != 0 {
-			continue
-		}
-		dx, dy := side.Step()
-		ps := hoop(a, z, dx, dy, j+1)
-		if !clearRun(cv, t, ps) {
-			continue
-		}
-		hoops[[2]int{node, int(side)}] = j + 1
-		pt.used[a], pt.used[z] = true, true
-		return port{a.x, a.y, side.Opposite()}, port{z.x, z.y, side.Opposite()}, ps
 	}
 	return port{}, port{}, nil
 }
