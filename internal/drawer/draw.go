@@ -50,7 +50,7 @@ func (r run) drawBlock(ctx context.Context, src string, width int) []string {
 		if rows := r.drawPixels(ctx, src, width); rows != nil {
 			return bare(rows)
 		}
-		pick = rungOctants // cairo said no; the glyphs still can
+		pick = rungOctants // too narrow, too tall, out of time; the glyphs still can
 	}
 	if pick == rungOctants || pick == rungBraille {
 		if rows := subcell.Draw(ctx, src, width, pick == rungOctants); rows != nil {
@@ -90,10 +90,11 @@ func bare(rows []string) []string {
 }
 
 // pickRung answers which drawing this terminal gets. `auto` reads the
-// terminal: pixels want a terminal that draws placeholder cells, a cell
-// size in pixels and a rasteriser; octants want a terminal that draws them
-// itself, which is the same list; everything else gets braille, which every
-// font carries.
+// terminal, and nothing else: pixels want a terminal that draws
+// placeholder cells and a cell size in pixels to cut the picture to;
+// octants want a terminal that draws them itself, which is the same list
+// less the cell size; everything else gets braille, which every font
+// carries.
 //
 // The list is pixel.Placeholders and it lives there alone — one predicate,
 // read by the gate and by the doctor, so a terminal joins the rung in one
@@ -102,23 +103,21 @@ func bare(rows []string) []string {
 // out. It was on the octants tier only because this gate had asked for the
 // word kitty.
 //
-// raster is a thunk because looking for a rasteriser means walking the
-// PATH: it is asked only where the terminal and the geometry have already
-// said yes. Everything else it needs is what the run already knows, so the
-// judgement can be read — and tested — without a terminal anywhere near it.
-func pickRung(want rung, name string, geom term.Geom, raster func() bool) rung {
+// Everything the judgement needs is what the run already knows, so it can
+// be read — and tested — without a terminal anywhere near it.
+func pickRung(want rung, name string, geom term.Geom) rung {
 	if want != rungAuto {
 		return want
 	}
 	if !pixel.Placeholders(name) {
 		return rungBraille
 	}
-	if geom.OK() && raster() {
+	if geom.OK() {
 		return rungPixels
 	}
 	return rungOctants
 }
 
 func (r run) pickRung() rung {
-	return pickRung(r.rung, r.term, r.geom, func() bool { return pixel.Probe(r.term) != nil })
+	return pickRung(r.rung, r.term, r.geom)
 }

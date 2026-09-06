@@ -4,10 +4,8 @@
 package pixel
 
 import (
-	"strings"
 	"testing"
 
-	"github.com/sureffi/drawer/internal/svgtest"
 	"github.com/sureffi/drawer/internal/theme"
 )
 
@@ -22,29 +20,37 @@ func mustTheme(t *testing.T, src string) *theme.Theme {
 	return th
 }
 
-// A theme file reaches the picture: its fill is the nodes' fill, its edge
-// colour the edges', its fontname the face the SVG is set in — and what it
-// does not declare is graphviz's default, not the built-in theme's.
+// A theme file reaches the picture: its fill is the nodes' fill and its
+// edge colour the edges' — and what it does not declare is graphviz's
+// default, not the built-in theme's. Its fontname is the one declaration
+// that does not reach the picture unless it names a font file: the layout
+// is measured in Courier whatever anybody says, and paint.go sets it in
+// the face this binary carries.
 func TestThemeFileReachesThePicture(t *testing.T) {
 	th := mustTheme(t, `node [fillcolor="#7aa2f71f", fontname="JetBrains Mono"]
 	                    edge [color=red]`)
-	svg, err := RenderThemedSVG(t.Context(), th, "digraph { a -> b }", 0, "")
+	d, err := RenderThemed(t.Context(), th, "digraph { a -> b }", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// graphviz writes an RGBA fill as a colour and an opacity.
-	a := svgtest.Group(svg, "a")
-	if !strings.Contains(a, `fill="#7aa2f7" fill-opacity="0.12`) {
-		t.Errorf("the theme's fill did not reach the node:\n%s", a)
+	a := d.Object("a")
+	if a == nil {
+		t.Fatal("the drawing has no node a")
 	}
-	if strings.Contains(a, "#d77757") {
-		t.Errorf("Claude Code's stroke leaked through a theme that declares its own:\n%s", a)
+	if !inked(a.Draw, "C", "#7aa2f71f") {
+		t.Errorf("the theme's fill did not reach the node:\n%+v", a.Draw)
 	}
-	if e := svgtest.Group(svg, "a&#45;&gt;b"); !strings.Contains(e, `stroke="red"`) {
-		t.Errorf("the theme's edge colour did not reach the edge:\n%s", e)
+	if inked(a.Draw, "c", "#d77757") {
+		t.Errorf("Claude Code's stroke leaked through a theme that declares its own:\n%+v", a.Draw)
 	}
-	if !strings.Contains(string(svg), `font-family="JetBrains Mono"`) || strings.Contains(string(svg), "Courier") {
-		t.Error("the picture is not set in the theme's face")
+	if e := d.Between("a", "b"); e == nil || !inked(e.Draw, "c", "#ff0000") {
+		t.Errorf("the theme's edge colour did not reach the edge:\n%+v", e)
+	}
+	if !hasFace(a.LDraw, pxLayoutFont) {
+		t.Errorf("the layout was not measured in %s:\n%+v", pxLayoutFont, a.LDraw)
+	}
+	if f := fontFile(th.Face()); f != "" {
+		t.Errorf("a family name was taken for a font file and resolved to %q", f)
 	}
 }
 
@@ -52,14 +58,14 @@ func TestThemeFileReachesThePicture(t *testing.T) {
 // built-in one.
 func TestThemeFileYieldsToTheModel(t *testing.T) {
 	th := mustTheme(t, `node [fillcolor="#000000", color="#111111"]`)
-	svg, err := RenderThemedSVG(t.Context(), th, "digraph { a [color=red]; a -> b }", 0, "")
+	d, err := RenderThemed(t.Context(), th, "digraph { a [color=red]; a -> b }", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a := svgtest.Group(svg, "a"); !strings.Contains(a, `stroke="red"`) {
-		t.Errorf("the theme overwrote the model:\n%s", a)
+	if a := d.Object("a"); a == nil || !inked(a.Draw, "c", "#ff0000") {
+		t.Errorf("the theme overwrote the model:\n%+v", a)
 	}
-	if b := svgtest.Group(svg, "b"); !strings.Contains(b, `stroke="#111111"`) {
-		t.Errorf("the theme did not reach an unpainted node:\n%s", b)
+	if b := d.Object("b"); b == nil || !inked(b.Draw, "c", "#111111") {
+		t.Errorf("the theme did not reach an unpainted node:\n%+v", b)
 	}
 }

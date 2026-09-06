@@ -10,9 +10,8 @@
 // have had.
 //
 // Where any of that cannot happen — a terminal that does not draw the
-// placeholder cells, no cell size in pixels, no rasteriser, a tty that is
-// not there — the answer is nil and the rung below draws. Nothing here is
-// a dependency.
+// placeholder cells, no cell size in pixels, a tty that is not there — the
+// answer is nil and the rung below draws. Nothing here is a dependency.
 
 package pixel
 
@@ -49,7 +48,7 @@ type Picture struct {
 
 // Cut is the picture for a block of cells: the cut — its columns up
 // to the width, the rows that follow, and the orientation it was laid out
-// in — and the pixels rasterised for exactly that block. The picture is
+// in — and the pixels painted for exactly that block. The picture is
 // cut to whole columns so kitty scales nothing on the axis that has to
 // line up with text.
 //
@@ -62,81 +61,90 @@ type Picture struct {
 // rows; top-down it keeps 0.97 in 56. An error is a picture that will
 // not fit either way — too narrow to be anything, or taller than
 // grid.MaxRows.
-func Cut(ctx context.Context, th *theme.Theme, r *Raster, src string, width int, geom term.Geom) ([]byte, Picture, error) {
-	if r == nil || !geom.OK() {
-		return nil, Picture{}, errors.New("no rasteriser or no cell size")
+func Cut(ctx context.Context, th *theme.Theme, src string, width int, geom term.Geom) ([]byte, Picture, error) {
+	d, p, zoom, err := cut(ctx, th, src, width, geom)
+	if err != nil {
+		return nil, Picture{}, err
+	}
+	png, err := paintPNG(ctx, d, th.Face(), zoom)
+	if err != nil {
+		return nil, Picture{}, err
+	}
+	return png, p, nil
+}
+
+// cut is the choosing half of Cut: the layout it settled on, the block of
+// cells it will stand in, and the zoom that puts it there. Nothing is
+// painted, so what the cut chose can be read — by the caller above, and by
+// a law — without decoding a picture to find out.
+func cut(ctx context.Context, th *theme.Theme, src string, width int, geom term.Geom) (*layout.Drawing, Picture, float64, error) {
+	if !geom.OK() {
+		return nil, Picture{}, 0, errors.New("no cell size")
 	}
 	if width > len(rowColumnDiacritics) {
 		width = len(rowColumnDiacritics)
 	}
-	var svg []byte
-	cols, zoom := 0, 0.0
+	var best *layout.Drawing
+	cols, rows, zoom := 0, 0, 0.0
 	rd := cgraph.RankDir("")
 	var last error
 	for _, try := range layout.Orientations(src) {
-		s, err := RenderThemedSVG(ctx, th, src, FontPt(geom.CellW), try)
+		d, err := RenderThemed(ctx, th, src, FontPt(geom.CellW), try)
 		if err != nil {
-			return nil, Picture{}, err
+			return nil, Picture{}, 0, err
 		}
-		ptW, _, err := svgSize(s)
-		if err != nil {
-			return nil, Picture{}, err
-		}
-		c := min(int(math.Ceil(ptW*pxPerPt/float64(geom.CellW))), width)
-		z, _, err := pixelZoom(s, c, geom)
+		c := min(int(math.Ceil(canvas(d).w()*pxPerPt/float64(geom.CellW))), width)
+		z, r, err := pixelZoom(d, c, geom)
 		if err != nil {
 			last = err
 			continue
 		}
-		if svg == nil || z > zoom {
-			svg, cols, zoom, rd = s, c, z, try
+		if best == nil || z > zoom {
+			best, cols, rows, zoom, rd = d, c, r, z, try
 		}
 		if try == "" && z >= 1 {
 			break
 		}
 	}
-	if svg == nil {
-		return nil, Picture{}, last
+	if best == nil {
+		return nil, Picture{}, 0, last
 	}
-	png, rows, err := Fit(ctx, r, svg, cols, geom)
-	if err != nil {
-		return nil, Picture{}, err
-	}
-	return png, Picture{Src: src, Cols: cols, Rows: rows, Geom: geom, Rankdir: rd}, nil
+	return best, Picture{Src: src, Cols: cols, Rows: rows, Geom: geom, Rankdir: rd}, zoom, nil
 }
 
 // pixelZoom is the cut's arithmetic: the zoom that puts a laid-out
 // picture's width on exactly `cols` columns, and the rows that follow. An
 // error is a block that will not do — too narrow to be anything, or
 // taller than grid.MaxRows.
-func pixelZoom(svg []byte, cols int, geom term.Geom) (float64, int, error) {
+func pixelZoom(d *layout.Drawing, cols int, geom term.Geom) (float64, int, error) {
 	if cols < 4 {
 		return 0, 0, errors.New("too narrow to draw")
 	}
-	ptW, ptH, err := svgSize(svg)
-	if err != nil {
-		return 0, 0, err
+	b := canvas(d)
+	pxW, pxH := b.w()*pxPerPt, b.h()*pxPerPt
+	if pxW <= 0 || pxH <= 0 {
+		return 0, 0, errors.New("the picture has no size")
 	}
-	pxW, pxH := ptW*pxPerPt, ptH*pxPerPt
 	zoom := float64(cols*geom.CellW) / pxW
 	rows := int(math.Ceil(pxH * zoom / float64(geom.CellH)))
 	if rows < 1 || rows > grid.MaxRows || rows > len(rowColumnDiacritics) {
 		return 0, 0, fmt.Errorf("%d rows; the ceiling is %d", rows, grid.MaxRows)
 	}
-	if zoom > rasterMaxZoom {
-		zoom = rasterMaxZoom
+	if zoom > maxZoom {
+		zoom = maxZoom
 	}
 	return zoom, rows, nil
 }
 
-// Fit rasterises a laid-out picture into a block `cols` wide, at the zoom
-// pixelZoom chose: the pixels, and the rows they stand on.
-func Fit(ctx context.Context, r *Raster, svg []byte, cols int, geom term.Geom) ([]byte, int, error) {
-	zoom, rows, err := pixelZoom(svg, cols, geom)
+// Fit paints a laid-out picture into a block `cols` wide, at the zoom
+// pixelZoom chose: the pixels, and the rows they stand on. face is the
+// theme's; paint.go says what it may name.
+func Fit(ctx context.Context, d *layout.Drawing, face string, cols int, geom term.Geom) ([]byte, int, error) {
+	zoom, rows, err := pixelZoom(d, cols, geom)
 	if err != nil {
 		return nil, 0, err
 	}
-	png, err := r.Run(ctx, svg, zoom)
+	png, err := paintPNG(ctx, d, face, zoom)
 	if err != nil {
 		return nil, 0, err
 	}

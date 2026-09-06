@@ -71,12 +71,7 @@ func (r run) runPNG(ctx context.Context, dotPath, pngPath string, width int, geo
 		fmt.Fprintln(os.Stderr, "drawer:", err)
 		return 1
 	}
-	ras := pixel.Find()
-	if ras == nil {
-		fmt.Fprintln(os.Stderr, "drawer: no rasteriser on the PATH (rsvg-convert or magick)")
-		return 1
-	}
-	png, p, err := pixel.Cut(ctx, r.theme.get(ctx), ras, string(src), width, geom)
+	png, p, err := pixel.Cut(ctx, r.theme.get(ctx), string(src), width, geom)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "drawer:", err)
 		return 1
@@ -160,7 +155,7 @@ func (r run) muxLine(ctx context.Context) string {
 // Every answer is read out of the same run a hook is built from, so what it
 // prints is what a hook process would have decided — which is the point.
 // Nearly every question this tool gets asked is "why that rung", and the
-// ten facts around that line are the ones the answer is made of.
+// nine facts around that line are the ones the answer is made of.
 //
 // The window arrives as a call rather than being asked for inside: term.Size
 // in the binary, and in a law a window nobody has, because go test runs
@@ -173,7 +168,7 @@ func (r run) runDoctor(ctx context.Context, w io.Writer, probe func() (int, term
 	return 0
 }
 
-// doctor writes the eleven facts. The window is handed in rather than asked
+// doctor writes the ten facts. The window is handed in rather than asked
 // for here: asking is the door's job, and a law can then stand this binary
 // in a terminal that is not there. The theme is the one exception: it is
 // derived here, the way the first picture of a session derives it, because
@@ -198,11 +193,6 @@ func (r run) doctor(ctx context.Context, w io.Writer, cols int, from term.WidthF
 		fmt.Fprintln(w, "cell: unknown: the terminal did not say")
 	}
 	fmt.Fprintln(w, "placeholders:", placeholders)
-	if ras := pixel.Find(); ras != nil {
-		fmt.Fprintf(w, "rasteriser: %s at %s\n", ras.Name, ras.Path)
-	} else {
-		fmt.Fprintln(w, "rasteriser: none: rsvg-convert or magick on the PATH would enable pixels")
-	}
 	// The rung is what will be drawn, not what the terminal could show:
 	// drawBlock falls from pixels to the strokes where the picture cannot
 	// cross the wire, and the doctor falls with it.

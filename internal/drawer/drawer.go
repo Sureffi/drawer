@@ -60,7 +60,7 @@ func Main(args []string) int {
 	themePath := fs.String("theme", os.Getenv("DRAWER_THEME"), "a theme file: DOT graph/node/edge defaults for the pixels rung (DRAWER_THEME; default: Claude Code's own theme)")
 	showTheme := fs.Bool("show-theme", false, "print the theme in force as DOT and exit: Claude Code's, or the file given with -theme")
 	showVersion := fs.Bool("version", false, "print the version this binary was built from and exit")
-	doctor := fs.Bool("doctor", false, "print what this binary sees — terminal, window, rasteriser, rung, theme, state — and exit")
+	doctor := fs.Bool("doctor", false, "print what this binary sees — terminal, window, cell, rung, theme, state — and exit")
 	fs.Parse(args)
 
 	// One deadline, derived here and threaded down: everything below draws

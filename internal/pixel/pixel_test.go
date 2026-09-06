@@ -1,20 +1,26 @@
 // pixel_test.go — laws for the pixels rung: the placeholders, the cut, the
-// theme on the picture, and the labels on their lines.
+// theme on the picture, the paint on the image, and the labels on their
+// lines.
 
 package pixel
 
 import (
 	"context"
 	"fmt"
+	"image/color"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/sureffi/drawer/internal/grid"
-	"github.com/sureffi/drawer/internal/svgtest"
+	"github.com/sureffi/drawer/internal/layout"
 	"github.com/sureffi/drawer/internal/term"
 	"github.com/sureffi/drawer/internal/theme"
+	"golang.org/x/image/font/gofont/gomono"
 )
 
 // The hook wire quantises a truecolor foreground, so a picture's id rides
@@ -50,25 +56,91 @@ func TestPlaceholderRowsNameTheirImageOnEveryCell(t *testing.T) {
 	}
 }
 
+// ---------- reading a drawing ----------
+
+// inked reports whether a drawing list carries an op of that code in that
+// colour: `c` is the pen, `C` the fill, and graphviz resolves both to hex
+// before this ever sees them.
+func inked(list []layout.Op, code, colour string) bool {
+	for _, op := range list {
+		if op.Op == code && op.Color == colour {
+			return true
+		}
+	}
+	return false
+}
+
+// shaped reports whether a list draws one of those ops at all.
+func shaped(list []layout.Op, codes ...string) bool {
+	for _, op := range list {
+		if slices.Contains(codes, op.Op) {
+			return true
+		}
+	}
+	return false
+}
+
+// set reports whether a list sets that text, as one run of it.
+func set(list []layout.Op, text string) bool {
+	for _, op := range list {
+		if op.Op == "T" && op.Text == text {
+			return true
+		}
+	}
+	return false
+}
+
+// heads counts the arrowheads on an edge: a filled shape at either end.
+func heads(e *layout.Edge) int {
+	n := 0
+	for _, list := range [][]layout.Op{e.HDraw, e.TDraw} {
+		for _, op := range list {
+			if op.Op == "P" || op.Op == "E" || op.Op == "B" {
+				n++
+			}
+		}
+	}
+	return n
+}
+
 // ---------- the pixel theme ----------
 
-// Type is measured in Courier, which the wasm's tables know, and set in
-// the terminal's face, which fontconfig knows; a label measured in one face
-// and set in another runs out of its box. At a known cell width the size is
+// Type is measured in Courier, which the wasm's tables know exactly, and
+// set in Go Mono, which this binary carries: a label measured in one face
+// and set in another of a different advance runs out of its box, and those
+// two advances are 0.600em and 0.602em. At a known cell width the size is
 // the one that puts a glyph in a cell.
-func TestPixelTypeIsMeasuredInCourierAndSetInMonospace(t *testing.T) {
-	svg, err := RenderThemedSVG(t.Context(), mustTheme(t, theme.ClaudeDOT()), "digraph { a -> b }", FontPt(10), "")
+func TestPixelTypeIsMeasuredInCourierAndSetInGoMono(t *testing.T) {
+	th := mustTheme(t, theme.ClaudeDOT())
+	d, err := RenderThemed(t.Context(), th, "digraph { a -> b }", FontPt(10), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(svg), "Courier") {
-		t.Error("the layout font reached the SVG")
+	a := d.Object("a")
+	if a == nil {
+		t.Fatal("the drawing has no node a")
 	}
-	if !strings.Contains(string(svg), `font-family="monospace"`) {
-		t.Error("the SVG does not name the terminal's face")
+	var font *layout.Op
+	for i, op := range a.LDraw {
+		if op.Op == "F" {
+			font = &a.LDraw[i]
+			break
+		}
 	}
-	if !strings.Contains(string(svg), `font-size="12.50"`) {
-		t.Errorf("a 10px cell wants 12.5pt type; got %s", svg)
+	if font == nil {
+		t.Fatal("the label sets no font at all")
+	}
+	if font.Face != pxLayoutFont {
+		t.Errorf("the layout was measured in %q, want %s", font.Face, pxLayoutFont)
+	}
+	if font.Size != 12.5 {
+		t.Errorf("a 10px cell wants 12.5pt type; got %v", font.Size)
+	}
+	if f := fontFile(th.Face()); f != "" {
+		t.Errorf("the face a theme leaves undeclared was looked for on the box, and found %q", f)
+	}
+	if face(faceKey{fontKey{"", false, false}, font.Size}) == nil {
+		t.Error("Go Mono is not in this binary")
 	}
 }
 
@@ -85,27 +157,29 @@ func TestPixelThemeKeepsTheModelsPaint(t *testing.T) {
 		a -> b -> c -> d
 	}`
 	th := mustTheme(t, theme.ClaudeDOT())
-	svg, err := RenderThemedSVG(t.Context(), th, src, 0, "")
+	dr, err := RenderThemed(t.Context(), th, src, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := svgtest.Group(svg, "a")
-	if !strings.Contains(a, `fill="pink"`) || !strings.Contains(a, `stroke="red"`) {
-		t.Errorf("the model's paint was overwritten:\n%s", a)
+	a, b, c, d := dr.Object("a"), dr.Object("b"), dr.Object("c"), dr.Object("d")
+	if a == nil || b == nil || c == nil || d == nil {
+		t.Fatal("the drawing is missing a node")
 	}
-	if strings.Contains(a, th.Node["fontcolor"]) {
-		t.Errorf("theme text on the model's fill:\n%s", a)
+	if !inked(a.Draw, "C", "#ffc0cb") || !inked(a.Draw, "c", "#ff0000") {
+		t.Errorf("the model's paint was overwritten:\n%+v", a.Draw)
 	}
-	if !strings.Contains(svgtest.Group(svg, "b"), "<ellipse") {
-		t.Error("the model asked for an ellipse and got a box")
+	if inked(a.LDraw, "c", th.Node["fontcolor"]) {
+		t.Errorf("theme text on the model's fill:\n%+v", a.LDraw)
 	}
-	c := svgtest.Group(svg, "c")
-	if strings.Contains(c, "{head|body|tail}") || !strings.Contains(c, ">body<") {
-		t.Errorf("the record printed its markup:\n%s", c)
+	if !shaped(b.Draw, "e", "E") {
+		t.Errorf("the model asked for an ellipse and got %+v", b.Draw)
 	}
-	d := svgtest.Group(svg, "d")
-	if !strings.Contains(d, th.Node["fillcolor"]) || !strings.Contains(d, th.Node["fontcolor"]) || !strings.Contains(d, th.Node["color"]) {
-		t.Errorf("an unpainted node did not get the theme:\n%s", d)
+	if set(c.LDraw, "{head|body|tail}") || !set(c.LDraw, "body") {
+		t.Errorf("the record printed its markup:\n%+v", c.LDraw)
+	}
+	if !inked(d.Draw, "C", th.Node["fillcolor"]) || !inked(d.LDraw, "c", th.Node["fontcolor"]) ||
+		!inked(d.Draw, "c", th.Node["color"]) {
+		t.Errorf("an unpainted node did not get the theme:\n%+v\n%+v", d.Draw, d.LDraw)
 	}
 }
 
@@ -119,41 +193,175 @@ func TestPixelThemeReachesEveryCluster(t *testing.T) {
 		x -> y
 	}`
 	th := mustTheme(t, theme.ClaudeDOT())
-	svg, err := RenderThemedSVG(t.Context(), th, src, 0, "")
+	d, err := RenderThemed(t.Context(), th, src, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"cluster_a", "cluster_b"} {
-		g := svgtest.Group(svg, name)
-		if !strings.Contains(g, `stroke="`+th.Graph["color"]+`"`) {
-			t.Errorf("%s outline is not themed:\n%s", name, g)
+		g := d.Object(name)
+		if g == nil {
+			t.Fatalf("the drawing has no %s", name)
 		}
-		if !strings.Contains(g, `fill="`+th.Graph["fontcolor"]+`"`) {
-			t.Errorf("%s label is not themed:\n%s", name, g)
+		if !inked(g.Draw, "c", th.Graph["color"]) {
+			t.Errorf("%s outline is not themed:\n%+v", name, g.Draw)
 		}
-		if !strings.Contains(g, `font-family="monospace"`) {
-			t.Errorf("%s label is not in the terminal's face:\n%s", name, g)
+		if !inked(g.LDraw, "c", th.Graph["fontcolor"]) {
+			t.Errorf("%s label is not themed:\n%+v", name, g.LDraw)
+		}
+		if !hasFace(g.LDraw, pxLayoutFont) {
+			t.Errorf("%s label was not measured in %s:\n%+v", name, pxLayoutFont, g.LDraw)
 		}
 	}
 }
 
-// The picture stands on the terminal's own ground: no background unless
-// the model asked for one.
+// hasFace reports whether a list sets its type in that face.
+func hasFace(list []layout.Op, face string) bool {
+	for _, op := range list {
+		if op.Op == "F" && op.Face == face {
+			return true
+		}
+	}
+	return false
+}
+
+// The picture stands on the terminal's own ground: no background unless the
+// model asked for one. graphviz writes a background op either way — white,
+// when nobody asked — so the answer is in the pixels, at the corner where
+// nothing else is ever drawn.
 func TestPixelBackgroundIsTheTerminalsUnlessSet(t *testing.T) {
 	th := mustTheme(t, theme.ClaudeDOT())
-	svg, err := RenderThemedSVG(t.Context(), th, "digraph { a -> b }", 0, "")
+	corner := func(src string) color.NRGBA {
+		t.Helper()
+		d, err := RenderThemed(t.Context(), th, src, 0, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		im, err := paint(t.Context(), d, th.Face(), 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b := im.Bounds()
+		return color.NRGBAModel.Convert(im.At(b.Min.X, b.Min.Y)).(color.NRGBA)
+	}
+	if c := corner("digraph { a -> b }"); c.A != 0 {
+		t.Errorf("a graph that asked for no background stands on %v; want the terminal's own ground", c)
+	}
+	if c := (corner("digraph { bgcolor=white; a -> b }")); c != (color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}) {
+		t.Errorf("the model's white background came out %v", c)
+	}
+}
+
+// ---------- the paint ----------
+
+// A filled shape is filled with the fill in force AND its outline stroked
+// with the pen in force: that is what an uppercase op means in xdot, and it
+// is the rule go-graphviz's own renderer drops. Read off the image, because
+// the drawing says both and only the paint can say whether both happened.
+func TestPixelFilledShapeIsFilledAndStroked(t *testing.T) {
+	th := mustTheme(t, "")
+	src := `digraph { a [shape=box, style=filled, fillcolor="#00ff00", color="#ff0000", penwidth=4, label=""] }`
+	d, err := RenderThemed(t.Context(), th, src, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(svg), `fill="white"`) || strings.Contains(string(svg), `stroke="transparent"`) {
-		t.Error("a background was painted under a graph that set none")
-	}
-	svg, err = RenderThemedSVG(t.Context(), th, "digraph { bgcolor=white; a -> b }", 0, "")
+	im, err := paint(t.Context(), d, th.Face(), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(svg), `fill="white"`) {
-		t.Error("the model's background was dropped")
+	at := func(x, y int) color.NRGBA {
+		return color.NRGBAModel.Convert(im.At(x, y)).(color.NRGBA)
+	}
+	// Inside the box and clear of its label, which graphviz sets from the
+	// node's own name where the source leaves it empty.
+	b := im.Bounds()
+	inside := at(b.Dx()/2, b.Dy()/4)
+	if inside != (color.NRGBA{G: 0xff, A: 0xff}) {
+		t.Errorf("the inside of a filled box is %v, want the fill", inside)
+	}
+	// The box is the whole drawing, so its outline runs across the picture
+	// one pad down from the top, and a four-point pen is wide enough to
+	// land a sample on.
+	top := svgPad * pxPerPt
+	edge := at(b.Dx()/2, int(top))
+	if edge != (color.NRGBA{R: 0xff, A: 0xff}) {
+		t.Errorf("the outline of a filled box is %v, want the pen", edge)
+	}
+}
+
+// The picture stands on graphviz's own canvas: the bounding box, plus the
+// air the graph asked for with `pad`, and where it asked for none the 4pt
+// its SVG writer would have added — a stroke on the boundary would
+// otherwise lose half its width off the edge.
+func TestPixelCanvasIsTheBoxAndItsPad(t *testing.T) {
+	th := mustTheme(t, "")
+	d, err := RenderThemed(t.Context(), th, "digraph { pad=0.15; a -> b }", 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := canvas(d); c.w() != d.W+2*10.8 || c.h() != d.H+2*10.8 {
+		t.Errorf("a pad of 0.15in put %vx%v round a %vx%v box, want 10.8pt on each side",
+			c.w()-d.W, c.h()-d.H, d.W, d.H)
+	}
+	d, err = RenderThemed(t.Context(), th, "digraph { a -> b }", 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := canvas(d); c.w() != d.W+2*svgPad || c.h() != d.H+2*svgPad {
+		t.Errorf("a graph that named no pad got %vx%v of air, want %vpt on each side",
+			c.w()-d.W, c.h()-d.H, svgPad)
+	}
+}
+
+// A cell size nobody can honour is no picture, not a gigabyte of one: the
+// rows and columns of a block are bounded, the cell in pixels is whatever
+// -cell was handed or the terminal answered, and the product is what gets
+// allocated.
+func TestPixelPaintRefusesAnImageNobodyCanHold(t *testing.T) {
+	th := mustTheme(t, theme.ClaudeDOT())
+	d, err := RenderThemed(t.Context(), th, "digraph { a -> b }", 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := paint(t.Context(), d, th.Face(), maxZoom); err != nil {
+		t.Errorf("a picture at the zoom ceiling would not paint: %v", err)
+	}
+	if _, err := paint(t.Context(), d, th.Face(), 4000); err == nil {
+		t.Error("a picture past the pixel ceiling was painted anyway")
+	}
+}
+
+// A theme's fontname may name a font file — an absolute path, or a file
+// name findfont locates — and then the picture is set in that one face.
+// Anything else is Go Mono, silently, because the picture always draws: a
+// family name is not a file, and a file that will not parse is not a face.
+func TestPixelFontnameIsAFileOrGoMono(t *testing.T) {
+	dir := t.TempDir()
+	carried := filepath.Join(dir, "carried.ttf")
+	if err := os.WriteFile(carried, gomono.TTF, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := fontFile(carried); got != carried {
+		t.Errorf("a font file the theme named resolved to %q, want the file", got)
+	}
+	if face(faceKey{fontKey{carried, false, false}, 12}) == nil {
+		t.Error("a font file that parses gave no face")
+	}
+	bad := filepath.Join(dir, "bad.ttf")
+	if err := os.WriteFile(bad, []byte("this is not a font"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"monospace", "JetBrains Mono", "Courier", filepath.Join(dir, "gone.ttf")} {
+		if got := fontFile(name); got != "" {
+			t.Errorf("%q was taken for a font file and resolved to %q", name, got)
+		}
+	}
+	if f := face(faceKey{fontKey{bad, false, false}, 12}); f != nil {
+		t.Error("a file that is not a font parsed as one")
+	}
+	// and the picture still draws: the painter falls to the face it carries
+	p := &painter{s: 1, file: bad}
+	if p.font(&pen{size: 12}) == nil {
+		t.Error("a font file that would not parse left the picture with no face at all")
 	}
 }
 
@@ -229,94 +437,117 @@ func TestPixelLabelsSpaceAsDotDoes(t *testing.T) {
 // each end: the back arrow on the first half, the forward on the second.
 func TestPixelEdgeLabelSitsOnItsLine(t *testing.T) {
 	th := mustTheme(t, theme.ClaudeDOT())
-	svg, err := RenderThemedSVG(t.Context(), th, `digraph { a -> b [label="x", color=red, dir=both] }`, 0, "")
+	d, err := RenderThemed(t.Context(), th, `digraph { a -> b [label="x", color=red, dir=both] }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if g := svgtest.Group(svg, "a&#45;&gt;b"); g != "" {
-		t.Errorf("the labelled edge is still drawn whole:\n%s", g)
+	if e := d.Between("a", "b"); e != nil {
+		t.Errorf("the labelled edge is still drawn whole:\n%+v", e.Draw)
 	}
-	first := svgtest.Group(svg, "a&#45;&gt;"+labelNodePrefix+"0")
-	second := svgtest.Group(svg, labelNodePrefix+"0&#45;&gt;b")
-	for name, half := range map[string]string{"first": first, "second": second} {
-		if !strings.Contains(half, `stroke="red"`) {
-			t.Errorf("the %s half lost the edge's colour:\n%s", name, half)
+	halves := map[string]*layout.Edge{
+		"first":  d.Between("a", labelNodePrefix+"0"),
+		"second": d.Between(labelNodePrefix+"0", "b"),
+	}
+	for name, half := range halves {
+		if half == nil {
+			t.Fatalf("no %s half of the labelled edge", name)
 		}
-		if n := strings.Count(half, "<polygon"); n != 1 {
-			t.Errorf("the %s half has %d heads, want one:\n%s", name, n, half)
+		if !inked(half.Draw, "c", "#ff0000") {
+			t.Errorf("the %s half lost the edge's colour:\n%+v", name, half.Draw)
+		}
+		if n := heads(half); n != 1 {
+			t.Errorf("the %s half has %d heads, want one", name, n)
 		}
 	}
-	label := svgtest.Group(svg, labelNodePrefix+"0")
-	if !strings.Contains(label, ">x<") || !strings.Contains(label, `fill="`+th.Edge["fontcolor"]+`"`) {
-		t.Errorf("the label is not on the line in the edge label colour:\n%s", label)
+	label := d.Object(labelNodePrefix + "0")
+	if label == nil {
+		t.Fatal("the label is not a node on the line")
 	}
-	if strings.Contains(label, th.Node["fillcolor"]) {
-		t.Errorf("the label node was filled like a node:\n%s", label)
+	if !set(label.LDraw, "x") || !inked(label.LDraw, "c", th.Edge["fontcolor"]) {
+		t.Errorf("the label is not on the line in the edge label colour:\n%+v", label.LDraw)
+	}
+	if inked(label.Draw, "C", th.Node["fillcolor"]) {
+		t.Errorf("the label node was filled like a node:\n%+v", label.Draw)
 	}
 }
 
 // An undirected labelled edge grows no heads.
 func TestPixelUndirectedLabelGrowsNoHeads(t *testing.T) {
-	svg, err := RenderThemedSVG(t.Context(), mustTheme(t, theme.ClaudeDOT()), `graph { a -- b [label="x"] }`, 0, "")
+	d, err := RenderThemed(t.Context(), mustTheme(t, theme.ClaudeDOT()), `graph { a -- b [label="x"] }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, title := range []string{"a&#45;&#45;" + labelNodePrefix + "0", labelNodePrefix + "0&#45;&#45;b"} {
-		half := svgtest.Group(svg, title)
-		if half == "" {
-			t.Errorf("no half titled %s", title)
+	for _, ends := range [][2]string{{"a", labelNodePrefix + "0"}, {labelNodePrefix + "0", "b"}} {
+		half := d.Between(ends[0], ends[1])
+		if half == nil {
+			t.Errorf("no half between %s and %s", ends[0], ends[1])
+			continue
 		}
-		if strings.Contains(half, "<polygon") {
-			t.Errorf("an undirected half grew a head:\n%s", half)
+		if n := heads(half); n != 0 {
+			t.Errorf("an undirected half grew %d heads", n)
 		}
 	}
 }
 
 // A labelled edge inside a cluster keeps its label in the cluster, or dot
-// would route the edge out of the cluster and back to visit it.
+// would route the edge out of the cluster and back to visit it. A cluster
+// says which nodes are its own, and the label node has to be one of them.
 func TestPixelEdgeLabelStaysInItsCluster(t *testing.T) {
-	svg, err := RenderThemedSVG(t.Context(), mustTheme(t, theme.ClaudeDOT()), `digraph { subgraph cluster_c { a -> b [label="x"] } c -> a }`, 0, "")
+	d, err := RenderThemed(t.Context(), mustTheme(t, theme.ClaudeDOT()), `digraph { subgraph cluster_c { a -> b [label="x"] } c -> a }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The cluster's outline is drawn before its members; the label's group
-	// following it inside the same SVG is how graphviz writes membership.
-	s := string(svg)
-	cluster := strings.Index(s, "<title>cluster_c</title>")
-	label := strings.Index(s, "<title>"+labelNodePrefix+"0</title>")
-	outside := strings.Index(s, "<title>c</title>")
-	if cluster < 0 || label < 0 || outside < 0 {
-		t.Fatalf("missing cluster, label or outside node in\n%s", s)
+	cluster := d.Object("cluster_c")
+	if cluster == nil {
+		t.Fatal("the drawing has no cluster")
 	}
-	if !(cluster < label && label < outside) {
-		t.Errorf("the label node is not written inside its cluster (cluster %d, label %d, outside %d)", cluster, label, outside)
+	inside := -1
+	outside := -1
+	for i := range d.Objects {
+		switch d.Objects[i].Name {
+		case labelNodePrefix + "0":
+			inside = i
+		case "c":
+			outside = i
+		}
+	}
+	if inside < 0 || outside < 0 {
+		t.Fatalf("missing the label node or the node outside: %d, %d", inside, outside)
+	}
+	if !slices.Contains(cluster.Nodes, inside) {
+		t.Errorf("the label node is not one of the cluster's own: %v", cluster.Nodes)
+	}
+	if slices.Contains(cluster.Nodes, outside) {
+		t.Errorf("the node outside the cluster was taken into it: %v", cluster.Nodes)
 	}
 }
 
 // The label of an edge that closes a cycle sits between the edge's ends,
 // and the arrow still points where the model pointed it.
 func TestPixelLabelOnABackEdgeSitsBetweenItsEnds(t *testing.T) {
-	svg, err := RenderThemedSVG(t.Context(), mustTheme(t, theme.ClaudeDOT()), `digraph { a -> b -> c; c -> a [label="no"] }`, 0, "")
+	d, err := RenderThemed(t.Context(), mustTheme(t, theme.ClaudeDOT()), `digraph { a -> b -> c; c -> a [label="no"] }`, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	ya, yc := svgtest.TextY(svgtest.Group(svg, "a")), svgtest.TextY(svgtest.Group(svg, "c"))
-	yl := svgtest.TextY(svgtest.Group(svg, labelNodePrefix+"0"))
+	a, c, l := d.Object("a"), d.Object("c"), d.Object(labelNodePrefix+"0")
+	if a == nil || c == nil || l == nil {
+		t.Fatal("the drawing is missing a node")
+	}
+	ya, yc, yl := layout.TextY(a.LDraw), layout.TextY(c.LDraw), layout.TextY(l.LDraw)
 	if ya == 0 || yc == 0 || yl == 0 {
-		t.Fatalf("missing a node: a=%v c=%v label=%v", ya, yc, yl)
+		t.Fatalf("missing a label: a=%v c=%v label=%v", ya, yc, yl)
 	}
 	if !(min(ya, yc) < yl && yl < max(ya, yc)) {
 		t.Errorf("the label is at %v, not between its ends at %v and %v", yl, ya, yc)
 	}
 	// The chain runs a -> label -> c, and the head is on the half that
 	// touches a: drawn as a back arrow on that half.
-	first := svgtest.Group(svg, "a&#45;&gt;"+labelNodePrefix+"0")
-	second := svgtest.Group(svg, labelNodePrefix+"0&#45;&gt;c")
-	if first == "" || second == "" {
-		t.Fatalf("the back edge was not chained the other way round:\n%s", svg)
+	first, second := d.Between("a", labelNodePrefix+"0"), d.Between(labelNodePrefix+"0", "c")
+	if first == nil || second == nil {
+		t.Fatal("the back edge was not chained the other way round")
 	}
-	if strings.Count(first, "<polygon") != 1 || strings.Count(second, "<polygon") != 0 {
-		t.Errorf("the arrow moved: half at a has %d heads, half at c has %d", strings.Count(first, "<polygon"), strings.Count(second, "<polygon"))
+	if heads(first) != 1 || heads(second) != 0 {
+		t.Errorf("the arrow moved: half at a has %d heads, half at c has %d", heads(first), heads(second))
 	}
 }
 
@@ -327,15 +558,11 @@ func TestPixelLabelOnABackEdgeSitsBetweenItsEnds(t *testing.T) {
 func TestPixelLabelsHalveRanksepAsDotDoes(t *testing.T) {
 	claude := mustTheme(t, theme.ClaudeDOT())
 	height := func(th *theme.Theme, src string) float64 {
-		svg, err := RenderThemedSVG(t.Context(), th, src, 0, "")
+		d, err := RenderThemed(t.Context(), th, src, 0, "")
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, h, err := svgSize(svg)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return h
+		return d.H
 	}
 	bare := height(claude, `digraph { a -> b [label="x"] }`)
 	if dflt := height(claude, `digraph { ranksep=0.5; a -> b [label="x"] }`); dflt != bare {
@@ -355,15 +582,11 @@ func TestPixelLabelsHalveRanksepAsDotDoes(t *testing.T) {
 // cell's own type and as written does not, top-down when both are squeezed
 // and it is squeezed less, and as written when top-down is too tall for
 // the ceiling — which is the picture that was there before this law. The
-// cut says which way it went.
+// cut says which way it went, and the zoom it chose is read where it is
+// chosen, with nothing painted.
 func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	th := mustTheme(t, theme.ClaudeDOT())
-	var zooms []float64
-	r := &Raster{Name: "stub", Run: func(_ context.Context, _ []byte, zoom float64) ([]byte, error) {
-		zooms = append(zooms, zoom)
-		return []byte("png"), nil
-	}}
 	geom := term.Geom{CellW: 10, CellH: 24}
 	chain := func(n int) string {
 		var b strings.Builder
@@ -377,41 +600,40 @@ func TestPixelCutFlipsTopDownBeforeSqueezing(t *testing.T) {
 		b.WriteString(" }")
 		return b.String()
 	}
-	last := func() float64 { return zooms[len(zooms)-1] }
 
 	wide := chain(6)
-	_, p, err := Cut(t.Context(), th, r, wide, 100, geom)
+	_, p, zoom, err := cut(t.Context(), th, wide, 100, geom)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if p.Rankdir != cgraph.TBRank || p.Cols > 100 {
 		t.Errorf("a chain too wide for 100 columns was cut %d wide, laid out %q; want top-down within the width", p.Cols, p.Rankdir)
 	}
-	if last() < 1 {
-		t.Errorf("flipped top-down and still squeezed: zoom %v", last())
+	if zoom < 1 {
+		t.Errorf("flipped top-down and still squeezed: zoom %v", zoom)
 	}
-	_, p, err = Cut(t.Context(), th, r, wide, len(rowColumnDiacritics), geom)
+	_, p, zoom, err = cut(t.Context(), th, wide, len(rowColumnDiacritics), geom)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Rankdir != "" || last() < 1 {
-		t.Errorf("a chain with room to spare was laid out %q at zoom %v; want as written at the cell's own type", p.Rankdir, last())
+	if p.Rankdir != "" || zoom < 1 {
+		t.Errorf("a chain with room to spare was laid out %q at zoom %v; want as written at the cell's own type", p.Rankdir, zoom)
 	}
 
-	_, p, err = Cut(t.Context(), th, r, wide, 12, geom)
+	_, p, zoom, err = cut(t.Context(), th, wide, 12, geom)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Rankdir != cgraph.TBRank || p.Cols != 12 || last() >= 1 {
-		t.Errorf("a chain too wide either way was laid out %q, %d wide at zoom %v; want top-down, squeezed less", p.Rankdir, p.Cols, last())
+	if p.Rankdir != cgraph.TBRank || p.Cols != 12 || zoom >= 1 {
+		t.Errorf("a chain too wide either way was laid out %q, %d wide at zoom %v; want top-down, squeezed less", p.Rankdir, p.Cols, zoom)
 	}
 
 	tall := chain(60)
-	_, p, err = Cut(t.Context(), th, r, tall, 100, geom)
+	_, p, zoom, err = cut(t.Context(), th, tall, 100, geom)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Rankdir != "" || p.Cols != 100 || last() >= 1 {
-		t.Errorf("a chain too tall top-down was laid out %q, %d wide at zoom %v; want as written, squeezed into 100 columns", p.Rankdir, p.Cols, last())
+	if p.Rankdir != "" || p.Cols != 100 || zoom >= 1 {
+		t.Errorf("a chain too tall top-down was laid out %q, %d wide at zoom %v; want as written, squeezed into 100 columns", p.Rankdir, p.Cols, zoom)
 	}
 }

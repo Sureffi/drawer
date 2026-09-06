@@ -23,11 +23,7 @@ import (
 
 // drawPixels is the pixels rung: the rows that show a picture, or nil.
 func (r run) drawPixels(ctx context.Context, src string, width int) []string {
-	ras := pixel.Probe(r.term)
-	if ras == nil || !r.geom.OK() {
-		return nil
-	}
-	png, p, err := pixel.Cut(ctx, r.theme.get(ctx), ras, src, width, r.geom)
+	png, p, err := pixel.Cut(ctx, r.theme.get(ctx), src, width, r.geom)
 	if err != nil {
 		return nil
 	}

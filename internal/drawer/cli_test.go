@@ -11,17 +11,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sureffi/drawer/internal/pixel"
 	"github.com/sureffi/drawer/internal/term"
 	"github.com/sureffi/drawer/internal/theme"
 )
 
 // The offline picture is the hook's picture: cut to whole columns of the
-// cell it was asked for. Skipped where there is nothing to rasterise with.
+// cell it was asked for.
 func TestRunPNGWritesTheHooksPicture(t *testing.T) {
-	if pixel.Find() == nil {
-		t.Skip("no rasteriser on the PATH")
-	}
 	dir := t.TempDir()
 	dot := dir + "/g.dot"
 	png := dir + "/g.png"
@@ -116,7 +112,7 @@ func TestTheDoctorDoorSaysTheWindowItWasHanded(t *testing.T) {
 	}
 }
 
-// -doctor is what a hook process would decide from, said out loud: eleven
+// -doctor is what a hook process would decide from, said out loud: ten
 // facts, one per line, in the order the ladder decides them. Under a pipe
 // there is no window to ask — the columns are the number nobody chose and
 // the cell size is unknown — and a terminal that says nothing gets braille,
@@ -141,7 +137,6 @@ func TestDoctorSaysWhatAHookWouldSee(t *testing.T) {
 		"columns: 100 (from default)",
 		"cell: unknown: the terminal did not say",
 		"placeholders: no",
-		"rasteriser: ",
 		"rung: braille (asked: auto)",
 		"theme: Claude Code's dark",
 		"state: ",
@@ -155,8 +150,8 @@ func TestDoctorSaysWhatAHookWouldSee(t *testing.T) {
 			t.Errorf("line %d is %q, want it to open %q", i+1, said[i], w)
 		}
 	}
-	if !strings.HasSuffix(said[9], " (writable)") {
-		t.Errorf("a state directory this law just made is not writable: %q", said[9])
+	if !strings.HasSuffix(said[8], " (writable)") {
+		t.Errorf("a state directory this law just made is not writable: %q", said[8])
 	}
 }
 
@@ -362,16 +357,11 @@ func TestTheDoctorSaysWhetherAPictureCrossesTmux(t *testing.T) {
 	}
 }
 
-// The rung line says what this wire gets. On a kitty with a cell size and
-// a rasteriser the terminal can show pixels, and where the pane said no the
-// drawing is glyphs: drawBlock falls that way, and the doctor says so on
-// the line a reader greps, not only on the tmux line above it. Skipped
-// where there is nothing to rasterise with, because then it is octants
-// for a reason the wire has nothing to do with.
+// The rung line says what this wire gets. On a kitty with a cell size the
+// terminal can show pixels, and where the pane said no the drawing is
+// glyphs: drawBlock falls that way, and the doctor says so on the line a
+// reader greps, not only on the tmux line above it.
 func TestTheDoctorsRungIsWhatThisWireGets(t *testing.T) {
-	if pixel.Find() == nil {
-		t.Skip("no rasteriser on the PATH")
-	}
 	for _, c := range []struct {
 		name, force, own, pane, want string
 	}{

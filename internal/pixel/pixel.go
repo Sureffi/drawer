@@ -3,32 +3,34 @@
 // The cells and the sub-cell strokes are the floor: they need nothing but
 // this binary and draw in any terminal that can show a `┌`. This is the
 // ceiling, and it is optional in the strongest sense — every stage fails
-// open to the glyph drawing, so a missing rasteriser, a slow one, a
-// terminal that does not draw the placeholder cells, or a graph cairo
-// chokes on all end in the picture that was already there. No error from
-// here reaches the screen.
+// open to the glyph drawing, so a terminal that does not draw the
+// placeholder cells, a graph too big for the block it was given, or a
+// deadline already spent all end in the picture that was already there. No
+// error from here reaches the screen.
 //
-// Two things have to be true. The terminal has to draw kitty's Unicode
-// placeholders — kitty or ghostty — because those cells are the one way an
-// image can live in cells and therefore scroll, wrap and copy exactly like
-// text. And something on the PATH has to turn SVG into pixels. graphviz's own PNG
-// backend is not that something: goccy/go-graphviz carries graphviz's real
-// SVG writer, which is exact, and its own rasteriser, which silently drops
-// any edge stroke past hairline and loses them outright at dpi=192. So the
-// wasm writes SVG and cairo — rsvg-convert, else magick — makes the pixels.
+// One thing has to be true, and it is about the terminal alone: it has to
+// draw kitty's Unicode placeholders — kitty or ghostty — because those
+// cells are the one way an image can live in cells and therefore scroll,
+// wrap and copy exactly like text. Nothing else is asked of the box. The
+// wasm writes the layout as json, which is xdot — every polygon, bezier,
+// ellipse and text anchor graphviz would have painted — and paint.go
+// paints it, in this process, in type this binary carries.
+//
+// graphviz's own PNG backend is still not the answer, and the reason is
+// not the dependency: measured, goccy/go-graphviz's renderer silently
+// drops an edge stroke past hairline and loses them outright at dpi=192,
+// fills a shape without stroking the outline xdot says to stroke, and sets
+// type in Go Regular, which is proportional, while the layout was measured
+// in Courier. What it shares with this file is the rasteriser underneath;
+// what it does with the drawing is the part that had to be written here.
 
 package pixel
 
 import (
-	"bytes"
 	"context"
-	"errors"
-	"os/exec"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
@@ -37,18 +39,6 @@ import (
 )
 
 // ---------- capability ----------
-
-// Raster is the rasteriser this machine actually has: a name, the program
-// that name found, and the one call it can make. A func rather than a
-// command line so a law can stand in a stub and read the zoom it was asked
-// for, with no rasteriser anywhere in the loop. The call takes the caller's
-// context because it is another process, and the one thing in this tree
-// most able to hang.
-type Raster struct {
-	Name string
-	Path string
-	Run  func(ctx context.Context, svg []byte, zoom float64) ([]byte, error)
-}
 
 // Placeholders says whether a terminal draws kitty's Unicode placeholder
 // cells, which are the one way a picture can live in cells and therefore
@@ -69,65 +59,7 @@ func Placeholders(name string) bool {
 	return strings.Contains(name, "kitty") || strings.Contains(name, "ghostty")
 }
 
-// Probe answers whether pixels are possible on the terminal named: it draws
-// placeholder cells and a rasteriser exists.
-func Probe(name string) *Raster {
-	if !Placeholders(name) {
-		return nil
-	}
-	return Find()
-}
-
-// Find is the rasteriser on the PATH, whatever the terminal: for a picture
-// that is going to a file rather than a screen.
-func Find() *Raster {
-	if p, err := exec.LookPath("rsvg-convert"); err == nil {
-		return &Raster{Name: "rsvg-convert", Path: p, Run: func(ctx context.Context, svg []byte, zoom float64) ([]byte, error) {
-			return rasterExec(ctx, p, svg, "--zoom", strconv.FormatFloat(zoom, 'f', 4, 64))
-		}}
-	}
-	if p, err := exec.LookPath("magick"); err == nil {
-		// magick has no --zoom: it rasterises SVG at a density, and 96dpi is
-		// the density rsvg renders at unzoomed, so the same number means the
-		// same picture on either.
-		return &Raster{Name: "magick", Path: p, Run: func(ctx context.Context, svg []byte, zoom float64) ([]byte, error) {
-			return rasterExec(ctx, p, svg, "-background", "none",
-				"-density", strconv.FormatFloat(96*zoom, 'f', 2, 64), "svg:-", "png:-")
-		}}
-	}
-	return nil
-}
-
-// A rasteriser is another process on somebody else's machine: it can hang,
-// it can hand back a gigabyte, it can be a shell script. Bound both ends and
-// read anything outside them as no picture at all. This bound is its own,
-// under whatever the caller's context already allows: two seconds is what a
-// rasteriser gets, and never more than what is left of the draw.
-const (
-	rasterTimeout = 2 * time.Second
-	rasterMaxPNG  = 4 << 20
-	// A tiny graph in a tall region would otherwise be blown up without
-	// limit; past this the picture is not better, only heavier.
-	rasterMaxZoom = 8.0
-)
-
-func rasterExec(ctx context.Context, bin string, svg []byte, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, rasterTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, args...)
-	cmd.Stdin = bytes.NewReader(svg)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if err := cmd.Run(); err != nil {
-		return nil, err
-	}
-	if out.Len() == 0 || out.Len() > rasterMaxPNG {
-		return nil, errors.New("rasteriser output out of bounds")
-	}
-	return out.Bytes(), nil
-}
-
-// ---------- SVG, themed ----------
+// ---------- the drawing, themed ----------
 
 // The theme goes on through cgraph, on the parsed graph, and only where the
 // model left an attribute unset: a node it painted keeps its paint, and
@@ -143,17 +75,16 @@ func rasterExec(ctx context.Context, bin string, svg []byte, args ...string) ([]
 // wallpaper: an opaque slab was the one thing in the picture that said
 // "pasted in", and it was the first thing a reader saw.
 
-// Type is measured in Courier and set in the theme's face. The wasm has no
-// fontconfig: graphviz measures a label from tables built into it, and the
-// tables know Courier's advance exactly — 0.6em, which is every terminal
-// monospace's advance too. Any other name, "monospace" included, falls back
-// to Times metrics and the labels run out of their boxes; measured, "API
-// Server 1" overran its box by two glyphs. So the layout is done in Courier
-// and on the way out the SVG is told the face, which fontconfig resolves —
-// "monospace" to the one the terminal itself is showing. Neither the model
-// nor the theme gets to choose the layout font: a label measured in one
-// face and set in another is the overrun again, so fontname is the one
-// attribute always written.
+// Type is measured in Courier, always. The wasm has no font system:
+// graphviz measures a label from tables built into it, and the tables know
+// Courier's advance exactly — 0.6em, which is every terminal monospace's
+// advance too. Any other name, "monospace" included, falls back to Times
+// metrics and the labels run out of their boxes; measured, "API Server 1"
+// overran its box by two glyphs. So fontname is the one attribute always
+// written, over the model and over the theme alike: a label measured in one
+// face and set in another is that overrun again. What the picture is
+// finally set in is paint.go's answer, and Go Mono's advance is 0.602em
+// against Courier's 0.600.
 const (
 	pxLayoutFont = "Courier"
 	pxAdvance    = 0.6 // em per glyph: Courier's, and every terminal's
@@ -170,7 +101,8 @@ func FontPt(cellW int) float64 {
 	return float64(cellW) / pxAdvance / pxPerPt
 }
 
-// RenderThemedSVG lays the source out and writes graphviz's SVG for it.
+// RenderThemed lays the source out in a theme and reads back what graphviz
+// would have drawn.
 //
 // Node sizes are graphviz's own here, unlike the cell renderer's, which
 // forces every box to its label's width in cells. There the cells do the
@@ -179,8 +111,8 @@ func FontPt(cellW int) float64 {
 //
 // force overrides the orientation the source asked for; empty leaves the
 // author's choice alone.
-func RenderThemedSVG(ctx context.Context, th *theme.Theme, src string, fontPt float64, force cgraph.RankDir) ([]byte, error) {
-	var svg []byte
+func RenderThemed(ctx context.Context, th *theme.Theme, src string, fontPt float64, force cgraph.RankDir) (*layout.Drawing, error) {
+	var d *layout.Drawing
 	err := layout.Door(ctx, src, func(ctx context.Context, g *graphviz.Graphviz, graph *cgraph.Graph) error {
 		if force != "" {
 			graph.SetRankDir(force)
@@ -265,45 +197,20 @@ func RenderThemedSVG(ctx context.Context, th *theme.Theme, src string, fontPt fl
 		apply(graph.GetStr, graph.SafeSet, th.Graph, "fontname", "fontsize")
 		typeset(graph.GetStr, graph.SafeSet, th.Graph)
 
-		var buf bytes.Buffer
-		if err := g.Render(ctx, graph, graphviz.SVG, &buf); err != nil {
-			return err
-		}
-		// graphviz writes Courier as a family with its generic behind it.
-		svg = bytes.ReplaceAll(buf.Bytes(),
-			[]byte(`font-family="`+pxLayoutFont+`,monospace"`), []byte(`font-family="`+th.Face()+`"`))
-		return nil
+		var err error
+		d, err = layout.Render(ctx, g, graph)
+		return err
 	})
-	return svg, err
+	return d, err
 }
 
 // ---------- pixels ----------
 
-// An SVG length is in points and a rasteriser renders a point at 96dpi.
-// Measured, not assumed: the reference 672pt × 121pt render comes back
-// 896 × 162 px at --zoom 1, and 672 × 96/72 is 896.
+// A drawing is measured in points, and a point is 96dpi's ninety-sixth of
+// an inch: the size the picture has always been rendered at. Measured, not
+// assumed — the reference 672pt × 121pt picture came back 896 × 162 px at
+// zoom 1, and 672 × 96/72 is 896.
 const pxPerPt = 96.0 / 72.0
-
-var svgSizeRe = regexp.MustCompile(`width="([0-9.]+)pt"\s+height="([0-9.]+)pt"`)
-
-// svgSize reads the size graphviz wrote into its own output. The layout
-// already answered how big this picture is; measuring it again from the
-// geometry inside would be a second guess at an answer already given.
-func svgSize(svg []byte) (float64, float64, error) {
-	head := svg
-	if len(head) > 4096 {
-		head = head[:4096]
-	}
-	m := svgSizeRe.FindSubmatch(head)
-	if m == nil {
-		return 0, 0, errors.New("svg carries no size")
-	}
-	w, h := layout.Atof(string(m[1])), layout.Atof(string(m[2]))
-	if w <= 0 || h <= 0 {
-		return 0, 0, errors.New("svg size is not a size")
-	}
-	return w, h, nil
-}
 
 // ---------- names ----------
 

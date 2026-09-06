@@ -77,8 +77,8 @@ func (r run) recordPicture(ctx context.Context, p pixel.Picture) {
 // repaintPictures sends every picture in a session's ledger to the terminal
 // again, in the theme in force, when that is not the theme they stand in.
 // How many were sent; none when nothing changed, or nothing was drawn.
-func (r run) repaintPictures(ctx context.Context, tty string, ras *pixel.Raster) int {
-	if r.sess == "" || ras == nil {
+func (r run) repaintPictures(ctx context.Context, tty string) int {
+	if r.sess == "" {
 		return 0
 	}
 	path := ledgerPath(r.sess)
@@ -101,11 +101,11 @@ func (r run) repaintPictures(ctx context.Context, tty string, ras *pixel.Raster)
 		return 0
 	}
 	for _, p := range l.Pictures {
-		svg, err := pixel.RenderThemedSVG(ctx, r.theme.get(ctx), p.Src, pixel.FontPt(p.Geom.CellW), p.Rankdir)
+		d, err := pixel.RenderThemed(ctx, r.theme.get(ctx), p.Src, pixel.FontPt(p.Geom.CellW), p.Rankdir)
 		if err != nil {
 			continue
 		}
-		png, _, err := pixel.Fit(ctx, ras, svg, p.Cols, p.Geom)
+		png, _, err := pixel.Fit(ctx, d, r.theme.get(ctx).Face(), p.Cols, p.Geom)
 		if err != nil {
 			continue
 		}

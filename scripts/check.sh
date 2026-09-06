@@ -39,14 +39,13 @@ layers_table() {
   grid       (nothing internal)
   term       (nothing internal)
   layout     grid
-  svgtest    layout
   theme      layout
   fence      grid layout
   notice     grid layout
   cells      grid layout
   subcell    grid layout
-  pixel      grid term layout theme svgtest
-  drawer     grid term layout theme svgtest fence notice cells subcell pixel
+  pixel      grid term layout theme
+  drawer     grid term layout theme fence notice cells subcell pixel
   cmd/drawer drawer
 TABLE
 }
@@ -138,13 +137,10 @@ hook_draws() {
 stage "plugin: session" session_speaks || true
 stage "plugin: hook" hook_draws || true
 
-# The pixels rung, to a file: the same cut the hook makes. Only where this
-# machine can rasterise; a box without cairo is not wrong, only glyph-bound.
-if command -v rsvg-convert >/dev/null 2>&1 || command -v magick >/dev/null 2>&1; then
-  stage "png: testdata/chain.dot" ./bin/drawer -dot testdata/chain.dot -png bin/chain.png -size 100x40 || true
-else
-  say "png: testdata/chain.dot" "skipped (no rasteriser)"
-fi
+# The pixels rung, to a file: the same cut the hook makes. Nothing gates
+# this — the picture is painted in the binary, so a box that can run the
+# laws can draw one.
+stage "png: testdata/chain.dot" ./bin/drawer -dot testdata/chain.dot -png bin/chain.png -size 100x40 || true
 
 # The hook wire: recorded delta streams, replayed. `drawer -hook -hooktee`
 # writes these straight off a live session, so the corpus is not limited to
