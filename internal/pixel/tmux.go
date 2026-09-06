@@ -148,9 +148,11 @@ func (t *Tmux) Passthrough(ctx context.Context) (string, error) {
 // permissive of the two, not the lesser, so a pane already sitting on it is
 // left exactly as it is. Anything else is asked again without -A, which
 // answers with what this pane itself was set to and nothing inherited from
-// the server, and a pane whose own value is "off" is a reader who said no
-// here: drawer leaves it alone and draws in glyphs. Only a pane with no
-// answer of its own is written to, and what it is written is "on".
+// the server. Only a pane with no value of its own is written to, and what
+// it is written is "on": a pane carrying any value at all — "off" from a
+// reader who said no here, or a word this version of tmux spells and this
+// one does not know — is left exactly where it is, which makes it a closed
+// wire and draws the graph in glyphs.
 //
 // The note is empty where it was already through and there was nothing to
 // do, because a note about nothing is noise — and it is written once
@@ -180,10 +182,14 @@ func (t *Tmux) Allow(ctx context.Context) (string, bool) {
 		return t.note("tmux: allow-passthrough is " + Quoted(was) + pane +
 			" and this pane's own value could not be read: " + reason(err)), false
 	}
-	if own == "off" {
-		return t.note("tmux: allow-passthrough is off" + pane +
-			", set there and not inherited from the server: a reader said no in this" +
-			" pane, so drawer leaves it and draws in glyphs"), false
+	if own != "" {
+		// Not only "off": the sentence above says a pane with no value of
+		// its own, and a value nobody here recognises is still a value
+		// somebody set. Overwriting one drawer cannot read is the same
+		// trespass as overwriting one it can.
+		return t.note("tmux: allow-passthrough is " + own + pane +
+			", set there and not inherited from the server: drawer leaves a pane's" +
+			" own value alone and draws in glyphs"), false
 	}
 	if !t.tried {
 		t.setErr, t.tried = t.allow(ctx), true
@@ -212,8 +218,9 @@ func (t *Tmux) note(s string) string {
 
 // PaneOption is what this pane itself was set to, with nothing inherited
 // from the server: "off" from here is a reader who said no in this pane,
-// and empty is a pane nobody has said anything about either way. -A is
-// deliberately absent — the value in force is the other question, and
+// empty is a pane nobody has said anything about either way, and anything
+// else is still this pane's own answer and not drawer's to write over. -A
+// is deliberately absent — the value in force is the other question, and
 // Passthrough asks it.
 //
 // Asked once and remembered, like the other one, and asked at all only on

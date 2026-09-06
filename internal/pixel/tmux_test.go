@@ -312,6 +312,26 @@ func TestAPaneThatSaidOffIsLeftAlone(t *testing.T) {
 	}
 }
 
+// A value this binary has no word for is still a value the pane carries.
+// The policy is written as "only a pane with no value of its own is written
+// to", and it used to be read as "only a pane that did not say off": a pane
+// answering anything else at all was written over. tmux's option vocabulary
+// is tmux's to extend, and drawer is a guest here.
+func TestAPaneCarryingAValueNobodyKnowsIsLeftAlone(t *testing.T) {
+	log := optionTmux(t, "off", "sometimes")
+	mux := &Tmux{Socket: "/nowhere", Pane: "%0"}
+	note, through := mux.Allow(t.Context())
+	if through {
+		t.Errorf("a pane answering \"sometimes\" was read as a wire a picture can cross")
+	}
+	if !strings.Contains(note, "sometimes") {
+		t.Errorf("the note does not say what the pane's own value was: %q", note)
+	}
+	if got := asked(t, log); len(got) != 2 || got[0] != "show-A" || got[1] != "show" {
+		t.Errorf("tmux was run %v; want the two reads and no write at all", got)
+	}
+}
+
 // A pane nobody has said anything about is the pane drawer writes to, and
 // the write is the only one it makes: the value in force is off because the
 // server's default is off, and the pane's own answer is empty.

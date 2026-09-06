@@ -110,8 +110,8 @@ func runVersion(w io.Writer) int {
 //
 // Where the value in force is not already through, the pane's own value is
 // read too, because that is the answer the hook would act on: a pane that
-// set itself off is one drawer will not write to, and a line saying it
-// would is a line that is not true.
+// set itself anything at all is one drawer will not write to, and a line
+// saying it would is a line that is not true.
 func (r run) muxLine(ctx context.Context) string {
 	if r.mux == nil {
 		return "no"
@@ -140,8 +140,8 @@ func (r run) muxLine(ctx context.Context) string {
 		return "yes: " + pane + ", allow-passthrough " + pixel.Quoted(was) +
 			", and this pane's own value could not be read: " + err.Error() +
 			" — no picture can cross this wire"
-	case own == "off":
-		return "yes: " + pane + ", allow-passthrough off, set on the pane itself" +
+	case own != "":
+		return "yes: " + pane + ", allow-passthrough " + own + ", set on the pane itself" +
 			": drawer leaves that alone and draws glyphs"
 	default:
 		return "yes: " + pane + ", allow-passthrough " + pixel.Quoted(was) +
