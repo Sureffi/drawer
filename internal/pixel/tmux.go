@@ -70,33 +70,49 @@ func (t *Tmux) Passthrough() string {
 
 // Allow turns the pane's passthrough on where it is not on already,
 // because tmux drops a passthrough nobody allowed and the picture is then
-// simply gone — no error, no cells missing, nothing to see.
+// simply gone — no error, no cells missing, nothing to see. Two answers:
+// what it found and did, for the tee, and whether an escape can get
+// through afterwards. False is the fail-open signal the rung above needs:
+// a wire this one knows is closed is a wire to draw glyphs down instead of
+// leaving a reader eight blank rows.
 //
 // Pane-scoped, on purpose and without an option to do otherwise: this is
 // somebody else's tmux and drawer is a guest in it. The change reaches the
 // pane claude is running in and no other, it is never written to a file,
 // the server's own setting is left where it was, and it dies with the pane.
+// An option somebody already set on — on the server, or on this pane — is
+// read as on and nothing is written at all: -A asks for the value in force.
 //
-// What it found and did, for the tee — empty where it was already on and
-// there was nothing to do, because a note about nothing is noise.
-func (t *Tmux) Allow() string {
+// The note is empty where it was already on and there was nothing to do,
+// because a note about nothing is noise.
+func (t *Tmux) Allow() (string, bool) {
 	if t == nil {
-		return ""
+		return "", true
 	}
+	pane := " for pane " + t.Pane
 	switch was := t.Passthrough(); was {
 	case "on":
-		return ""
+		return "", true
 	case "":
-		return "tmux: allow-passthrough could not be read for pane " + t.Pane +
-			"; the picture may not reach the terminal"
-	default:
-		if out := t.run("set", "-p", "-t", t.Pane, "allow-passthrough", "on"); out != "" {
-			return "tmux: allow-passthrough is " + was + " for pane " + t.Pane +
-				" and would not be set: " + strings.TrimSpace(out)
+		// tmux would not say. Ask for it anyway rather than deciding from
+		// an answer nobody gave.
+		if out := t.allow(); out != "" {
+			return "tmux: allow-passthrough could not be read or set" + pane + ": " + out, false
 		}
-		return "tmux: allow-passthrough was " + was + "; set on for pane " + t.Pane +
-			" (this pane only, until it closes)"
+		return "tmux: allow-passthrough could not be read" + pane + "; set on for it anyway", true
+	default:
+		if out := t.allow(); out != "" {
+			return "tmux: allow-passthrough is " + was + pane + " and would not be set: " + out, false
+		}
+		return "tmux: allow-passthrough was " + was + "; set on" + pane +
+			" (this pane only, until it closes)", true
 	}
+}
+
+// allow is the one write this package makes to anything but a tty: what
+// tmux said about it, and nothing where it worked.
+func (t *Tmux) allow() string {
+	return strings.TrimSpace(t.run("set", "-p", "-t", t.Pane, "allow-passthrough", "on"))
 }
 
 // run is one tmux command against this server. The socket is addressed

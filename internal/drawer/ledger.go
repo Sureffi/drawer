@@ -92,7 +92,11 @@ func (r run) repaintPictures(ctx context.Context, tty string, ras *pixel.Raster)
 		return 0
 	}
 	n := 0
-	r.teeNote(r.mux.Allow())
+	note, through := r.mux.Allow()
+	r.teeNote(note)
+	if !through {
+		return 0
+	}
 	for _, p := range l.Pictures {
 		svg, err := pixel.RenderThemedSVG(ctx, r.theme.get(ctx), p.Src, pixel.FontPt(p.Geom.CellW), p.Rankdir)
 		if err != nil {

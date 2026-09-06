@@ -91,10 +91,25 @@ func TestNoMultiplexerIsNothingToDo(t *testing.T) {
 	if got := none.wrap("\x1bX"); got != "\x1bX" {
 		t.Errorf("wrap changed an escape with no tmux: %q", got)
 	}
-	if got := none.Allow(); got != "" {
-		t.Errorf("Allow did something with no tmux: %q", got)
+	if note, through := none.Allow(); note != "" || !through {
+		t.Errorf("Allow with no tmux said %q, through=%v; want nothing in the way", note, through)
 	}
 	if got := none.Passthrough(); got != "" {
 		t.Errorf("Passthrough answered with no tmux: %q", got)
+	}
+}
+
+// A tmux that will not answer is a wire this process knows is closed: the
+// note says so and the answer is false, which is what sends the rung above
+// back to the glyphs rather than leaving a reader rows of nothing. No
+// server is listening on this socket, which is exactly the shape of a tmux
+// that went away mid-session.
+func TestAllowSaysSoWhenTheWireIsClosed(t *testing.T) {
+	note, through := (&Tmux{Socket: "/nowhere/tmux-does-not-exist", Pane: "%0"}).Allow()
+	if through {
+		t.Error("a tmux that answers nothing was read as a wire the picture can cross")
+	}
+	if !strings.Contains(note, "allow-passthrough") || !strings.Contains(note, "%0") {
+		t.Errorf("the note does not say what happened, or to which pane: %q", note)
 	}
 }

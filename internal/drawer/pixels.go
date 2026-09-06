@@ -34,8 +34,14 @@ func (r run) drawPixels(ctx context.Context, src string, width int) []string {
 	id := pixel.ImageID(p.Src, p.Cols, p.Rows)
 	// tmux drops a passthrough nobody allowed, and a dropped picture looks
 	// exactly like no picture: the cells arrive and stay empty. Ask for it
-	// before the escape goes out, and say so where a note can be read.
-	r.teeNote(r.mux.Allow())
+	// before the escape goes out, say so where a note can be read, and fail
+	// open to the glyphs where the answer is no — eight blank rows are worse
+	// than a drawing in strokes.
+	note, through := r.mux.Allow()
+	r.teeNote(note)
+	if !through {
+		return nil
+	}
 	if !pixel.Send(term.TTYOut(), png, id, p.Cols, p.Rows, r.mux) {
 		return nil
 	}
