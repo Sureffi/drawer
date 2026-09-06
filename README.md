@@ -3,15 +3,16 @@
 [![check](https://github.com/sureffi/drawer/actions/workflows/check.yml/badge.svg)](https://github.com/sureffi/drawer/actions/workflows/check.yml)
 
 A ```dot fence in Claude Code becomes a drawing, in place, as the reply
-streams. One binary, nothing else running.
+streams.
 
 ![a live session](demo/session.gif)
 
+Two commands to install.
 
     /plugin marketplace add sureffi/drawer
     /plugin install drawer@drawer
 
-Then ask for a graph. The model writes DOT; the reader sees the picture.
+Then ask for a graph. The model writes DOT; you see the picture.
 
 ## what you get
 
