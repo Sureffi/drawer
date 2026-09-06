@@ -196,7 +196,7 @@ func routeAll(cv *Canvas, g *layout.Graph, sl slots, boxes, frames []Box, encl [
 		}
 		commit(cv, ps, tp, hp, e)
 		if e.Label != "" {
-			labelled = append(labelled, laid{ps, e.Label})
+			labelled = append(labelled, laid{ps, e.Label, ParsePen(e.FontPen)})
 		}
 	}
 	// The words go on once every line is down. A label belongs to the
@@ -204,7 +204,7 @@ func routeAll(cv *Canvas, g *layout.Graph, sl slots, boxes, frames []Box, encl [
 	// a drawing half of which is not there yet — nor can the room for one
 	// be taken from an edge that still has to be routed.
 	for _, l := range labelled {
-		if !placeLabel(cv, t, l.ps, l.label) {
+		if !placeLabel(cv, t, l.ps, l.label, l.ink) {
 			short++
 		}
 	}
@@ -215,6 +215,7 @@ func routeAll(cv *Canvas, g *layout.Graph, sl slots, boxes, frames []Box, encl [
 type laid struct {
 	ps    Route
 	label string
+	ink   Pen
 }
 
 // selfLoop hoops a line out of one wall and back into the same wall. The
@@ -416,7 +417,7 @@ func segments(ps Route) []segment {
 // side — a word interrupting a stroke belongs to that stroke, and nothing
 // else can claim it. Failing that it stands beside the line, which is
 // where graph-easy sets one.
-func placeLabel(cv *Canvas, t *terrain, ps Route, label string) bool {
+func placeLabel(cv *Canvas, t *terrain, ps Route, label string, ink Pen) bool {
 	need := grid.Cells(label)
 	if need == 0 {
 		return true
@@ -424,17 +425,17 @@ func placeLabel(cv *Canvas, t *terrain, ps Route, label string) bool {
 	segs := segments(ps)
 	if bridgeable(label) {
 		for _, s := range segs {
-			if s.horiz && inLine(cv, t, ps, s, label, need) {
+			if s.horiz && inLine(cv, t, ps, s, label, need, ink) {
 				return true
 			}
 		}
 	}
 	for _, s := range segs {
-		if beside(cv, t, ps, s, label, need) {
+		if beside(cv, t, ps, s, label, need, ink) {
 			return true
 		}
 	}
-	return nudge(cv, t, ps, label, need)
+	return nudge(cv, t, ps, label, need, ink)
 }
 
 // bridgeable says whether a label may be set into its own line. A reader
@@ -524,7 +525,7 @@ func mine(cv *Canvas, t *terrain, ps Route, x, y, n int) bool {
 
 // inLine writes the label into its own line: the run is blanked for the
 // words and a shoulder, and the line carries on either side of them.
-func inLine(cv *Canvas, t *terrain, ps Route, s segment, label string, need int) bool {
+func inLine(cv *Canvas, t *terrain, ps Route, s segment, label string, need int, ink Pen) bool {
 	lo, hi := s.a.x, s.b.x
 	if lo > hi {
 		lo, hi = hi, lo
@@ -554,19 +555,19 @@ func inLine(cv *Canvas, t *terrain, ps Route, s segment, label string, need int)
 		return false
 	}
 	cv.Blank(x0, y, need+2)
-	cv.Text(x0+1, y, label, 0)
+	cv.Text(x0+1, y, label, ink)
 	cv.Hold(x0, y, need+2, 1)
 	return true
 }
 
 // beside sets the label next to its line: above a run across the page, or
 // two cells out from one down it, which is where a reader looks for it.
-func beside(cv *Canvas, t *terrain, ps Route, s segment, label string, need int) bool {
+func beside(cv *Canvas, t *terrain, ps Route, s segment, label string, need int, ink Pen) bool {
 	put := func(x, y int) bool {
 		if !cv.Free(x, y, need) || !mine(cv, t, ps, x, y, need) || !safeText(cv, label, x, y) {
 			return false
 		}
-		cv.Text(x, y, label, 0)
+		cv.Text(x, y, label, ink)
 		cv.Hold(x, y, need, 1)
 		return true
 	}
@@ -616,13 +617,13 @@ func beside(cv *Canvas, t *terrain, ps Route, s segment, label string, need int)
 // nothing else's. A label that will not go anywhere clean is left off, and
 // the attempt says it was short, so the drawing is made again with more
 // room rather than damaged here.
-func nudge(cv *Canvas, t *terrain, ps Route, label string, need int) bool {
+func nudge(cv *Canvas, t *terrain, ps Route, label string, need int, ink Pen) bool {
 	for _, p := range ps {
 		for _, dy := range []int{-1, 1, -2, 2, 0} {
 			for _, dx := range []int{0, 2, -1 - need, 1, -2, -need, 3} {
 				x, y := p.x+dx, p.y+dy
 				if cv.Free(x, y, need) && mine(cv, t, ps, x, y, need) && safeText(cv, label, x, y) {
-					cv.Text(x, y, label, 0)
+					cv.Text(x, y, label, ink)
 					cv.Hold(x, y, need, 1)
 					return true
 				}

@@ -56,6 +56,7 @@ type GEdge struct {
 	Dir        Dir
 	Style      string
 	Pen        string
+	FontPen    string
 	PenWidth   float64
 }
 
@@ -189,6 +190,7 @@ func readEdge(e *cgraph.Edge, tail, head int, tn, hn, graphName string, directed
 		Tail: tail, Head: head, Dir: None,
 		Style:    strings.TrimSpace(e.GetStr("style")),
 		Pen:      strings.TrimSpace(e.GetStr("color")),
+		FontPen:  strings.TrimSpace(e.GetStr("fontcolor")),
 		PenWidth: atof(e.GetStr("penwidth")),
 	}
 	if directed {
