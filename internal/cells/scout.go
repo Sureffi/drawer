@@ -27,9 +27,9 @@ import "container/heap"
 const (
 	priceStep  = 1
 	priceTurn  = 10
-	priceCross = 30
-	priceWall  = 6 // travelling along a box's own edge row or column
-	priceLane  = 2 // travelling right alongside another edge
+	priceCross = 48 // passing through another edge: dearer than any detour
+	priceWall  = 6  // travelling along a box's own edge row or column
+	priceLane  = 2  // travelling right alongside another edge
 )
 
 // Route is one edge's path, cell by cell, the ports at both ends included.
