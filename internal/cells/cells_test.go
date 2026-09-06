@@ -908,15 +908,23 @@ func TestLinesCrossAndNeverJoin(t *testing.T) {
 		corpusTB, corpusLR,
 		"digraph { rankdir=LR; a -> b; a -> c; a -> d; b -> d; c -> d; d -> a }",
 		"digraph { rankdir=TB; a -> b; b -> c; c -> a; a -> c; b -> a }",
+		// A dashed box and a heavy one, because a box is drawn in the pen
+		// it asked for and the wall this law looks for has to know all of
+		// them. The alphabet here was the light runes alone, so the law
+		// held for solid boxes and could not be pointed at any other kind
+		// without going red on a correct drawing.
+		"digraph { rankdir=LR; a [style=dashed]; b [style=bold]; a -> b; a -> c; c -> b }",
+		"digraph { rankdir=TB; node [style=dashed]; a -> b; a -> c; b -> d; c -> d }",
 	}
 	tees := "├┤┬┴┝┞┟┠┡┢┥┦┧┨┩┪┭┮┯┰┱┲┵┶┷┸┹┺╞╟╠╡╢╣╤╥╦╧╨╩"
 	for _, src := range srcs {
 		g := gridOf(drawn(t, src+"\n", 120))
 		wall := func(y, x int) bool {
 			// a wall cell is one a box's own border passes through: it has
-			// a corner or a straight run of the same box on either side.
+			// a corner or a straight run of the same box on either side —
+			// in every pen a box is drawn in, light, dashed and heavy.
 			return y >= 0 && y < len(g) && x >= 0 && x < len(g[y]) &&
-				strings.ContainsRune("┌┐└┘╭╮╰╯│─"+tees, g[y][x])
+				strings.ContainsRune("┌┐└┘╭╮╰╯│─┏┓┗┛┃━┄┆╌╎"+tees, g[y][x])
 		}
 		for y := range g {
 			for x, r := range g[y] {
@@ -1005,19 +1013,61 @@ func TestNoLineCrossesAFrame(t *testing.T) {
 	rows := plain(drawn(t, src+"\n", 120))
 	j := strings.Join(rows, "\n")
 	// A frame's own corner runes are square; a node's are round. So any
-	// square corner belongs to a frame, and a frame's edges must be whole
-	// runs of `─` and `│` broken only by its name and by the tees where a
-	// line stops against it.
-	if !strings.Contains(j, "┌") || !strings.Contains(j, "╭") {
-		t.Fatalf("want both frames and boxes:\n%s", j)
+	// square corner opens a frame, and every cell of that frame's four
+	// walls has to be the wall's own rune, the name written into the top
+	// edge, or a tee where a line stopped against it. A crossing there, or
+	// a line rune lying across the wall's own axis, is a line gone through.
+	//
+	// The check used to sit inside `if the drawing has a ┼ in it`, and this
+	// drawing has none, so it asserted nothing at all for a long time.
+	if !strings.Contains(j, "╭") {
+		t.Fatalf("want boxes as well as frames:\n%s", j)
 	}
-	if strings.ContainsAny(j, "┼") {
-		// A crossing inside a frame's own wall would be a line through it.
-		for _, r := range rows {
-			if strings.Contains(r, "┼") && (strings.Count(r, "┌")+strings.Count(r, "└")) > 0 {
-				t.Errorf("a line crossed a frame:\n%s", j)
+	g := gridOf(rows)
+	frames := 0
+	for y := range g {
+		for x, r := range g[y] {
+			if r != '┌' {
+				continue
+			}
+			x1, y1 := -1, -1
+			for c := x + 1; c < len(g[y]); c++ {
+				if g[y][c] == '┐' {
+					x1 = c
+					break
+				}
+			}
+			for r2 := y + 1; r2 < len(g); r2++ {
+				if at(g, x, r2) == '└' {
+					y1 = r2
+					break
+				}
+			}
+			if x1 < 0 || y1 < 0 || at(g, x1, y1) != '┘' {
+				continue
+			}
+			frames++
+			// Across the two horizontal walls: nothing that runs down the
+			// page, and no crossing.
+			for c := x + 1; c < x1; c++ {
+				for _, r2 := range []int{y, y1} {
+					if ch := at(g, c, r2); strings.ContainsRune("│┃┆╎┼╂┿╋", ch) {
+						t.Errorf("a line crossed a frame's horizontal wall at %d,%d (%q):\n%s", c, r2, ch, j)
+					}
+				}
+			}
+			// And down the two vertical walls: nothing that runs across it.
+			for r2 := y + 1; r2 < y1; r2++ {
+				for _, c := range []int{x, x1} {
+					if ch := at(g, c, r2); strings.ContainsRune("─━┄╌┼╂┿╋", ch) {
+						t.Errorf("a line crossed a frame's vertical wall at %d,%d (%q):\n%s", c, r2, ch, j)
+					}
+				}
 			}
 		}
+	}
+	if frames < 2 {
+		t.Fatalf("found %d frames to ask the question of, want the source's two:\n%s", frames, j)
 	}
 }
 
@@ -1204,21 +1254,35 @@ func at(g [][]rune, x, y int) rune {
 // and its head, and no more, because every cell between two boxes is a
 // cell the reader's eye has to carry the join across. Two boxes never
 // touch — a wall against a wall is one box with a rule through it.
+//
+// The exception is a label, and it is the whole exception: a label rides
+// its own line, so the gap it rides through is the words plus a shoulder
+// each side, the line stopping around them, and the head — six cells, and
+// exactly six. Both halves are asked here. A three-node chain was the only
+// graph this used to be asked of, which is the one shape where nothing
+// widens a gap at all.
 func TestRanksStandTwoOrThreeCellsApart(t *testing.T) {
 	// Down the page: the boxes stack, so the gap is rows.
-	rows := plain(drawn(t, "digraph { rankdir=TB; a -> b -> c }\n", 100))
-	var tops []int
-	for i, r := range rows {
-		if strings.Contains(r, "╭") {
-			tops = append(tops, i)
+	for _, src := range []string{
+		"digraph { rankdir=TB; a -> b -> c }",
+		"digraph { rankdir=TB; a -> b; a -> c; b -> d; c -> d }",
+		"digraph { rankdir=TB; r -> x; r -> y; r -> z }",
+	} {
+		rows := plain(drawn(t, src+"\n", 100))
+		var tops []int
+		for i, r := range rows {
+			if strings.Contains(r, "╭") {
+				tops = append(tops, i)
+			}
 		}
-	}
-	if len(tops) != 3 {
-		t.Fatalf("want three boxes down the page, found %d:\n%s", len(tops), strings.Join(rows, "\n"))
-	}
-	for i := 1; i < len(tops); i++ {
-		if gap := tops[i] - tops[i-1] - 3; gap < 2 || gap > 3 {
-			t.Errorf("top-down ranks stand %d rows apart, want 2 or 3:\n%s", gap, strings.Join(rows, "\n"))
+		if len(tops) < 2 {
+			t.Fatalf("%s: want boxes on more than one row:\n%s", src, strings.Join(rows, "\n"))
+		}
+		for i := 1; i < len(tops); i++ {
+			if gap := tops[i] - tops[i-1] - 3; gap < 2 || gap > 3 {
+				t.Errorf("%s: top-down ranks stand %d rows apart, want 2 or 3:\n%s",
+					src, gap, strings.Join(rows, "\n"))
+			}
 		}
 	}
 	// Across the page: the boxes march, so the gap is columns.
@@ -1235,6 +1299,26 @@ func TestRanksStandTwoOrThreeCellsApart(t *testing.T) {
 	for i := 1; i < len(lefts); i++ {
 		if gap := lefts[i] - lefts[i-1] - 5; gap < 2 || gap > 3 {
 			t.Errorf("left-right ranks stand %d columns apart, want 2 or 3:\n%s", gap, strings.Join(across, "\n"))
+		}
+	}
+	// And the label's exception, to the cell. Three labels of three
+	// lengths, so a gap that is merely generous fails as loudly as one
+	// that is mean.
+	for _, w := range []string{"x", "open", "close and flush"} {
+		src := `digraph { rankdir=LR; a -> b [label="` + w + `"] }` + "\n"
+		rows := plain(drawn(t, src, 200))
+		var xs []int
+		for i, r := range []rune(rows[0]) {
+			if r == '╭' {
+				xs = append(xs, i)
+			}
+		}
+		if len(xs) != 2 {
+			t.Fatalf("label %q: want two boxes on one row, found %d:\n%s", w, len(xs), strings.Join(rows, "\n"))
+		}
+		if gap, want := xs[1]-xs[0]-5, grid.Cells(w)+6; gap != want {
+			t.Errorf("label %q rides a gap of %d columns, wants exactly %d:\n%s",
+				w, gap, want, strings.Join(rows, "\n"))
 		}
 	}
 }
@@ -1341,16 +1425,48 @@ func TestOppositeDirectionsNeverShareACorridor(t *testing.T) {
 		}
 		// And never one bare run with a head at each end: that is what
 		// `dir=both` draws, and neither of these graphs said it.
+		//
+		// Both ways up. The rows alone were asked for a long time, and the
+		// runes they were asked with are horizontal, so the two top-down
+		// cases in this table were held to their head count and nothing
+		// else — and a shared vertical corridor with `▲` at one end and
+		// `▼` at the other has exactly the two heads they wanted.
 		if bothEnds.MatchString(j) {
 			t.Errorf("%s drew one corridor with a head at each end:\n%s", c.src, j)
+		}
+		if bothEndsDown.MatchString(strings.Join(columns(plain(drawn(t, c.src+"\n", 120))), "\n")) {
+			t.Errorf("%s drew one column with a head at each end:\n%s", c.src, j)
 		}
 	}
 }
 
 // bothEnds is one unbroken run of line with an arrowhead at each end —
 // the shape two opposite edges make when they share a corridor, and the
-// shape `dir=both` means.
+// shape `dir=both` means. Across the page, and down it.
 var bothEnds = regexp.MustCompile(`◀[─━┄╌]+▶|▶[─━┄╌]+◀`)
+var bothEndsDown = regexp.MustCompile(`▲[│┃┆╎]+▼|▼[│┃┆╎]+▲`)
+
+// columns is a drawing read down the page: column 0 as a string, then
+// column 1, and so on, so a law about a run of cells can be asked of a
+// column with the same regexp it asks of a row.
+func columns(rows []string) []string {
+	g := gridOf(rows)
+	w := 0
+	for _, r := range g {
+		if len(r) > w {
+			w = len(r)
+		}
+	}
+	out := make([]string, w)
+	for x := 0; x < w; x++ {
+		var b strings.Builder
+		for y := range g {
+			b.WriteRune(at(g, x, y))
+		}
+		out[x] = b.String()
+	}
+	return out
+}
 
 // BOXES. A box is its label with one cell of air each side, and the
 // walls outside that. Not two cells, not none: this is the width every
