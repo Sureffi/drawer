@@ -16,6 +16,7 @@
 package drawer
 
 import (
+	"github.com/sureffi/drawer/internal/pixel"
 	"github.com/sureffi/drawer/internal/term"
 )
 
@@ -26,16 +27,21 @@ type run struct {
 	sess string    // Claude Code's session id: the ledger's key
 	tee  string    // -hooktee / DRAWER_TEE
 
+	mux *pixel.Tmux // the multiplexer a picture has to get past; nil where there is none
+
 	theme *inForce // the theme, derived when the first picture asks
 }
 
 // newRun is the run main hands down. TERM is read here and not at probe
 // time, because it is available on every door and the window is not: a
 // -deltas replay never asks the window how big it is, and it still gets to
-// know what terminal it is replaying for. The theme arrives whole, because
-// main is where -theme was read and where it was found unreadable.
+// know what terminal it is replaying for. The multiplexer is read in the
+// same breath and for the same reason — it is an environment fact, and
+// under tmux it is also half of what the terminal's name is. The theme
+// arrives whole, because main is where -theme was read and where it was
+// found unreadable.
 func newRun(r rung, tee string, th *inForce) run {
-	return run{rung: r, term: term.Name(), tee: tee, theme: th}
+	return run{rung: r, term: term.Name(), mux: pixel.Multiplexer(), tee: tee, theme: th}
 }
 
 // probe asks the window how big it is. The columns come back, and where

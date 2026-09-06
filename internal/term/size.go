@@ -85,9 +85,18 @@ func Size() (cols int, g Geom, from WidthFrom) {
 // Name names the terminal. TERM survives CC's scrub of a hook's environment
 // (measured); when it does not, the parent's environment is readable where
 // there is a /proc and says the same thing.
+//
+// Under tmux TERM is tmux's own and names no terminal at all, so the answer
+// is the terminal behind it, read from the mark that terminal left in the
+// environment — mux.go says which marks, how they were measured, and what
+// they cannot answer. The name that comes back is that terminal's own TERM,
+// so everything downstream reads one kind of name and no rung has to know
+// there was a multiplexer.
 func Name() string {
-	if t := os.Getenv("TERM"); t != "" {
-		return t
+	if Tmux() {
+		if n := behindTmux(); n != "" {
+			return n
+		}
 	}
-	return parentEnv("TERM")
+	return env("TERM")
 }

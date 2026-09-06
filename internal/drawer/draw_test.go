@@ -14,9 +14,15 @@ import (
 // pickRung is the whole of the auto rung's judgement, and every branch of
 // it is a fact about the terminal the run is standing in. A rung asked for
 // by name is that rung, whatever the terminal says. Otherwise: pixels want
-// kitty, a cell size in pixels and a rasteriser; octants want a terminal
-// that draws them itself, which today means kitty or ghostty; everything
-// else gets braille, which every font carries.
+// a terminal that draws placeholder cells — kitty or ghostty — a cell size
+// in pixels and a rasteriser; the same terminals draw their own octants
+// when one of those is missing; everything else gets braille, which every
+// font carries.
+//
+// The name is the terminal's, already resolved: under tmux term.Name
+// answers with the terminal behind it, so "xterm-kitty" here is a kitty
+// with or without a multiplexer in the way and this function never learns
+// the difference.
 //
 // Looking for a rasteriser walks the PATH, so it is asked last and only
 // where the answer can still change — a law nothing enforced while this
@@ -36,7 +42,9 @@ func TestPickRungReadsTheTerminal(t *testing.T) {
 		{"kitty, a cell size and a rasteriser", rungAuto, "xterm-kitty", geom, true, rungPixels, true},
 		{"kitty with nothing to rasterise with", rungAuto, "xterm-kitty", geom, false, rungOctants, true},
 		{"kitty through a pipe, so no cell size", rungAuto, "xterm-kitty", term.Geom{}, true, rungOctants, false},
-		{"ghostty draws its own octants", rungAuto, "xterm-ghostty", geom, true, rungOctants, false},
+		{"ghostty, a cell size and a rasteriser", rungAuto, "xterm-ghostty", geom, true, rungPixels, true},
+		{"ghostty with nothing to rasterise with", rungAuto, "xterm-ghostty", geom, false, rungOctants, true},
+		{"ghostty through a pipe, so no cell size", rungAuto, "xterm-ghostty", term.Geom{}, true, rungOctants, false},
 		{"anything else", rungAuto, "xterm-256color", geom, true, rungBraille, false},
 		{"no TERM at all", rungAuto, "", geom, true, rungBraille, false},
 	} {

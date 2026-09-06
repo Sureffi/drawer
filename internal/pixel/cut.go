@@ -1,7 +1,8 @@
 // cut.go — the picture goes round Claude Code, not through it.
 //
 // The hook writes the PNG to a temp file and hands the terminal one short
-// escape naming that file, straight down the parent's own tty via /proc.
+// escape naming that file, straight down the parent's own tty via /proc —
+// wrapped in tmux's passthrough where a tmux is in the way, see tmux.go.
 // kitty reads the file, deletes it, and holds the image under the id the
 // cells will name. One write of a hundred-odd bytes is atomic on a tty, so
 // the bytes cannot land inside a frame CC is mid-way through writing —
@@ -162,7 +163,13 @@ func ThemeSig(th *theme.Theme) string {
 // Send hands the terminal the picture through a temp file it will
 // delete itself. The name has to carry tty-graphics-protocol and the file
 // has to sit in a temp dir kitty knows, or it refuses on purpose.
-func Send(tty string, png []byte, id uint32, cols, rows int) bool {
+//
+// mux is the multiplexer between here and the screen, nil where there is
+// none: under tmux the escape is wrapped in tmux's passthrough on the way
+// out, which is the only shape that reaches the terminal at all. The cells
+// are not wrapped and never come near this function — they are text, and
+// they go home through CC's display wire.
+func Send(tty string, png []byte, id uint32, cols, rows int, mux *Tmux) bool {
 	sweepPictures()
 	f, err := os.CreateTemp("", "tty-graphics-protocol-graph-*.png")
 	if err != nil {
@@ -186,7 +193,7 @@ func Send(tty string, png []byte, id uint32, cols, rows int) bool {
 	cmd := "\x1b_Ga=T,U=1,q=2,f=100,t=t,i=" + strconv.Itoa(int(id)) +
 		",c=" + strconv.Itoa(cols) + ",r=" + strconv.Itoa(rows) + ";" +
 		base64.StdEncoding.EncodeToString([]byte(path)) + "\x1b\\"
-	if _, err := out.WriteString(cmd); err != nil {
+	if _, err := out.WriteString(mux.wrap(cmd)); err != nil {
 		os.Remove(path)
 		return false
 	}

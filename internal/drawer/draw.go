@@ -9,7 +9,8 @@
 //
 // The rungs, best first, each failing open to the one below it:
 //
-//	pixels   a real graphviz picture in kitty's placeholder cells
+//	pixels   a real graphviz picture in kitty's placeholder cells —
+//	         kitty draws them, and so does ghostty
 //	octants  strokes at 2x4 per cell, solid; labels as glyphs
 //	braille  the same at 2x4, dotted, and every font has it
 //	cells    box-drawing characters, and nothing but this binary
@@ -89,9 +90,17 @@ func bare(rows []string) []string {
 }
 
 // pickRung answers which drawing this terminal gets. `auto` reads the
-// terminal: pixels want kitty, a cell size in pixels and a rasteriser;
-// octants want a terminal that draws them itself, which today means kitty
-// or ghostty; everything else gets braille, which every font carries.
+// terminal: pixels want a terminal that draws placeholder cells, a cell
+// size in pixels and a rasteriser; octants want a terminal that draws them
+// itself, which is the same list; everything else gets braille, which every
+// font carries.
+//
+// The list is pixel.Placeholders and it lives there alone — one predicate,
+// read by the gate and by the doctor, so a terminal joins the rung in one
+// place. ghostty joined it on 2026-09-06, measured on the rig: its
+// placeholder cells hold streaming, complete and scrolled, inside tmux and
+// out. It was on the octants tier only because this gate had asked for the
+// word kitty.
 //
 // raster is a thunk because looking for a rasteriser means walking the
 // PATH: it is asked only where the terminal and the geometry have already
@@ -101,14 +110,13 @@ func pickRung(want rung, name string, geom term.Geom, raster func() bool) rung {
 	if want != rungAuto {
 		return want
 	}
-	kitty := strings.Contains(name, "kitty")
-	if kitty && geom.OK() && raster() {
+	if !pixel.Placeholders(name) {
+		return rungBraille
+	}
+	if geom.OK() && raster() {
 		return rungPixels
 	}
-	if kitty || strings.Contains(name, "ghostty") {
-		return rungOctants
-	}
-	return rungBraille
+	return rungOctants
 }
 
 func (r run) pickRung() rung {

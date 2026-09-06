@@ -102,11 +102,32 @@ func runVersion(w io.Writer) int {
 	return 0
 }
 
+// muxLine is the doctor's tmux fact: whether there is one, and whether
+// this pane lets a graphics escape past. It is the difference between a
+// picture that is missing and a picture that was dropped, which is the one
+// question a reader under tmux actually has. Read only — the doctor asks
+// what is, and the hook is what turns it on.
+func (r run) muxLine() string {
+	if r.mux == nil {
+		return "no"
+	}
+	pane := "pane " + r.mux.Pane
+	switch r.mux.Passthrough() {
+	case "on":
+		return "yes: " + pane + ", allow-passthrough on"
+	case "":
+		return "yes: " + pane + ", allow-passthrough unknown: tmux would not answer"
+	default:
+		return "yes: " + pane + ", allow-passthrough off: drawer sets it on for this pane, " +
+			"and this pane only, when it draws a picture"
+	}
+}
+
 // runDoctor is the -doctor door: what this binary sees, one fact per line.
 // Every answer is read out of the same run a hook is built from, so what it
 // prints is what a hook process would have decided — which is the point.
 // Nearly every question this tool gets asked is "why that rung", and the
-// nine facts around that line are the ones the answer is made of.
+// ten facts around that line are the ones the answer is made of.
 //
 // The window arrives as a call rather than being asked for inside: term.Size
 // in the binary, and in a law a window nobody has, because go test runs
@@ -119,7 +140,7 @@ func (r run) runDoctor(ctx context.Context, w io.Writer, probe func() (int, term
 	return 0
 }
 
-// doctor writes the ten facts. The window is handed in rather than asked
+// doctor writes the eleven facts. The window is handed in rather than asked
 // for here: asking is the door's job, and a law can then stand this binary
 // in a terminal that is not there. The theme is the one exception: it is
 // derived here, the way the first picture of a session derives it, because
@@ -130,19 +151,20 @@ func (r run) doctor(ctx context.Context, w io.Writer, cols int, from term.WidthF
 	if name == "" {
 		name = "unknown"
 	}
-	kitty := "no"
-	if pixel.Kitty() {
-		kitty = "yes"
+	placeholders := "no"
+	if pixel.PlaceholdersHere() {
+		placeholders = "yes"
 	}
 	fmt.Fprintln(w, "drawer:", version)
 	fmt.Fprintln(w, "terminal:", name)
+	fmt.Fprintln(w, "tmux:", r.muxLine())
 	fmt.Fprintf(w, "columns: %d (from %s)\n", cols, from)
 	if r.geom.OK() {
 		fmt.Fprintf(w, "cell: %dx%d px\n", r.geom.CellW, r.geom.CellH)
 	} else {
 		fmt.Fprintln(w, "cell: unknown: the terminal did not say")
 	}
-	fmt.Fprintln(w, "kitty:", kitty)
+	fmt.Fprintln(w, "placeholders:", placeholders)
 	if ras := pixel.Find(); ras != nil {
 		fmt.Fprintf(w, "rasteriser: %s at %s\n", ras.Name, ras.Path)
 	} else {

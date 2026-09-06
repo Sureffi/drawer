@@ -98,7 +98,8 @@ func TestTheDoctorDoorSaysTheWindowItWasHanded(t *testing.T) {
 		"terminal: xterm-kitty",
 		"columns: 120 (from tty)",
 		"cell: 9x20 px",
-		"kitty: yes",
+		"placeholders: yes",
+		"tmux: no",
 		"tee: /tmp/deltas.jsonl",
 	} {
 		if !strings.Contains(b.String(), want) {
@@ -107,7 +108,7 @@ func TestTheDoctorDoorSaysTheWindowItWasHanded(t *testing.T) {
 	}
 }
 
-// -doctor is what a hook process would decide from, said out loud: ten
+// -doctor is what a hook process would decide from, said out loud: eleven
 // facts, one per line, in the order the ladder decides them. Under a pipe
 // there is no window to ask — the columns are the number nobody chose and
 // the cell size is unknown — and a terminal that says nothing gets braille,
@@ -119,7 +120,7 @@ func TestTheDoctorDoorSaysTheWindowItWasHanded(t *testing.T) {
 // different window in each place.
 func TestDoctorSaysWhatAHookWouldSee(t *testing.T) {
 	t.Setenv("TERM", "dumb")
-	t.Setenv("KITTY_WINDOW_ID", "")
+	t.Setenv("TMUX", "")
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("DRAWER_STATE", t.TempDir())
 	var b strings.Builder
@@ -128,9 +129,10 @@ func TestDoctorSaysWhatAHookWouldSee(t *testing.T) {
 	want := []string{
 		"drawer: ",
 		"terminal: dumb",
+		"tmux: no",
 		"columns: 100 (from default)",
 		"cell: unknown: the terminal did not say",
-		"kitty: no",
+		"placeholders: no",
 		"rasteriser: ",
 		"rung: braille (asked: auto)",
 		"theme: Claude Code's dark",
@@ -145,8 +147,8 @@ func TestDoctorSaysWhatAHookWouldSee(t *testing.T) {
 			t.Errorf("line %d is %q, want it to open %q", i+1, said[i], w)
 		}
 	}
-	if !strings.HasSuffix(said[8], " (writable)") {
-		t.Errorf("a state directory this law just made is not writable: %q", said[8])
+	if !strings.HasSuffix(said[9], " (writable)") {
+		t.Errorf("a state directory this law just made is not writable: %q", said[9])
 	}
 }
 

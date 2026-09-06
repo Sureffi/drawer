@@ -7,10 +7,10 @@
 // terminal that is not kitty, or a graph cairo chokes on all end in the
 // picture that was already there. No error from here reaches the screen.
 //
-// Two things have to be true. The terminal has to be kitty, because the
-// graphics protocol's Unicode placeholders are the one way an image can
-// live in cells and therefore scroll, wrap and copy exactly like text. And
-// something on the PATH has to turn SVG into pixels. graphviz's own PNG
+// Two things have to be true. The terminal has to draw kitty's Unicode
+// placeholders — kitty or ghostty — because those cells are the one way an
+// image can live in cells and therefore scroll, wrap and copy exactly like
+// text. And something on the PATH has to turn SVG into pixels. graphviz's own PNG
 // backend is not that something: goccy/go-graphviz carries graphviz's real
 // SVG writer, which is exact, and its own rasteriser, which silently drops
 // any edge stroke past hairline and loses them outright at dpi=192. So the
@@ -22,7 +22,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"os"
 	"os/exec"
 	"regexp"
 	"slices"
@@ -33,6 +32,7 @@ import (
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/sureffi/drawer/internal/layout"
+	"github.com/sureffi/drawer/internal/term"
 	"github.com/sureffi/drawer/internal/theme"
 )
 
@@ -50,17 +50,30 @@ type Raster struct {
 	Run  func(ctx context.Context, svg []byte, zoom float64) ([]byte, error)
 }
 
-// Kitty says whether this is kitty, which is the terminal the placeholder
-// cells need. TERM is the usual answer and KITTY_WINDOW_ID is the one that
-// survives a TERM somebody else set — a multiplexer, or a shell wrapper.
-func Kitty() bool {
-	return strings.Contains(os.Getenv("TERM"), "kitty") || os.Getenv("KITTY_WINDOW_ID") != ""
+// Placeholders says whether a terminal draws kitty's Unicode placeholder
+// cells, which are the one way a picture can live in cells and therefore
+// scroll, wrap and copy exactly like text. kitty invented them; ghostty
+// implements them, measured on the rig 2026-09-06 — streaming, complete and
+// scrolled all hold, inside tmux and out, aligned to the same rows kitty
+// puts them on. Nobody else measured that night drew them: wezterm,
+// konsole and alacritty each printed 576 tofu boxes where the picture was,
+// so this is a gate and not a hint. A terminal not named here gets glyphs,
+// which every font carries.
+//
+// The name is the terminal's, resolved: term.Name answers with the terminal
+// behind tmux rather than tmux's own TERM, so this predicate never has to
+// know a multiplexer exists.
+func Placeholders(name string) bool {
+	return strings.Contains(name, "kitty") || strings.Contains(name, "ghostty")
 }
 
-// Probe answers whether pixels are possible here: the terminal is kitty
-// and a rasteriser exists.
+// PlaceholdersHere asks it of the terminal this process is talking to.
+func PlaceholdersHere() bool { return Placeholders(term.Name()) }
+
+// Probe answers whether pixels are possible here: the terminal draws
+// placeholder cells and a rasteriser exists.
 func Probe() *Raster {
-	if !Kitty() {
+	if !PlaceholdersHere() {
 		return nil
 	}
 	return Find()

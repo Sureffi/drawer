@@ -86,6 +86,34 @@ func (r run) teePayload(raw []byte) {
 	f.Close()
 }
 
+// teeNote writes down something this process did to the terminal's
+// surroundings, into the same tee, in the shape -deltas reads: an empty
+// delta, and the note beside it. A tee is a fixture, not a log — a line
+// that would not parse takes -deltas down — so the note travels as a field
+// and the replay sees a delta that says nothing.
+//
+// There is one note today, and it is the reason the door exists: turning
+// tmux's passthrough on is drawer changing a setting in somebody else's
+// multiplexer, and that is not a thing to do quietly.
+func (r run) teeNote(note string) {
+	if note == "" || r.tee == "" {
+		return
+	}
+	b, err := json.Marshal(struct {
+		Delta string `json:"delta"`
+		Note  string `json:"drawer_note"`
+	}{"", note})
+	if err != nil {
+		return
+	}
+	f, err := os.OpenFile(r.tee, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	f.Write(append(b, '\n'))
+	f.Close()
+}
+
 // runHook is the whole of the -hook entry point: one payload in, one
 // replacement out, through drawBlock. Any failure prints an empty object,
 // which CC reads as "display the original".

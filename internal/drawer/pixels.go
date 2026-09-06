@@ -7,6 +7,10 @@
 // side. The placeholder cells, on the other hand, ride through untouched:
 // U+10EEEE with its diacritics and a 256-colour foreground came out byte
 // for byte and counted as one column each.
+//
+// So the two halves of a picture travel by two different roads: the cells
+// home through CC, the pixels down the parent's own tty — and, under tmux,
+// through tmux's passthrough, which is the only door that wire has.
 
 package drawer
 
@@ -28,7 +32,11 @@ func (r run) drawPixels(ctx context.Context, src string, width int) []string {
 		return nil
 	}
 	id := pixel.ImageID(p.Src, p.Cols, p.Rows)
-	if !pixel.Send(term.TTYOut(), png, id, p.Cols, p.Rows) {
+	// tmux drops a passthrough nobody allowed, and a dropped picture looks
+	// exactly like no picture: the cells arrive and stay empty. Ask for it
+	// before the escape goes out, and say so where a note can be read.
+	r.teeNote(r.mux.Allow())
+	if !pixel.Send(term.TTYOut(), png, id, p.Cols, p.Rows, r.mux) {
 		return nil
 	}
 	r.recordPicture(ctx, p)
