@@ -32,7 +32,18 @@ import (
 // and which pane the parent is in. A nil *Tmux is "there is no
 // multiplexer", and every method here reads that as nothing to do, so a
 // caller has one path whether or not tmux is in the way.
-type Tmux struct{ Socket, Pane string }
+//
+// What the pane answered about passthrough is kept here, because the answer
+// cannot change under a process that is the only one writing it: one hook
+// draws a picture and may repaint a whole ledger of them, and each of those
+// used to fork a tmux to ask the same question over again.
+type Tmux struct {
+	Socket, Pane string
+
+	asked bool   // whether this process has run `show` yet
+	was   string // what it said
+	err   error  // or why it could not be asked at all
+}
 
 // Multiplexer is the tmux this process is under, or nil.
 func Multiplexer() *Tmux {
@@ -75,12 +86,19 @@ const tmuxWaitDelay = tmuxTimeout / 4
 // tmux that could not be asked at all — no server on that socket, no tmux
 // on the PATH — knows nothing about this pane, and reading its silence as
 // "no option set" is how a closed wire came to read as an open one.
+//
+// Asked once, then remembered: a fork and a socket round-trip per drawn
+// picture is a cost a hook pays in front of CC's own painting, and the
+// value cannot move underneath a process that is the only one setting it.
 func (t *Tmux) Passthrough() (string, error) {
 	if t == nil {
 		return "", nil
 	}
-	out, err := t.run("show", "-p", "-t", t.Pane, "-A", "-v", "allow-passthrough")
-	return strings.TrimSpace(out), err
+	if !t.asked {
+		out, err := t.run("show", "-p", "-t", t.Pane, "-A", "-v", "allow-passthrough")
+		t.was, t.err, t.asked = strings.TrimSpace(out), err, true
+	}
+	return t.was, t.err
 }
 
 // Allow turns the pane's passthrough on where it is not on already,
@@ -99,7 +117,8 @@ func (t *Tmux) Passthrough() (string, error) {
 // read as on and nothing is written at all: -A asks for the value in force.
 //
 // The note is empty where it was already on and there was nothing to do,
-// because a note about nothing is noise.
+// because a note about nothing is noise — and a second picture in the same
+// process finds it on, because setting it is what this wrote down.
 func (t *Tmux) Allow() (string, bool) {
 	if t == nil {
 		return "", true
@@ -122,6 +141,7 @@ func (t *Tmux) Allow() (string, bool) {
 		return "tmux: allow-passthrough is " + quoted(was) + pane +
 			" and would not be set: " + reason(out, err), false
 	}
+	t.was, t.err = "on", nil
 	return "tmux: allow-passthrough was " + quoted(was) + "; set on" + pane +
 		" (this pane only, until it closes)", true
 }

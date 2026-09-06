@@ -171,3 +171,68 @@ func TestATmuxHoldingThePipeStillAnswersInTime(t *testing.T) {
 		t.Errorf("Allow said %q, through=%v; want a wire nobody can post through", note, through)
 	}
 }
+
+// countingTmux puts a tmux on the PATH that writes down every command it is
+// given and answers `show` with a passthrough nobody set. The file it writes
+// is the count.
+func countingTmux(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	log := filepath.Join(dir, "asked")
+	sh := "#!/bin/sh\nshift 2\necho \"$1\" >>" + log + "\ncase $1 in show) echo off;; esac\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(sh), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return log
+}
+
+// asked is what that tmux was asked to do, in order.
+func asked(t *testing.T, log string) []string {
+	t.Helper()
+	b, err := os.ReadFile(log)
+	if err != nil {
+		return nil
+	}
+	return strings.Fields(string(b))
+}
+
+// One hook process asks the pane about passthrough once. It draws a picture
+// and it may repaint every picture the session has, and each of those went
+// through here — a fork, a socket, and the same answer, in front of CC's
+// own painting. The answer is remembered instead, and setting it on is
+// written into the same memory, so the second picture finds it on and the
+// note about somebody else's tmux is written once.
+func TestThePassthroughIsAskedAboutOncePerProcess(t *testing.T) {
+	log := countingTmux(t)
+	mux := &Tmux{Socket: "/nowhere", Pane: "%0"}
+	note, through := mux.Allow()
+	if !through || !strings.Contains(note, "set on") {
+		t.Fatalf("the first picture said %q, through=%v; want the pane turned on", note, through)
+	}
+	note, through = mux.Allow()
+	if !through {
+		t.Errorf("a pane this process turned on read as closed")
+	}
+	if note != "" {
+		t.Errorf("the note was written twice: %q", note)
+	}
+	if got := asked(t, log); len(got) != 2 || got[0] != "show" || got[1] != "set" {
+		t.Errorf("tmux was run %v; want one show and the one set that followed it", got)
+	}
+}
+
+// The doctor asks the same question, and it is the same answer: a run that
+// has already drawn a picture does not fork a tmux to say so.
+func TestTheDoctorReadsTheSameMemory(t *testing.T) {
+	log := countingTmux(t)
+	mux := &Tmux{Socket: "/nowhere", Pane: "%0"}
+	for i := 0; i < 3; i++ {
+		if _, err := mux.Passthrough(); err != nil {
+			t.Fatalf("Passthrough: %v", err)
+		}
+	}
+	if got := asked(t, log); len(got) != 1 || got[0] != "show" {
+		t.Errorf("tmux was run %v; want one show", got)
+	}
+}
