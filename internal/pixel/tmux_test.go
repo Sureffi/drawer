@@ -5,10 +5,12 @@
 package pixel
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -170,6 +172,64 @@ func TestATmuxHoldingThePipeStillAnswersInTime(t *testing.T) {
 	}
 	if through || !strings.Contains(note, "allow-passthrough") {
 		t.Errorf("Allow said %q, through=%v; want a wire nobody can post through", note, through)
+	}
+}
+
+// wedgedTmux puts a tmux on the PATH that never finishes: it opens a fifo
+// nobody will ever write to, which is a tmux server that has stopped
+// answering seen from here. Nothing is forked — the blocked process is the
+// direct child — so the only thing that can end it is the deadline, and how
+// long it took is what the deadline was.
+func wedgedTmux(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	fifo := filepath.Join(dir, "never")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Skipf("no fifo to wedge on here: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "tmux"),
+		[]byte("#!/bin/sh\nexec cat "+fifo+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// tmux runs on the caller's clock, narrowed — never on one of its own.
+// tmuxTimeout is the most tmux may have; what it actually gets is whatever
+// is left of the drawing the question was asked for. Measured on the pixels
+// path against a wedged tmux: three of twenty fences came back as "ran out
+// of time" notices, because tmux had spent the layout's whole budget on a
+// clock that started fresh here.
+//
+// So 150 ms of context is 150 ms of tmux, and a context that is already
+// over is no tmux at all. Both answers are the closed wire, which is what
+// sends the rung above to the glyphs rather than leaving a reader rows of
+// nothing.
+func TestTheTmuxClockIsWhatTheCallerHasLeft(t *testing.T) {
+	wedgedTmux(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	note, through := (&Tmux{Socket: "/nowhere", Pane: "%0"}).Allow(ctx)
+	switch d := time.Since(start); {
+	case d > tmuxTimeout/2:
+		t.Errorf("Allow under a 150ms context came back after %v; tmux's own clock is %v", d, tmuxTimeout)
+	case d < 100*time.Millisecond:
+		t.Errorf("Allow came back after %v; the wedged tmux was never waited on at all", d)
+	}
+	if through || note == "" {
+		t.Errorf("a tmux that never answered said %q, through=%v; want a closed wire, written down", note, through)
+	}
+
+	over, stop := context.WithCancel(t.Context())
+	stop()
+	start = time.Now()
+	note, through = (&Tmux{Socket: "/nowhere", Pane: "%0"}).Allow(over)
+	if d := time.Since(start); d > 250*time.Millisecond {
+		t.Errorf("Allow under a context already over took %v; there was no time to spend", d)
+	}
+	if through || note == "" {
+		t.Errorf("a process out of time said %q, through=%v; want a closed wire", note, through)
 	}
 }
 

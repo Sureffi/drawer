@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -136,6 +137,61 @@ func TestATmuxHoldingThePipeIsNotAnAnswer(t *testing.T) {
 	}
 	if got != "tmux-256color" {
 		t.Errorf("the terminal is %q; a tmux that never answered leaves TERM standing", got)
+	}
+}
+
+// wedgedTmux puts a tmux on the PATH that never finishes: it opens a fifo
+// nobody will ever write to, which is a tmux server that has stopped
+// answering seen from here. Nothing is forked — the blocked process is the
+// direct child — so the only thing that can end it is the deadline.
+func wedgedTmux(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	fifo := filepath.Join(dir, "never")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Skipf("no fifo to wedge on here: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "tmux"),
+		[]byte("#!/bin/sh\nexec cat "+fifo+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// The one question this file asks runs on the caller's clock, narrowed to
+// muxTimeout — not on a fresh one. A hook has a deadline for everything it
+// draws, and a name asked for on a clock of its own is time the drawing
+// does not get: 150 ms of context is 150 ms of tmux, and a context already
+// over asks nothing at all. TERM stands in both, which names no terminal
+// and lands on the glyph rungs — the safe direction.
+func TestTheNameIsAskedOnWhatTheCallerHasLeft(t *testing.T) {
+	wedgedTmux(t)
+	t.Setenv("TERM", "tmux-256color")
+	t.Setenv("TMUX", "/nowhere,1,0")
+	t.Setenv("TMUX_PANE", "%0")
+	ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	got := Name(ctx)
+	switch d := time.Since(start); {
+	case d > muxTimeout/2:
+		t.Errorf("Name under a 150ms context came back after %v; tmux's own clock is %v", d, muxTimeout)
+	case d < 100*time.Millisecond:
+		t.Errorf("Name came back after %v; the wedged tmux was never waited on at all", d)
+	}
+	if got != "tmux-256color" {
+		t.Errorf("the terminal is %q; a tmux that never answered leaves TERM standing", got)
+	}
+
+	over, stop := context.WithCancel(t.Context())
+	stop()
+	start = time.Now()
+	got = Name(over)
+	if d := time.Since(start); d > 250*time.Millisecond {
+		t.Errorf("Name under a context already over took %v; there was no time to spend", d)
+	}
+	if got != "tmux-256color" {
+		t.Errorf("the terminal is %q with no time to ask; TERM stands", got)
 	}
 }
 
