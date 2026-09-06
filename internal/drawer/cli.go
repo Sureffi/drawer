@@ -37,22 +37,16 @@ func (r run) runDotDump(ctx context.Context, path string, w, h int) int {
 			return 1
 		}
 	}
-	l, _, ok := layout.Fit(ctx, string(b), w, 0)
-	if ok && rows == nil {
-		rows = cells.Draw(l, w, h)
+	if rows == nil {
+		g, err := layout.Read(ctx, string(b))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "-dot:", err)
+			return 1
+		}
+		rows = cells.Draw(g, w, h)
 	}
 	if rows == nil {
-		// the layout already worked the answer out; reporting only "will
-		// not fit" makes the caller hand-search for a size the tool knows
-		if l == nil {
-			l, _ = layout.DOT(ctx, string(b), "")
-		}
-		if dw, dh := layout.Footprint(l); dw > 0 && dh > 0 {
-			fmt.Fprintf(os.Stderr, "-dot: needs %dx%d, given %dx%d (source would be left alone)\n",
-				dw, dh, w, h)
-		} else {
-			fmt.Fprintf(os.Stderr, "-dot: will not lay out (source would be left alone)\n")
-		}
+		fmt.Fprintf(os.Stderr, "-dot: will not fit in %dx%d (source would be left alone)\n", w, h)
 		return 1
 	}
 	for _, row := range rows {

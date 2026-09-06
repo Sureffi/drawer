@@ -57,9 +57,8 @@ func (r run) drawBlock(ctx context.Context, src string, width int) []string {
 			return bare(rows)
 		}
 	}
-	l, h, ok := layout.Fit(ctx, src, width, 0)
-	if ok && h <= grid.MaxRows {
-		if rows := cells.Draw(l, width, h); rows != nil {
+	if g, err := layout.Read(ctx, src); err == nil {
+		if rows := cells.Draw(g, width, grid.MaxRows); rows != nil {
 			return bare(grid.TrimBlank(rows))
 		}
 	}

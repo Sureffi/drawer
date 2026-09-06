@@ -33,6 +33,22 @@ func plain(rows []string) []string {
 	return out
 }
 
+// drawn is the whole path a law below tests: the source read through the
+// one door, laid out, and drawn. A test that cannot get a drawing has
+// nothing to say about one.
+func drawn(t *testing.T, src string, w int) []string {
+	t.Helper()
+	g, err := layout.Read(t.Context(), src)
+	if err != nil {
+		t.Fatalf("the source did not read: %v", err)
+	}
+	rows := Draw(g, w, 0)
+	if rows == nil {
+		t.Fatal("nothing drew")
+	}
+	return rows
+}
+
 func joined(rows []string) string { return strings.Join(plain(rows), "\n") }
 
 // ---------- the vocabulary ----------
@@ -523,17 +539,18 @@ func TestTheDefaultPenIsTheDimOne(t *testing.T) {
 // ---------- the drawing ----------
 
 // walled reports whether a label still has a left and right wall around
-// it. The wall is not always `│`: where an edge attaches, the correct
+// it, across the cell of air a box keeps between its words and its walls.
+// The wall is not always `│`: where an edge attaches, the correct
 // box-drawing glyph is the T that admits it. Asserting the literal `│`
 // made this case fail the moment leaving edges started joining their
 // walls, which is a stricter thing than the law it is here to protect.
 func walled(row, label string) bool {
 	i := strings.Index(row, label)
-	if i <= 0 || i+len(label) >= len(row) {
+	if i < 0 {
 		return false
 	}
-	left := []rune(row[:i])
-	right := []rune(row[i+len(label):])
+	left := []rune(strings.TrimRight(row[:i], " "))
+	right := []rune(strings.TrimLeft(row[i+len(label):], " "))
 	isWall := func(r rune) bool { return r == '│' || r == '├' || r == '┤' }
 	return len(left) > 0 && isWall(left[len(left)-1]) && len(right) > 0 && isWall(right[0])
 }
@@ -541,11 +558,7 @@ func walled(row, label string) bool {
 // One ruler. Measuring a label in bytes and its box in runes drew the box
 // one cell short and ate its own left border.
 func TestLabelKeepsItsBox(t *testing.T) {
-	l, h, ok := layout.Fit(t.Context(), "digraph { rankdir=LR; \"käyttö\" -> \"sivu\" }\n", 100, 0)
-	if !ok {
-		t.Fatal("layout failed")
-	}
-	for _, r := range plain(Draw(l, 100, h)) {
+	for _, r := range plain(drawn(t, "digraph { rankdir=LR; \"käyttö\" -> \"sivu\" }\n", 100)) {
 		if strings.Contains(r, "käyttö") && !walled(r, "käyttö") {
 			t.Errorf("label lost its border: %q", r)
 		}
@@ -557,11 +570,7 @@ func TestLabelKeepsItsBox(t *testing.T) {
 // rasteriser, so every row carrying one came out wider than the box drawn
 // around it — right by the ruler, crooked on screen.
 func TestWideLabelKeepsItsColumns(t *testing.T) {
-	l, h, ok := layout.Fit(t.Context(), `digraph { rankdir=LR; "日本語" -> "ok" }`+"\n", 100, 0)
-	if !ok {
-		t.Fatal("layout failed")
-	}
-	rows := plain(Draw(l, 100, h))
+	rows := plain(drawn(t, `digraph { rankdir=LR; "日本語" -> "ok" }`+"\n", 100))
 	var widths []int
 	for _, r := range rows {
 		if strings.TrimSpace(r) != "" {
@@ -583,11 +592,7 @@ func TestWideLabelKeepsItsColumns(t *testing.T) {
 // everything else turned a label of `a\nb` into `anb` — a word nobody
 // wrote, drawn with full confidence. Absent is survivable; invented is not.
 func TestLabelEscapesAreNotEaten(t *testing.T) {
-	l, h, ok := layout.Fit(t.Context(), `digraph { rankdir=LR; A[label="a\nb"]; A -> B }`+"\n", 100, 0)
-	if !ok {
-		t.Fatal("layout failed")
-	}
-	for _, r := range plain(Draw(l, 100, h)) {
+	for _, r := range plain(drawn(t, `digraph { rankdir=LR; A[label="a\\nb"]; A -> B }`+"\n", 100)) {
 		if strings.Contains(r, "anb") {
 			t.Errorf("escape eaten, invented a word: %q", r)
 		}
@@ -598,12 +603,9 @@ func TestLabelEscapesAreNotEaten(t *testing.T) {
 // text looks like a number dropped every numeric one. graphviz had already
 // answered by how many fields it wrote.
 func TestNumericEdgeLabelDraws(t *testing.T) {
-	l, h, ok := layout.Fit(t.Context(), `digraph { rankdir=LR; A -> B [label="42"] }`+"\n", 100, 0)
-	if !ok {
-		t.Fatal("layout failed")
-	}
-	if !strings.Contains(joined(Draw(l, 100, h)), "42") {
-		t.Errorf("numeric edge label not drawn:\n%s", joined(Draw(l, 100, h)))
+	j := joined(drawn(t, `digraph { rankdir=LR; A -> B [label="42"] }`+"\n", 100))
+	if !strings.Contains(j, "42") {
+		t.Errorf("numeric edge label not drawn:\n%s", j)
 	}
 }
 
@@ -612,11 +614,7 @@ func TestNumericEdgeLabelDraws(t *testing.T) {
 // end literally left a cell of white between every arrow and its target.
 // The boxes are ours; where they are is not something to infer.
 func TestArrowMeetsItsBox(t *testing.T) {
-	l, h, ok := layout.Fit(t.Context(), "digraph { rankdir=LR; wire -> grid -> paint }\n", 100, 0)
-	if !ok {
-		t.Fatal("layout failed")
-	}
-	j := joined(Draw(l, 100, h))
+	j := joined(drawn(t, "digraph { rankdir=LR; wire -> grid -> paint }\n", 100))
 	if strings.Contains(j, "▶ ") {
 		t.Errorf("arrowhead left short of its box:\n%s", j)
 	}
@@ -636,15 +634,7 @@ func TestALeavingEdgeJoinsItsWall(t *testing.T) {
 	// b's tail edge back to a has to leave b and cross the whole drawing,
 	// which is what pushes its port onto a border row.
 	src := "digraph { rankdir=LR; a -> b; a -> c; c -> d; d -> b; b -> a }\n"
-	l, h, ok := layout.Fit(t.Context(), src, 100, 40)
-	if !ok {
-		t.Fatal("layout failed")
-	}
-	rows := Draw(l, 100, h)
-	if rows == nil {
-		t.Fatal("nothing drew")
-	}
-	j := joined(rows)
+	j := joined(drawn(t, src, 100))
 
 	// No wall may be a plain corner with a line running into its blind
 	// side. Concretely: a horizontal run must never terminate against the
@@ -664,22 +654,15 @@ func TestALeavingEdgeJoinsItsWall(t *testing.T) {
 // arrive with its accent and without a column for it.
 func TestDiagramLabelKeepsItsCombiningMarks(t *testing.T) {
 	const decomposed = "áccent" // á, spelled as base + mark
-	l, h, ok := layout.Fit(t.Context(), "digraph { rankdir=LR\n x [label=\""+decomposed+"\"]\n x -> y\n}", 100, 40)
-	if !ok {
-		t.Fatal("the graph did not lay out")
-	}
-	rows := Draw(l, 100, h)
-	if rows == nil {
-		t.Fatal("nothing drew")
-	}
-	j := joined(rows)
+	j := joined(drawn(t, "digraph { rankdir=LR\n x [label=\""+decomposed+"\"]\n x -> y\n}", 100))
 	if !strings.Contains(j, decomposed) {
 		t.Errorf("the mark was dropped; label rendered without it:\n%s", j)
 	}
 	// The mark must not have taken a column of its own: the box is sized in
-	// cells, and a cluster is one cell.
-	if !strings.Contains(j, "╭──────╮") {
-		t.Errorf("box is not six cells wide, so the mark stole a column:\n%s", j)
+	// cells — six for the word, one of air each side, a wall each side —
+	// and a cluster is one cell.
+	if !strings.Contains(j, "╭────────╮") {
+		t.Errorf("box is not eight cells wide, so the mark stole a column:\n%s", j)
 	}
 }
 
@@ -688,17 +671,11 @@ func TestDiagramLabelKeepsItsCombiningMarks(t *testing.T) {
 // read as left-right and collapse onto its root's row.
 func TestTopDownTreeKeepsItsRanks(t *testing.T) {
 	src := "digraph { rankdir=TB; root -> parser; root -> checker; root -> emitter; parser -> lexer; parser -> ast; checker -> types; checker -> scopes; emitter -> ir; emitter -> asm }\n"
-	l, h, ok := layout.Fit(t.Context(), src, 116, 0)
-	if !ok {
-		t.Fatal("layout failed")
-	}
-	rows := plain(Draw(l, 116, h))
+	rows := plain(drawn(t, src, 116))
 	rowOf := func(label string) int {
 		for i, r := range rows {
-			for _, w := range []string{"│" + label + "│", "│" + label + "├", "┤" + label + "│", "┤" + label + "├"} {
-				if strings.Contains(r, w) {
-					return i
-				}
+			if walled(r, label) {
+				return i
 			}
 		}
 		return -1
@@ -714,11 +691,7 @@ func TestTopDownTreeKeepsItsRanks(t *testing.T) {
 
 // A `graph { a -- b }` has no heads to draw.
 func TestUndirectedGraphHasNoArrowheads(t *testing.T) {
-	l, h, ok := layout.Fit(t.Context(), "graph { rankdir=LR; a -- b -- c }\n", 80, 0)
-	if !ok {
-		t.Fatal("layout failed")
-	}
-	if j := joined(Draw(l, 80, h)); strings.ContainsAny(j, "▶◀▲▼") {
+	if j := joined(drawn(t, "graph { rankdir=LR; a -- b -- c }\n", 80)); strings.ContainsAny(j, "▶◀▲▼") {
 		t.Errorf("arrowheads on an undirected graph:\n%s", j)
 	}
 }
@@ -748,15 +721,7 @@ const corpusLR = `digraph { rankdir=LR
 
 func renderOf(t *testing.T, src string, w int) []string {
 	t.Helper()
-	l, h, ok := layout.Fit(t.Context(), src+"\n", w, 0)
-	if !ok {
-		t.Fatal("layout failed")
-	}
-	rows := Draw(l, w, h)
-	if rows == nil {
-		t.Fatal("render failed")
-	}
-	return plain(rows)
+	return plain(drawn(t, src+"\n", w))
 }
 
 // A chain renders as one straight line of arrows: three drawn rows and
@@ -820,25 +785,38 @@ func TestArrowheadsMeetWalls(t *testing.T) {
 	}
 }
 
-// A label rides inside its own stroke — ──go──▶ — so it can only belong
-// to one edge.
+// A label rides inside its own stroke — ── go ──▶ — with a shoulder of
+// air each side, so it can only belong to one edge and a reader can tell
+// where the words stop.
 func TestInlineLabelRidesItsStroke(t *testing.T) {
 	rows := renderOf(t, `digraph { rankdir=LR; a -> b [label="go"] }`, 100)
-	if j := strings.Join(rows, "\n"); !strings.Contains(j, "─go─") {
+	if j := strings.Join(rows, "\n"); !strings.Contains(j, "─ go ─") {
 		t.Errorf("label does not ride its stroke:\n%s", j)
 	}
 }
 
-// A self-loop is attached — foot joined into the border, arrow meeting
-// the top — or absent when the box has no room. Never a floating hook.
+// A self-loop is a hoop out of one wall and back into the same wall: a
+// foot joined into the border, a head meeting it, and nothing hugging the
+// box. The scout is no help here — its cheapest path from a wall to the
+// wall beside it is a scribble — so this is the law that the shape is
+// drawn outright.
 func TestSelfLoopAttachedOrAbsent(t *testing.T) {
-	j := strings.Join(renderOf(t, "digraph { rankdir=LR; loopy -> loopy }", 100), "\n")
-	if !strings.Contains(j, "▼") || !strings.Contains(j, "┴") {
-		t.Errorf("wide self-loop not attached:\n%s", j)
+	for _, src := range []string{
+		"digraph { rankdir=LR; loopy -> loopy }",
+		"digraph { rankdir=LR; b -> b }",
+	} {
+		j := strings.Join(renderOf(t, src, 100), "\n")
+		if !strings.Contains(j, "▼") || !strings.Contains(j, "┴") {
+			t.Errorf("self-loop not attached:\n%s", j)
+		}
 	}
-	j = strings.Join(renderOf(t, "digraph { rankdir=LR; b -> b }", 100), "\n")
-	if strings.ContainsAny(j, "▼▲◀▶") {
-		t.Errorf("narrow self-loop should be absent, not meaningless:\n%s", j)
+	// Several on one node take a wall each, or nest, and never meet.
+	j := strings.Join(renderOf(t, "digraph { rankdir=LR; m -> m; m -> m }", 100), "\n")
+	if n := strings.Count(j, "▼") + strings.Count(j, "▲"); n != 2 {
+		t.Errorf("want two self-loops drawn, got %d heads:\n%s", n, j)
+	}
+	if strings.ContainsRune(j, '┼') {
+		t.Errorf("two self-loops crossed each other:\n%s", j)
 	}
 }
 
