@@ -16,6 +16,8 @@
 package cells
 
 import (
+	"strings"
+
 	"github.com/sureffi/drawer/internal/grid"
 	"github.com/sureffi/drawer/internal/layout"
 )
@@ -145,13 +147,24 @@ func titleRoom(title string) int {
 	return n + 6
 }
 
-// plainTitle says whether every rune of a name is writing. A name set into
-// the top edge is read off the edge itself, so a colon or a hash in it —
-// runes a box drawing spends on lines — comes back as a blank and the name
-// comes back wrong. Those go on the air row inside the frame instead.
+// upright is the two arrowheads that point along a column, and their
+// unicode twins. They are ordinary letters as well — `v` is the fourth
+// letter of "Services" — and in a top edge there is no line above or below
+// one for it to be the head of, so a reader gives it back as the letter.
+// `>` and `<` are not here: a top edge runs east-west and puts a line right
+// behind either of them, which is an arrowhead however it was meant.
+const upright = "v∨^∧"
+
+// plainTitle says whether every rune of a name is writing where the name is
+// going. A name set into the top edge is read off the edge itself, so a
+// colon or a hash in it — runes a box drawing spends on lines — comes back
+// as a blank and the name comes back wrong. Those go on the air row inside
+// the frame instead. Asking the alphabet alone barred the letter `v`, and
+// with it Services, Overview, Dev, Provider and every other name with one
+// in it.
 func plainTitle(title string) bool {
 	for _, r := range title {
-		if r != ' ' && InAlphabet(r) {
+		if r != ' ' && InAlphabet(r) && !strings.ContainsRune(upright, r) {
 			return false
 		}
 	}

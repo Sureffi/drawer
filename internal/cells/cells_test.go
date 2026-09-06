@@ -1563,6 +1563,65 @@ func TestAClusterInsetsItsMembersOneCell(t *testing.T) {
 	}
 }
 
+// BOXES. A cluster is a frame with its label in the top edge — in the edge
+// itself, between two stretches of the frame's own line, not on the air row
+// under it. Nothing asserted that on a real drawing for a while: the two
+// cluster tests that existed both named their cluster something with a
+// colon in it, which is a rune the drawing spends on lines, so both took
+// the air-row path and the edge path was drawn by nobody.
+//
+// The exception is the second case, and it is the whole of the exception:
+// a name is read back off the edge, so a rune the edge is drawn with comes
+// back as a blank, and a name holding one stands on the air row instead.
+func TestAClustersNameIsSetIntoItsTopEdge(t *testing.T) {
+	// `Services` is the case that used to fail for a plain letter: `v` is
+	// an ascii arrowhead as well, and asking the alphabet alone barred it.
+	for _, c := range []struct {
+		what, name string
+		inEdge     bool
+	}{
+		{"a plain name", "group", true},
+		{"a name with a letter that is also a head", "Services", true},
+		{"a name with a rune the drawing draws lines with", "namespace: prod", false},
+	} {
+		src := `digraph { rankdir=LR
+		  subgraph cluster_one { label="` + c.name + `"; a; b }
+		  a -> b
+		}` + "\n"
+		rows := plain(drawn(t, src, 120))
+		j := strings.Join(rows, "\n")
+		row := -1
+		for y, r := range rows {
+			if strings.Contains(r, c.name) {
+				row = y
+			}
+		}
+		if row < 0 {
+			t.Errorf("%s: the cluster lost its name:\n%s", c.what, j)
+			continue
+		}
+		// The top edge is the row the frame's own corners stand on.
+		got := strings.Contains(rows[row], "┌") && strings.Contains(rows[row], "┐")
+		if got != c.inEdge {
+			where := "on the air row"
+			if got {
+				where = "in the top edge"
+			}
+			t.Errorf("%s: %q came out %s:\n%s", c.what, c.name, where, j)
+		}
+		if !got {
+			continue
+		}
+		// In the edge means in it: the frame's line carries on either side
+		// of the name, with one blank between.
+		i := strings.Index(rows[row], c.name)
+		r := []rune(rows[row][:i])
+		if len(r) < 2 || r[len(r)-1] != ' ' || !strings.ContainsRune("─┬", r[len(r)-2]) {
+			t.Errorf("%s: no edge and a blank before the name:\n%s", c.what, j)
+		}
+	}
+}
+
 // BOXES. A head that stops against a cluster's frame meets the frame and
 // never the frame's own name. An edge into a cluster stops one cell
 // outside it and the reader walks in across the border; a head landing
