@@ -7,10 +7,10 @@
       "name": "drawer",
       "source": {
         "source": "archive",
-        "url": "https://github.com/sureffi/drawer/releases/download/v0.2.0/drawer-plugin.zip",
-        "sha256": "b5f410d86da928bde4aefc29660446a0bca30a524f9e0d07e55705cf0735911c"
+        "url": "https://github.com/sureffi/drawer/releases/download/v0.3.0/drawer-plugin.zip",
+        "sha256": "386306c8dafcbc7d3d2bbf88720531ea09b7691be77ada66f3c14ff7233fb173"
       },
-      "version": "0.2.0",
+      "version": "0.3.0",
       "description": "A ```dot fence in a reply is drawn in place."
     }
   ]
