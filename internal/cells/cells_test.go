@@ -990,76 +990,114 @@ func TestClusterIsAFrameRoundItsMembers(t *testing.T) {
 	}
 }
 
-// A line never crosses a frame. A reader stops at a border, so an edge
-// drawn through one is an edge cut in half; it stops outside instead and
-// the reader walks in across the blanks.
-func TestNoLineCrossesAFrame(t *testing.T) {
-	src := `digraph {
-	  rankdir=TB
-	  subgraph cluster_a { label="A"; p; q }
-	  subgraph cluster_b { label="B"; r; s }
-	  p -> q; q -> r; r -> s; s -> p
-	}`
-	rows := plain(drawn(t, src+"\n", 120))
-	j := strings.Join(rows, "\n")
-	// A frame's own corner runes are square; a node's are round. So any
-	// square corner opens a frame, and every cell of that frame's four
-	// walls has to be the wall's own rune, the name written into the top
-	// edge, or a tee where a line stopped against it. A crossing there, or
-	// a line rune lying across the wall's own axis, is a line gone through.
-	//
-	// The check used to sit inside `if the drawing has a ┼ in it`, and this
-	// drawing has none, so it asserted nothing at all for a long time.
-	if !strings.Contains(j, "╭") {
-		t.Fatalf("want boxes as well as frames:\n%s", j)
-	}
-	g := gridOf(rows)
-	frames := 0
-	for y := range g {
-		for x, r := range g[y] {
-			if r != '┌' {
-				continue
-			}
-			x1, y1 := -1, -1
-			for c := x + 1; c < len(g[y]); c++ {
-				if g[y][c] == '┐' {
-					x1 = c
-					break
+// A frame's line is crossed only where a member's edge comes in or goes
+// out: straight, perpendicular, as a crossing, with the line carrying on
+// both sides of the wall. Nothing stops against a frame — a tee on a
+// frame's wall, or a head pointing at one, would be an edge that ended at
+// a cluster, which no graph says — and nothing runs along one.
+func TestALineCrossesAFrameOnlyStraightThrough(t *testing.T) {
+	armN := func(r rune) bool { return strings.ContainsRune("│┃┆╎┼╂┿╋┴├┤└┘╰╯▼", r) }
+	armS := func(r rune) bool { return strings.ContainsRune("│┃┆╎┼╂┿╋┬├┤┌┐╭╮▲", r) }
+	armE := func(r rune) bool { return strings.ContainsRune("─━┄╌┼╂┿╋├┬┴┌└╭╰◀", r) }
+	armW := func(r rune) bool { return strings.ContainsRune("─━┄╌┼╂┿╋┤┬┴┐┘╮╯▶", r) }
+	for _, dir := range []string{"TB", "LR"} {
+		src := strings.Replace(frameGraph, "RANKDIR", dir, 1)
+		rows := plain(drawn(t, src, 120))
+		j := strings.Join(rows, "\n")
+		if !strings.Contains(j, "╭") {
+			t.Fatalf("want boxes as well as frames:\n%s", j)
+		}
+		g := gridOf(rows)
+		frames, crossings := 0, 0
+		for y := range g {
+			for x, r := range g[y] {
+				if r != '┌' {
+					continue
 				}
-			}
-			for r2 := y + 1; r2 < len(g); r2++ {
-				if at(g, x, r2) == '└' {
-					y1 = r2
-					break
-				}
-			}
-			if x1 < 0 || y1 < 0 || at(g, x1, y1) != '┘' {
-				continue
-			}
-			frames++
-			// Across the two horizontal walls: nothing that runs down the
-			// page, and no crossing.
-			for c := x + 1; c < x1; c++ {
-				for _, r2 := range []int{y, y1} {
-					if ch := at(g, c, r2); strings.ContainsRune("│┃┆╎┼╂┿╋", ch) {
-						t.Errorf("a line crossed a frame's horizontal wall at %d,%d (%q):\n%s", c, r2, ch, j)
+				x1, y1 := -1, -1
+				for c := x + 1; c < len(g[y]); c++ {
+					if g[y][c] == '┐' {
+						x1 = c
+						break
 					}
 				}
-			}
-			// And down the two vertical walls: nothing that runs across it.
-			for r2 := y + 1; r2 < y1; r2++ {
-				for _, c := range []int{x, x1} {
-					if ch := at(g, c, r2); strings.ContainsRune("─━┄╌┼╂┿╋", ch) {
-						t.Errorf("a line crossed a frame's vertical wall at %d,%d (%q):\n%s", c, r2, ch, j)
+				for r2 := y + 1; r2 < len(g); r2++ {
+					if at(g, x, r2) == '└' {
+						y1 = r2
+						break
+					}
+				}
+				if x1 < 0 || y1 < 0 || at(g, x1, y1) != '┘' {
+					continue
+				}
+				frames++
+				// The two horizontal walls: nothing that runs down the
+				// page or stops against it, no head pointing at it, and
+				// every crossing carried on above and below.
+				for c := x + 1; c < x1; c++ {
+					for _, r2 := range []int{y, y1} {
+						ch := at(g, c, r2)
+						if strings.ContainsRune("│┃┆╎┬┴├┤", ch) {
+							t.Errorf("a line stops against or runs down a frame's wall at %d,%d (%q):\n%s", c, r2, ch, j)
+						}
+						if at(g, c, r2-1) == '▼' || at(g, c, r2+1) == '▲' {
+							t.Errorf("a head points at a frame's wall at %d,%d:\n%s", c, r2, j)
+						}
+						if strings.ContainsRune("┼╂┿╋", ch) {
+							crossings++
+							if !armS(at(g, c, r2-1)) || !armN(at(g, c, r2+1)) {
+								t.Errorf("a crossing on a frame's wall at %d,%d does not carry on both sides:\n%s", c, r2, j)
+							}
+						}
+					}
+				}
+				// And the two vertical walls, the same across the page.
+				for r2 := y + 1; r2 < y1; r2++ {
+					for _, c := range []int{x, x1} {
+						ch := at(g, c, r2)
+						if strings.ContainsRune("─━┄╌├┤┬┴", ch) {
+							t.Errorf("a line stops against or runs along a frame's wall at %d,%d (%q):\n%s", c, r2, ch, j)
+						}
+						if at(g, c-1, r2) == '▶' || at(g, c+1, r2) == '◀' {
+							t.Errorf("a head points at a frame's wall at %d,%d:\n%s", c, r2, j)
+						}
+						if strings.ContainsRune("┼╂┿╋", ch) {
+							crossings++
+							if !armE(at(g, c-1, r2)) || !armW(at(g, c+1, r2)) {
+								t.Errorf("a crossing on a frame's wall at %d,%d does not carry on both sides:\n%s", c, r2, j)
+							}
+						}
 					}
 				}
 			}
 		}
-	}
-	if frames < 2 {
-		t.Fatalf("found %d frames to ask the question of, want the source's two:\n%s", frames, j)
+		if frames < 1 {
+			t.Fatalf("found no frame to ask the question of:\n%s", j)
+		}
+		// Six edges cross the group's frame — two in, four out — so a
+		// drawing with no crossing on it is one where they never reached
+		// their members.
+		if crossings < 6 {
+			t.Errorf("%s: %d crossings on the frame, want the six edges through it:\n%s", dir, crossings, j)
+		}
 	}
 }
+
+// frameGraph is the README's own graph: a cluster of two, with edges into
+// it and out of it.
+const frameGraph = `digraph {
+  rankdir=RANKDIR
+  node [shape=box, style=rounded]
+  client [label="Client", shape=oval]
+  lb [label="Load Balancer"]
+  subgraph cluster_asg { label="Autoscaling Group"; style=dashed; api1 [label="API Server 1"]; api2 [label="API Server 2"] }
+  redis [label="Redis\n(cache)", shape=cylinder]
+  postgres [label="Postgres", shape=cylinder]
+  client -> lb [label="HTTPS"]
+  lb -> api1; lb -> api2
+  api1 -> redis; api2 -> redis; api1 -> postgres; api2 -> postgres
+}
+`
 
 // A record is one box with its fields ruled off inside it.
 func TestRecordIsOneBoxWithDividers(t *testing.T) {

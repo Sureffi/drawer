@@ -7,11 +7,12 @@
 // slots are sized to hold all of it, which is why a frame never lands on
 // anything and nothing that is not a member ever lands inside one.
 //
-// A frame's line is a wall to the scout: a reader stops a line at a
-// border, so an edge drawn through a frame is an edge cut in half. An edge
-// that has to leave one stops outside it instead, with a corridor of
-// blanks kept clear behind it — wire.go lays that out — and the reader
-// walks in across the blanks and the frame alike.
+// A frame's line is a wall to the scout: no route goes through one. An
+// edge that has to leave a frame is routed from a port outside it and
+// drawn on from that port straight in to its member, across the frame's
+// line — one crossing, perpendicular, at the member's own corridor, which
+// wire.go keeps clear. So a line meets a frame only where it passes it,
+// and nothing ever stops against one.
 
 package cells
 
@@ -277,7 +278,15 @@ func nameFrame(cv *Canvas, b Box) {
 			return
 		}
 	}
-	cv.Blank(best, b.Y, n+2)
+	// The blank the name keeps each side is a margin, not a wall: where a
+	// line crosses the edge exactly there, the crossing stays and the name
+	// stands against it. Blanking it would cut the line at the border,
+	// which is the one thing a frame must never do to a line.
+	for x := best; x < best+n+2; x++ {
+		if !crosses(x) {
+			cv.Blank(x, b.Y, 1)
+		}
+	}
 	cv.Text(best+1, b.Y, b.Title, b.Ink)
 }
 

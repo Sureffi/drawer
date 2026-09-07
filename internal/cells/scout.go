@@ -76,10 +76,11 @@ func newTerrain(w, h int, boxes []Box) *terrain {
 	return t
 }
 
-// ring walls off a cluster's frame and nothing else. A line may not cross
-// a frame — a reader takes a line stopped at a border as a line that ended
-// there, so an edge drawn through one is an edge cut in half — and
-// everything inside the frame is exactly what the frame is round.
+// ring walls off a cluster's frame and nothing else. The scout may not
+// route through a frame: the one place a line crosses one is the straight
+// corridor from a member out to its port, which wire.go draws and never
+// routes — and everything inside the frame is exactly what the frame is
+// round.
 func (t *terrain) ring(b Box) {
 	mark := func(x, y int) {
 		if x >= 0 && y >= 0 && x < t.w && y < t.h {
@@ -109,9 +110,9 @@ func (t *terrain) ring(b Box) {
 	}
 }
 
-// isRing says whether a cell is some frame's own line. A reader walks a
-// line's end outward across blanks and frames alike, so a corridor kept
-// clear for one may pass through a frame and still be read.
+// isRing says whether a cell is some frame's own line. A corridor kept
+// clear for a member's edge passes through the frame's line, and the leg
+// drawn along it crosses the line there.
 func (t *terrain) isRing(x, y int) bool {
 	return x >= 0 && y >= 0 && x < t.w && y < t.h && t.ringm[y*t.w+x]
 }

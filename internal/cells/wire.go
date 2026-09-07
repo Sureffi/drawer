@@ -29,6 +29,11 @@ import (
 type port struct {
 	x, y int
 	d    Dir
+	// in is the member's own port, for an edge that had to stop outside a
+	// frame: the leg from the port to it is drawn once the route is found.
+	// deep says there is one.
+	in   ipt
+	deep bool
 }
 
 type porter struct{ used map[ipt]bool }
@@ -103,7 +108,7 @@ func (p *porter) claim(cv *Canvas, t *terrain, b Box, tx, ty int) (port, bool) {
 				continue
 			}
 			p.used[c] = true
-			return port{c.x, c.y, side.Opposite()}, true
+			return port{x: c.x, y: c.y, d: side.Opposite()}, true
 		}
 	}
 	return port{}, false
@@ -161,11 +166,13 @@ func routeAll(cv *Canvas, g *layout.Graph, sl slots, boxes, frames []Box, encl [
 		if e.Tail == e.Head {
 			tp, hp, ps = selfLoop(cv, t, pt, tb, e.Tail, hoops, e.Label != "", grid.Cells(e.Label))
 		} else {
-			// A node inside a frame the other end is not inside cannot
-			// have the line come to it: a frame cuts a line in two. The
-			// edge stops outside the frame instead, with a corridor of
-			// blanks kept clear behind it, which is exactly what a reader
-			// walks when it looks for the box an end meant.
+			// A node inside a frame the other end is not inside is
+			// reached through the wall: the scout's route stops at a port
+			// outside the frame, and the edge is drawn on from there
+			// straight in to the member's own wall, across the frame's
+			// line. A frame is crossed only there, and only straight, so a
+			// reader sees one line passing a border and not two lines
+			// ending at it.
 			// Three tries at a pair of ports. A port that the scout can
 			// find no way out of is a port spent: it stays spent, and the
 			// next try takes the next place on the wall. This is the whole
@@ -264,7 +271,7 @@ func selfLoop(cv *Canvas, t *terrain, pt *porter, b Box, node int, hoops map[[2]
 			}
 			hoops[key] = j + 1
 			pt.used[a], pt.used[z] = true, true
-			return port{a.x, a.y, side.Opposite()}, port{z.x, z.y, side.Opposite()}, ps
+			return port{x: a.x, y: a.y, d: side.Opposite()}, port{x: z.x, y: z.y, d: side.Opposite()}, ps
 		}
 	}
 	return port{}, port{}, nil
@@ -349,6 +356,7 @@ func commit(cv *Canvas, ps Route, tp, hp port, e layout.GEdge) {
 		cv.Line(a.x, a.y, d, p)
 		cv.Line(b.x, b.y, d.Opposite(), p)
 	}
+	tp, hp = reachIn(cv, tp, p), reachIn(cv, hp, p)
 	if e.Dir == layout.Back || e.Dir == layout.Both {
 		cv.Head(tp.x, tp.y, tp.d, p.Pen)
 	} else {
@@ -359,6 +367,18 @@ func commit(cv *Canvas, ps Route, tp, hp port, e layout.GEdge) {
 	} else {
 		attach(cv, hp, p)
 	}
+}
+
+// reachIn draws the leg of an edge that had to stop outside a frame: from
+// the port outside it straight in, through the frame's line, to the
+// member's own port, and answers that port — where the head or the
+// attachment goes. An edge with no frame in its way is its own port.
+func reachIn(cv *Canvas, p port, pen Pencil) port {
+	if !p.deep {
+		return p
+	}
+	cv.Stroke(p.x, p.y, p.in.x, p.in.y, pen)
+	return port{x: p.in.x, y: p.in.y, d: p.d}
 }
 
 // attach joins a port to the wall it faces. Without it the line merely
@@ -664,12 +684,12 @@ func outside(a, b []int) int {
 }
 
 // reachOut claims a port, and where the edge has to leave a frame, claims
-// it outside that frame with a corridor of blanks behind it.
-//
-// The corridor is the reader's own rule turned into geometry: an end walks
-// straight outward across blanks and frames until it meets a box, and it
-// stops at the first thing it finds. So the run from the port to the wall
-// is kept empty and the reading is the one the drawing meant.
+// it outside that frame and keeps the straight run from the member's own
+// port out to it clear — the corridor. The scout routes to the outside
+// port; reachIn draws the corridor in through the frame's line once the
+// route is found. The corridor is straight because a line that bends
+// inside a frame is a line the frame is drawn over, and a reader gives a
+// bend at a border to the border.
 func reachOut(cv *Canvas, t *terrain, pt *porter, b Box, frames []Box, fr, tx, ty int) (port, bool) {
 	if fr < 0 || fr >= len(frames) {
 		p, ok := pt.claim(cv, t, b, tx, ty)
@@ -730,7 +750,7 @@ func reachOut(cv *Canvas, t *terrain, pt *porter, b Box, frames []Box, fr, tx, t
 			}
 			pt.used[c] = true
 			pt.used[ipt{px, py}] = true
-			return port{px, py, side.Opposite()}, true
+			return port{x: px, y: py, d: side.Opposite(), in: c, deep: true}, true
 		}
 	}
 	return port{}, false
