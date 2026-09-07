@@ -19,17 +19,41 @@ painting are all in the binary.
 
 The pictures need kitty or ghostty, the terminals that draw the placeholder
 cells a picture lives in — through tmux too. Anywhere else the graph is
-drawn in glyphs.
+drawn in box drawing, which every terminal draws with its own hand.
+
+      ╭───────────────╮
+      │    Client     │
+      ╰───────┬───────╯
+              │ HTTPS
+              ▼
+      ╭───────────────╮
+      │ Load Balancer ├──────────┐
+      ╰───────┬───────╯          │
+              │                  │
+              ▼                  ▼
+    ┌┄┄┄┄┄┄┄┄┄ Autoscaling Group ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┐
+    ┆                                            ┆
+    ┆ ╭───────────────╮         ╭──────────────╮ ┆
+    ┆ │ API Server 1  │         │ API Server 2 │ ├┐
+    ┆ ╰───────────────╯         ╰──────────────╯ ┆│
+    ┆                                            ┆│
+    └┄┄┄┄┄┄┄┄┄┬┄┄┄┄┄┄┬┄┄┄┄┄┄┄┄┄┄┄┬┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┘│
+              │      │           │                │
+              ▼      └───────────┼────────────┐   │
+      ╭───────────────╮          │            │   │ ╭──────────╮
+      │     Redis     │◀─────────┘            │   └▶│ Postgres │
+      │    (cache)    │                       └────▶│          │
+      ╰───────────────╯                             ╰──────────╯
 
 ## settings
 
 Three environment variables, set for `claude` in `settings.json` or the shell:
 
-    { "env": { "DRAWER_RENDER": "braille",
+    { "env": { "DRAWER_RENDER": "cells",
                "DRAWER_THEME":  "/home/me/.config/drawer/theme.dot",
                "DRAWER_TEE":    "/home/me/drawer-deltas.jsonl" } }
 
-- `DRAWER_RENDER` forces a drawing: `pixels`, `octants`, `braille` or `cells`.
+- `DRAWER_RENDER` forces a drawing: `auto`, `pixels` or `cells`.
 - `DRAWER_THEME` names a theme file.
 - `DRAWER_TEE` records every payload the hook receives, for `drawer -deltas` to replay.
 
@@ -83,7 +107,7 @@ A graph wider than the window is laid out top-down instead. One taller than
 labelled `dot` or `graphviz` is drawn, and so is an unlabelled fence that
 opens with `digraph {` or `graph {`. Other fences pass through untouched.
 
-Where the terminal cannot show pictures the same graph is drawn in glyphs.
+Where the terminal cannot show pictures the same graph is drawn in box drawing.
 
 ## known wrong
 
@@ -94,7 +118,7 @@ Where the terminal cannot show pictures the same graph is drawn in glyphs.
   replayed transcript.
 - macOS runs the whole test suite in CI, but a runner has no terminal, so
   the terminal path on a Mac is unverified. If it is wrong, drawings fall
-  back to glyphs at 100 columns.
+  back to box drawing at 100 columns.
 - Installed mid-session and reloaded with `/reload-plugins`, `SessionStart`
   does not fire, so the model is not told about the hook until a new session.
   A ```dot fence it writes anyway is drawn.
@@ -123,13 +147,13 @@ the manifests needs a reinstall.
 
 `scripts/check.sh` is every check in one command: build, vet, a vet
 cross-compiled for macOS, the import graph held to a table, the tests under
-`-race`, every rung on a fixture, the theme files, the plugin manifests and
+`-race`, both rungs on a fixture, the theme files, the plugin manifests and
 wrapper, the pixels rung to a PNG, and recorded hook streams replayed. CI
 runs it on Linux and macOS on every push.
 
 Offline, without a session:
 
-    ./bin/drawer -dot FILE -size WxH -render braille   # draw a file
+    ./bin/drawer -dot FILE -size WxH -render cells     # draw a file
     ./bin/drawer -dot FILE -png OUT [-cell 10x24]      # the picture, to a file
     ./bin/drawer -deltas FILE -render cells            # replay a recorded turn; nonzero if damaged
     ./bin/drawer -context                              # the line the model is handed
@@ -149,14 +173,13 @@ An organisation that can only point a marketplace at git gets the download.
 the wrapper, zips the plugin, points the marketplace at the zip, commits,
 tags, pushes and creates the GitHub release.
 
-The tree, one binary and ten packages, every import pointing down:
+The tree, one binary and nine packages, every import pointing down:
 
     cmd/drawer/          the binary
     internal/drawer      the flags, the hook wire, the ladder of rungs, the ledger
     internal/pixel       the pixels rung: the themed drawing, the painter, the cut, the placeholders
     internal/theme       Claude Code's theme, and a theme file
-    internal/subcell     the braille and octant rung
-    internal/cells       the cells rung: box-drawing characters, edges routed on them
+    internal/cells       the cells rung: box drawing, edges routed on the grid, clusters framed
     internal/notice      why there is no drawing, drawn
     internal/fence       a fence in, a drawing or the same bytes out
     internal/layout      graphviz: the one door, its drawing as data, the scale to cells
