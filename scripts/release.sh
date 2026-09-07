@@ -144,7 +144,11 @@ fi
 # quarter of an hour later — and gh takes a half-made release down with the
 # first failure. An upload that breaks off leaves an asset behind in GitHub's
 # `starter` state under the name the next try wants, and that name is then
-# refused, so every try first sweeps what did not finish.
+# refused, so every try first sweeps what did not finish. The zip is named
+# once: dist/drawer-* already matches it, and naming it again after the
+# glob uploaded it twice under --clobber, and the second upload of the same
+# name was the one uploads.github.com refused, eight times out of eight on
+# v0.3.0, while one upload of it by hand went through at once.
 gh release view "v$v" >/dev/null 2>&1 || gh release create "v$v" --title "drawer v$v" \
 	--notes "\`/plugin marketplace add $repo\` then \`/plugin install drawer@drawer\`. The zip is the plugin with every binary inside; the bare binaries are what a git checkout downloads, checked against checksums.txt."
 sweep() {
@@ -152,7 +156,7 @@ sweep() {
 		while read -r id; do gh api -X DELETE "repos/$repo/releases/assets/$id" >/dev/null; done
 }
 n=0
-until sweep; gh release upload "v$v" dist/drawer-* dist/checksums.txt dist/drawer-plugin.zip --clobber; do
+until sweep; gh release upload "v$v" dist/drawer-* dist/checksums.txt --clobber; do
 	n=$((n + 1))
 	[ $n -lt 8 ] || { echo "release: the upload failed eight times" >&2; exit 1; }
 	echo "release: upload failed; again in 60s ($n)" >&2
