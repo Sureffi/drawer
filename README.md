@@ -21,29 +21,7 @@ The pictures need kitty or ghostty, the terminals that draw the placeholder
 cells a picture lives in — through tmux too. Anywhere else the graph is
 drawn in box drawing, which every terminal draws with its own hand.
 
-      ╭───────────────╮
-      │    Client     │
-      ╰───────┬───────╯
-              │ HTTPS
-              ▼
-      ╭───────────────╮
-      │ Load Balancer ├──────────┐
-      ╰───────┬───────╯          │
-              │                  │
-              │                  │
-    ┌┄┄┄┄┄┄┄┄┄┼Autoscaling Group ┼┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┐
-    ┆         ▼                  ▼               ┆
-    ┆ ╭───────────────╮         ╭──────────────╮ ┆
-    ┆ │ API Server 1  │         │ API Server 2 ├─┼┐
-    ┆ ╰───────┬──────┬╯         ╰┬─────────────╯ ┆│
-    ┆         │      │           │               ┆│
-    └┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┘│
-              │      │           │                │
-              ▼      └───────────┼────────────┐   │
-      ╭───────────────╮          │            │   │ ╭──────────╮
-      │     Redis     │◀─────────┘            │   └▶│ Postgres │
-      │    (cache)    │                       └────▶│          │
-      ╰───────────────╯                             ╰──────────╯
+![the same graph, in box drawing](demo/cells.png)
 
 ## settings
 

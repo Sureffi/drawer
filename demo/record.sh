@@ -108,9 +108,10 @@ $(cat "$here/graph.dot")"
 	maim -i "$wid" "$out/$r-full.png"
 	kill $kpid
 	# the crop: the band below the reply's bullet, trimmed to the drawing,
-	# 24px of ground around. The band is where the drawing sat in that take,
-	# at 1280x720.
-	case $r in cells) band=1280x140+0+370 ;; *) band=1280x260+0+240 ;; esac
+	# 24px of ground around. The band is where the drawing sat in that take —
+	# the cells one starts 36px in, past the bullet, which sits level with
+	# the drawing's top row.
+	case $r in cells) band=1244x410+36+235 ;; *) band=1280x260+0+240 ;; esac
 	magick "$out/$r-full.png" -crop "$band" +repage -fuzz 6% -trim +repage \
 		-bordercolor '#0a0a0a' -border 24 "$out/$r.png"
 	;;
