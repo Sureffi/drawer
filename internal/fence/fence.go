@@ -82,6 +82,8 @@ type State struct {
 	// Buf is raw delta text that has arrived and not yet been decided on:
 	// an incomplete last line, which cannot be classified until its
 	// newline shows up, because it might still grow into a fence marker.
+	// After a fence drawn before its closer, it is everything between the
+	// drawing and that closer.
 	Buf string `json:"buf"`
 	// Held is the fence being captured, raw, from its opening marker.
 	Held string `json:"held"`
@@ -96,8 +98,8 @@ type State struct {
 	// Fence is the opener of the fence being held or streamed.
 	Fence Opener `json:"fence"`
 	// A fence drawn before its closing ``` arrived leaves that marker
-	// still in the stream, one delta behind. Nothing else knows it is
-	// owed, so it is carried.
+	// still in the stream, and every line before it. Nothing else knows
+	// they are owed to the drawing, so it is carried.
 	PendingClose bool `json:"pending_close"`
 	// Next is the index of the delta expected next: the turn.
 	Next int `json:"next"`
@@ -184,8 +186,10 @@ func Stream(ctx context.Context, delta string, final bool, st *State, emit func(
 
 	for {
 		if st.PendingClose {
-			s, e := closer()
-			if s == 0 {
+			// Everything up to the closer is still the fence's — a blank
+			// line, a trailing comment, a shorter run in a longer fence —
+			// and the drawing stands for all of it.
+			if s, e := closer(); s >= 0 {
 				// The drawing replaced the whole fence, closer included, so
 				// the closer's own line ending is what decides whether the
 				// text after it starts on a new row.
@@ -196,10 +200,16 @@ func Stream(ctx context.Context, delta string, final bool, st *State, emit func(
 				st.PendingClose = false
 				continue
 			}
-			if s < 0 && !final && completeLines(st.Buf) == 0 {
+			if !final {
 				break // it has not arrived yet
 			}
-			st.PendingClose = false // whatever is here, it is not our closer
+			// The message ended with the fence still open. What came after
+			// the drawing is given back as it came, on the row after the
+			// drawing's last: it was never drawn.
+			if st.Buf != "" {
+				out.WriteString("\n")
+			}
+			st.PendingClose = false
 			continue
 		}
 
@@ -281,9 +291,6 @@ func Stream(ctx context.Context, delta string, final bool, st *State, emit func(
 			st.InFence, st.Ours, st.Held = false, false, ""
 			continue
 		}
-		st.Held += st.Buf
-		st.Buf = ""
-
 		// A complete graph does not need its closing ``` to be drawable:
 		// graphviz is the completeness oracle, so a source that lays out
 		// is a source that is finished. Emitting before the closer is what
@@ -292,13 +299,19 @@ func Stream(ctx context.Context, delta string, final bool, st *State, emit func(
 		// with "yes, and here is why it is broken" on the first delta. A
 		// source that is finished and wrong is told apart at the close,
 		// where emit gets it whatever it is.
-		if src := Body(st.Held, st.Fence); layout.Complete(ctx, src) {
-			if rows := emitIn(st.Fence, src, emit); rows != nil {
-				out.WriteString(strings.Join(rows, "\n"))
-				st.InFence, st.Ours, st.Held = false, false, ""
-				st.PendingClose = true
-				continue
-			}
+		//
+		// The drawing stands for the fewest whole lines that lay out, so
+		// where the deltas fell does not move it: lines are held one at a
+		// time and the source is asked after each. graphviz reads the first
+		// graph and stops, so what follows a finished graph would lay out
+		// with it and vanish into the drawing; held back, it stays in Buf,
+		// the fence's up to the closer and given back if none comes. A
+		// fragment stays in Buf too, where the closer is looked for: a ```
+		// with no newline yet is this fence's closer on the next delta, and
+		// in Held it would be body. Only at the end of the message is a
+		// fragment a line.
+		if drew := holdLines(ctx, st, final, emit, &out); drew {
+			continue
 		}
 		if final {
 			// The message is over and nothing drew. Give back every byte:
@@ -310,6 +323,35 @@ func Stream(ctx context.Context, delta string, final bool, st *State, emit func(
 		break
 	}
 	return out.String()
+}
+
+// holdLines moves Buf into Held one whole line at a time, the held source
+// asked first, and draws the graph at the first line that finishes it. A
+// graph is finished only on the line that carries its closing brace, so a
+// line with no brace on it is not asked about.
+func holdLines(ctx context.Context, st *State, final bool, emit func(string, int) []string, out *strings.Builder) bool {
+	for {
+		held := strings.TrimSuffix(st.Held, "\n")
+		if strings.Contains(held[strings.LastIndexByte(held, '\n')+1:], "}") {
+			if src := Body(st.Held, st.Fence); layout.Complete(ctx, src) {
+				if rows := emitIn(st.Fence, src, emit); rows != nil {
+					out.WriteString(strings.Join(rows, "\n"))
+					st.InFence, st.Ours, st.Held = false, false, ""
+					st.PendingClose = true
+					return true
+				}
+			}
+		}
+		n := strings.IndexByte(st.Buf, '\n') + 1
+		if n == 0 && final {
+			n = len(st.Buf)
+		}
+		if n == 0 {
+			return false
+		}
+		st.Held += st.Buf[:n]
+		st.Buf = st.Buf[n:]
+	}
 }
 
 // emitIn is emit for a fence: the rows for its source at the width its

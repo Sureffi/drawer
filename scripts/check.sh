@@ -109,12 +109,16 @@ done
 stage "show-theme" ./bin/drawer -show-theme || true
 stage "context" ./bin/drawer -context || true
 
-# The plugin's manifest and marketplace, as Claude Code reads them. Only
-# where claude is on the PATH; the files are still in the repo either way.
+# The plugin's manifest and marketplace, as Claude Code reads them, and the
+# hooks module's laws, run by Claude Code's own kit. Only where claude is on
+# the PATH; the files are still in the repo either way.
 if command -v claude >/dev/null 2>&1; then
   stage "plugin: validate" claude plugin validate . --strict || true
+  stage "plugin: validate hooks" claude plugin validate .claude-plugin/plugin.json --strict || true
+  stage "plugin: module laws" claude plugin test . || true
 else
   say "plugin: validate" "skipped (no claude)"
+  say "plugin: module laws" "skipped (no claude)"
 fi
 # The wrapper, on this checkout: a built bin/drawer is linked into a scratch
 # data dir and the context line comes back through it, then the hook route
@@ -142,6 +146,31 @@ hook_cold() {
     grep -q displayContent
 }
 stage "plugin: hook, cold" hook_cold || true
+# The module's door: no plugin variable in sight, as a hooks module's child
+# has none, and the checkout's binary found from where the script is. The
+# kind is the terminal's: a picture in kitty, glyphs in a pipe. A notice is
+# text too, and it is no drawing.
+drew() {
+  el=$(cat) || return 1
+  printf '%s\n' "$el" | grep -q -E '"kind":"(text|image)"' &&
+    ! printf '%s\n' "$el" | grep -q '"notice":true' || { printf '%.300s\n' "$el"; return 1; }
+}
+element_draws() {
+  printf 'digraph { a -> b }' | env -u CLAUDE_PLUGIN_ROOT -u CLAUDE_PLUGIN_DATA ./scripts/drawer element 80 | drew
+}
+stage "plugin: element" element_draws || true
+# The same door in a plugin installed from git: the wrapper in Claude
+# Code's cache with no binary beside it, and the one the session hook
+# downloaded in the data directory the cache path names.
+rm -rf bin/pcfg
+element_from_data() {
+  cached=bin/pcfg/plugins/cache/mk/drawer/0.0.0
+  mkdir -p "$cached/scripts" bin/pcfg/plugins/data/drawer-mk &&
+    cp scripts/drawer "$cached/scripts/" &&
+    ln -s "$PWD/bin/drawer" bin/pcfg/plugins/data/drawer-mk/drawer &&
+    printf 'digraph { a -> b }' | env -u CLAUDE_PLUGIN_ROOT -u CLAUDE_PLUGIN_DATA "$cached/scripts/drawer" element 80 | drew
+}
+stage "plugin: element, git install" element_from_data || true
 
 # The pixels rung, to a file: the same cut the hook makes. Nothing gates
 # this — the picture is painted in the binary, so a box that can run the

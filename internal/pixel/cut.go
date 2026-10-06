@@ -113,8 +113,11 @@ func cut(ctx context.Context, th *theme.Theme, src string, width int, geom term.
 }
 
 // pixelZoom is the cut's arithmetic: the zoom that puts a laid-out
-// picture's width on exactly `cols` columns, and the rows that follow. An
-// error is a block that will not do — too narrow to be anything, or
+// picture's width on exactly `cols` columns, and the rows that follow. The
+// rows are those of the height paint paints at that zoom, rounded as paint
+// rounds it: a height a hair over a whole number of cells is painted on
+// that number, and a row more would be a block the picture does not fill.
+// An error is a block that will not do — too narrow to be anything, or
 // taller than grid.MaxRows.
 func pixelZoom(d *layout.Drawing, cols int, geom term.Geom) (float64, int, error) {
 	if cols < 4 {
@@ -125,13 +128,11 @@ func pixelZoom(d *layout.Drawing, cols int, geom term.Geom) (float64, int, error
 	if pxW <= 0 || pxH <= 0 {
 		return 0, 0, errors.New("the picture has no size")
 	}
-	zoom := float64(cols*geom.CellW) / pxW
-	rows := int(math.Ceil(pxH * zoom / float64(geom.CellH)))
+	zoom := min(float64(cols*geom.CellW)/pxW, maxZoom)
+	h := math.Round(b.h() * (zoom * pxPerPt))
+	rows := int(math.Ceil(h / float64(geom.CellH)))
 	if rows < 1 || rows > grid.MaxRows || rows > len(rowColumnDiacritics) {
 		return 0, 0, fmt.Errorf("%d rows; the ceiling is %d", rows, grid.MaxRows)
-	}
-	if zoom > maxZoom {
-		zoom = maxZoom
 	}
 	return zoom, rows, nil
 }
@@ -170,10 +171,16 @@ func Fit(ctx context.Context, d *layout.Drawing, face string, cols int, geom ter
 // a picture that never comes back. So the id keeps the 256-colour form,
 // which is the one that crossed this wire on every version measured and in
 // a pane besides. Zero is "no image" in the low byte, so it is skipped.
+//
+// The high byte is never zero either. An id under 256 is where Claude
+// Code's own Image elements are numbered from — read from the 2.1.283
+// binary, which says "every 8-bit image id is in use" when it runs out —
+// and a picture of ours in that range is one of its pictures the next time
+// either is sent: the cells stay where they are and show the other image.
 func ImageID(src string, cols, rows int) uint32 {
 	h := fnv1a32(strconv.Itoa(cols) + "x" + strconv.Itoa(rows) + "\x00" + src)
 	lo := 1 + h%255
-	hi := (h >> 8) & 0xff
+	hi := 1 + (h>>8)%255
 	return hi<<24 | lo
 }
 

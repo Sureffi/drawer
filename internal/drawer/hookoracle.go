@@ -4,7 +4,7 @@ package drawer
 // checked against the input the fixture carries, so a fixture cannot bless
 // whatever the code happens to do today.
 //
-// Three laws, and they are the ones that would actually hurt:
+// Four laws, and they are the ones that would actually hurt:
 //
 //  1. Prose is not ours. Strip every fence from the input and from what
 //     was displayed, and the remainder must be byte-identical. That
@@ -14,9 +14,14 @@ package drawer
 //     input maps in order to exactly one fence in the output, and that
 //     output is either the same bytes or the drawn block for the same
 //     source.
-//  3. The block is well formed: a bare fence that fits its width with a
+//  3. The block is well formed: a text fence that fits its width with a
 //     drawing in it, or the notice that says why not with the source
-//     under it. checkDrawn is that law.
+//     under it, and no fence marker on any row between its own two.
+//     checkDrawn is that law.
+//  4. Where the deltas fell is not the reader's business. The whole input
+//     handed over as one final delta displays the same bytes as the
+//     stream did. That catches a fence closed in the wrong place, which
+//     the other three can miss when the misplaced text comes back intact.
 
 import (
 	"bufio"
@@ -92,6 +97,14 @@ func (r run) runDeltas(ctx context.Context, path string, w int) int {
 		return 1
 	}
 
+	var whole fence.State
+	if one := fence.Stream(ctx, in.String(), true, &whole, emit); one != shown.String() {
+		fmt.Fprintf(os.Stderr, "-deltas: %s: the display depends on where the deltas fell\n", path)
+		fmt.Fprintf(os.Stderr, "  in one delta: %q\n", clip(one))
+		fmt.Fprintf(os.Stderr, "  as streamed:  %q\n", clip(shown.String()))
+		return 1
+	}
+
 	srcFences, srcProse := splitFences(in.String())
 	outFences, outProse := splitFences(shown.String())
 
@@ -157,19 +170,24 @@ func splitFences(text string) ([]string, string) {
 	return fences, prose.String()
 }
 
-// checkDrawn is law 3: the fence is bare, every row fits the width it was
-// drawn for, and something was actually drawn — a line, a placeholder, or
-// the notice that says why not, with the source under it.
+// checkDrawn is law 3: the fence is text's, every row fits the width it was
+// drawn for, no row inside it is a fence marker — the stray of a fence the
+// transducer closed in the wrong place — and something was actually drawn:
+// a line, a placeholder, or the notice that says why not, with the source
+// under it.
 func checkDrawn(block, src string, w int) error {
 	lines := strings.Split(block, "\n")
-	if len(lines) < 3 || strings.TrimSpace(lines[0]) != fenceTick ||
+	if len(lines) < 3 || strings.TrimSpace(lines[0]) != fenceOpen ||
 		strings.TrimSpace(lines[len(lines)-1]) != fenceTick {
-		return fmt.Errorf("drawn block is not a bare fence")
+		return fmt.Errorf("drawn block is not a text fence")
 	}
 	body := lines[1 : len(lines)-1]
 	drawn := false
 	for _, row := range body {
 		plain := grid.StripSGR(row)
+		if _, ok := fence.OpenerOf(plain); ok {
+			return fmt.Errorf("a fence marker inside the drawn block: %q", plain)
+		}
 		if n := grid.Cells(plain); n > w {
 			return fmt.Errorf("row is %d cells in %d columns: %q", n, w, plain)
 		}

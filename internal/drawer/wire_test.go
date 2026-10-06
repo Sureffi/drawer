@@ -96,8 +96,8 @@ func TestFenceDrawsAcrossEitherSplit(t *testing.T) {
 		if !strings.Contains(out, "▶") {
 			t.Fatalf("split %d drew nothing:\n%s", i, out)
 		}
-		if strings.Contains(out, src) || !strings.HasPrefix(out, fenceTick+"\n") {
-			t.Fatalf("split %d did not replace the fence with a bare drawn one:\n%s", i, out)
+		if strings.Contains(out, src) || !strings.HasPrefix(out, fenceOpen+"\n") {
+			t.Fatalf("split %d did not replace the fence with a drawn one:\n%s", i, out)
 		}
 		if st.InFence || st.PendingClose {
 			t.Fatalf("split %d left state behind: %+v", i, st)
@@ -144,8 +144,8 @@ func TestAFenceUnderAListItemDraws(t *testing.T) {
 	}
 	block := strings.TrimSuffix(strings.TrimPrefix(out, "- the flow:\n\n"), "\n\n- done\n")
 	rows := strings.Split(block, "\n")
-	if len(rows) < 3 || strings.TrimSpace(rows[0]) != fenceTick || strings.TrimSpace(rows[len(rows)-1]) != fenceTick {
-		t.Fatalf("the fence was not replaced by a bare drawn one:\n%q", block)
+	if len(rows) < 3 || strings.TrimSpace(rows[0]) != fenceOpen || strings.TrimSpace(rows[len(rows)-1]) != fenceTick {
+		t.Fatalf("the fence was not replaced by a drawn one:\n%q", block)
 	}
 	if !strings.Contains(block, "▶") {
 		t.Fatalf("nothing drawn:\n%s", block)
@@ -444,5 +444,21 @@ func TestThePaintedFixtureCarriesThePaintedSource(t *testing.T) {
 	}
 	if strings.TrimSpace(body) != strings.TrimSpace(string(src)) {
 		t.Errorf("the fixture's fence is not testdata/colour.dot:\n--- fence\n%s\n--- file\n%s", body, src)
+	}
+}
+
+// A drawn block holds no fence marker between its own two: a row that reads
+// as one is the stray of a fence closed in the wrong place, and the oracle
+// refuses it however well the rest is drawn.
+func TestTheOracleRefusesAFenceMarkerInsideADrawnBlock(t *testing.T) {
+	src := "digraph { a -> b }"
+	good := strings.Join(drawAt(t.Context(), 90)(src, 0), "\n")
+	if err := checkDrawn(good, src, 90); err != nil {
+		t.Fatalf("a clean drawing was refused: %v\n%s", err, good)
+	}
+	rows := strings.Split(good, "\n")
+	stray := strings.Join(append(rows[:len(rows)-1:len(rows)-1], "```// the end", fenceTick), "\n")
+	if checkDrawn(stray, src, 90) == nil {
+		t.Errorf("a block with a fence marker inside it passed:\n%s", stray)
 	}
 }

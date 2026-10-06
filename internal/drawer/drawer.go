@@ -39,7 +39,9 @@ import (
 // Fit's second orientation, Cut's, a repaint of a fence already drawn — and
 // that is the difference between late and never. A door that refuses
 // returns an error like any other, and the fence shows its source under a
-// notice, which is the same fail-open path a typo takes.
+// notice, which is the same fail-open path a typo takes. The -element door
+// alone does not wait for a late layout: it answers none at the deadline
+// and the process ends under it (answerBy).
 const layoutTimeout = 10 * time.Second
 
 // Main is the binary. The flag set is named for the binary and exits on a
@@ -51,6 +53,9 @@ func Main(args []string) int {
 	// setting reaches a hook: DRAWER_RENDER, DRAWER_THEME and DRAWER_TEE,
 	// set for claude in settings.json's `env` or the shell.
 	hook := fs.Bool("hook", false, "act as a CC MessageDisplay hook: payload on stdin, replacement on stdout")
+	elementDoor := fs.Bool("element", false, "act as the hooks module's drawer: one fence's DOT on stdin, its drawing on stdout as one JSON element")
+	cols := fs.Int("cols", 0, "with -element: the screen's width in cells, as ui.render reports it (0 reads the window)")
+	indent := fs.Int("indent", 0, "with -element: the columns the fence is indented by; the drawing is that much narrower, as the display hook draws it")
 	contextLine := fs.Bool("context", false, "print what a model should know about this hook, as a SessionStart hook hands it, and exit")
 	render := fs.String("render", envOr("DRAWER_RENDER", "auto"), "how a graph is drawn: auto, pixels or cells (DRAWER_RENDER)")
 	hooktee := fs.String("hooktee", os.Getenv("DRAWER_TEE"), "as -hook: append every payload here, one JSON object per line, a fixture for -deltas (DRAWER_TEE)")
@@ -82,7 +87,7 @@ func Main(args []string) int {
 		file = *themePath
 		loaded, err := theme.Load(ctx, *themePath)
 		if err != nil {
-			if !*hook && !*contextLine && !*doctor {
+			if !*hook && !*elementDoor && !*contextLine && !*doctor {
 				fmt.Fprintln(os.Stderr, "drawer: theme:", err)
 				return 1
 			}
@@ -130,6 +135,8 @@ func Main(args []string) int {
 		return r.runDeltas(ctx, *deltaDump, w)
 	case *hook:
 		return r.runHook(ctx)
+	case *elementDoor:
+		return r.runElement(ctx, *cols, *indent)
 	default:
 		fs.Usage()
 		return 2

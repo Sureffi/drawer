@@ -60,6 +60,21 @@ func TestPlaceholderRowsNameTheirImageOnEveryCell(t *testing.T) {
 	}
 }
 
+// Claude Code numbers its own Image elements under 256, and a picture of
+// ours in that range is one of its pictures the next time either is sent.
+// The high byte keeps the two apart, so it is never zero.
+func TestImageIDsStayAboveClaudeCodesOwn(t *testing.T) {
+	for i := range 5000 {
+		id := ImageID(fmt.Sprintf("digraph { a -> n%d }", i), 40, 1+i%30)
+		if id < 1<<24 {
+			t.Fatalf("image id %#x is in the range Claude Code numbers its own from", id)
+		}
+		if id&0xff == 0 {
+			t.Fatalf("image id %#x has a zero low byte", id)
+		}
+	}
+}
+
 // ---------- reading a drawing ----------
 
 // inked reports whether a drawing list carries an op of that code in that
@@ -557,6 +572,27 @@ func TestPixelThePictureIsAWholeNumberOfColumns(t *testing.T) {
 		if w := im.Bounds().Dx(); w != p.Cols*geom.CellW {
 			t.Errorf("%q: %d columns of a %dpx cell came out %dpx wide", src, p.Cols, geom.CellW, w)
 		}
+	}
+}
+
+// The rows are the rows of the picture as painted: its height in pixels,
+// rounded as paint rounds it, over the cell's. A 30x29pt canvas on five
+// 10px columns is 48.33px tall unrounded, a hair over two 24px cells, and
+// painted 48px tall: two rows, not three with the last one empty.
+func TestPixelTheRowsAreThePaintedHeights(t *testing.T) {
+	geom := term.Geom{CellW: 10, CellH: 24}
+	d := &layout.Drawing{W: 30, H: 29, Pad: "0"}
+	zoom, rows, err := pixelZoom(d, 5, geom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	im, err := paint(t.Context(), d, "", zoom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := im.Bounds().Dy()
+	if want := (h + geom.CellH - 1) / geom.CellH; rows != want || rows != 2 {
+		t.Errorf("a %dpx picture on %dpx cells stands on %d rows, want %d", h, geom.CellH, rows, want)
 	}
 }
 

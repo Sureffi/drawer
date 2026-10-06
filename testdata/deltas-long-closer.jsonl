@@ -1,0 +1,3 @@
+{"delta": "````dot\ndigraph { a -> b }\n", "final": false, "message_id": "deltas-long-closer.jsonl", "index": 0}
+{"delta": "```\n````\n", "final": false, "message_id": "deltas-long-closer.jsonl", "index": 1}
+{"delta": "After.", "final": true, "message_id": "deltas-long-closer.jsonl", "index": 2}

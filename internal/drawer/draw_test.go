@@ -68,18 +68,19 @@ func TestForcedPixelsStillNeedATerminalThatDrawsThem(t *testing.T) {
 	}
 }
 
-// Draw hands CC a bare fence. Every row inside it fits the width it was
-// drawn for, and nothing but the fence comes back: no caption, no source —
-// the reader gets the picture, not the plumbing.
-func TestDrawModeEmitsABareFenceThatFits(t *testing.T) {
+// Draw hands CC a text fence — draw.go says why that label and no other.
+// Every row inside it fits the width it was drawn for, and nothing but the
+// fence comes back: no caption, no source — the reader gets the picture,
+// not the plumbing.
+func TestDrawModeEmitsATextFenceThatFits(t *testing.T) {
 	r := run{rung: rungCells, theme: &inForce{}}
 	src := "digraph { rankdir=LR; parse -> check -> emit; check -> warn }\n"
 	rows := r.drawBlock(t.Context(), src, 90)
 	if rows == nil {
 		t.Fatal("nothing drawn")
 	}
-	if rows[0] != fenceTick || rows[len(rows)-1] != fenceTick {
-		t.Fatalf("not a bare fence:\n%s", strings.Join(rows, "\n"))
+	if rows[0] != fenceOpen || rows[len(rows)-1] != fenceTick {
+		t.Fatalf("not a text fence:\n%s", strings.Join(rows, "\n"))
 	}
 	for _, row := range rows[1 : len(rows)-1] {
 		if n := grid.Cells(grid.StripSGR(row)); n > 90 {
@@ -106,7 +107,7 @@ func TestDrawModeNoticeKeepsTheSourceInOneFence(t *testing.T) {
 		t.Fatal("a too-narrow window produced nothing, not even a reason")
 	}
 	joined := strings.Join(rows, "\n")
-	if strings.Count(joined, fenceTick+"\n") != 1 || !strings.HasSuffix(joined, fenceTick) {
+	if strings.Count(joined, fenceOpen+"\n") != 1 || !strings.HasSuffix(joined, "\n"+fenceTick) {
 		t.Fatalf("notice and source are not one fence:\n%s", joined)
 	}
 	if !strings.Contains(joined, "no diagram") || !strings.Contains(joined, "alpha ->") {

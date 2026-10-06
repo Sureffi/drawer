@@ -126,3 +126,106 @@ func TestAForeignFenceStreamsThrough(t *testing.T) {
 		t.Errorf("state left behind: %+v", st)
 	}
 }
+
+// A graph that lays out is drawn before its closer arrives, and the drawing
+// stands for the whole fence: every line between the graph and the closer
+// — a blank one, a trailing comment, a shorter run in a longer fence — is
+// the fence's, and none of it reaches the prose after it.
+func TestEverythingUpToAnEarlyDrawingsCloserIsTheFences(t *testing.T) {
+	for _, deltas := range [][]string{
+		{"```dot\ndigraph { a -> b }\n", "\n```\n", "After.\n"},
+		{"```dot\ndigraph { a -> b }\n", "// the end\n```\n", "After.\n"},
+		{"````dot\ndigraph { a -> b }\n", "```\n````\n", "After.\n"},
+	} {
+		var s stub
+		var st State
+		var out strings.Builder
+		for i, d := range deltas {
+			out.WriteString(Stream(t.Context(), d, i == len(deltas)-1, &st, s.emit))
+		}
+		if got := out.String(); got != mark+"\nAfter.\n" {
+			t.Errorf("%q: the fence's tail leaked past the drawing: %q", deltas, got)
+		}
+		if len(s.srcs) != 1 || s.srcs[0] != "digraph { a -> b }" {
+			t.Errorf("%q: emit was handed %q", deltas, s.srcs)
+		}
+	}
+}
+
+// A message that ends with an early-drawn fence still open gives back what
+// came after the drawing as it came, starting on the row after the
+// drawing's last: it was never drawn, so it is not the drawing's to take.
+func TestAnUnclosedTailAfterAnEarlyDrawingIsGivenBackOnItsOwnRow(t *testing.T) {
+	var s stub
+	var st State
+	out := Stream(t.Context(), "```dot\ndigraph { a -> b }\n", false, &st, s.emit)
+	out += Stream(t.Context(), "and then nothing closed it\nMore prose.\n", true, &st, s.emit)
+	if want := mark + "\nand then nothing closed it\nMore prose.\n"; out != want {
+		t.Errorf("the tail was not given back on its own row:\n got: %q\nwant: %q", out, want)
+	}
+	if st.PendingClose || st.Buf != "" {
+		t.Errorf("state left behind: %+v", st)
+	}
+}
+
+// An early drawing stands for the fewest whole lines that lay out, so
+// where the deltas fell does not move it: an unclosed fence handed over in
+// one delta draws the same lines as streamed, and what followed the graph
+// — whole lines or a fragment — comes back on its own row, never into the
+// drawing.
+func TestAnEarlyDrawingStandsForTheFewestLinesThatLayOut(t *testing.T) {
+	for _, deltas := range [][]string{
+		{"```dot\ndigraph { a -> b }\n", "and then nothing closed it\nMore prose.\n"},
+		{"```graphviz\n", "graph { a -- b }\nTrailing with no newline", ""},
+	} {
+		streamed, sSrcs := drawAll(t, deltas)
+		whole, wSrcs := drawAll(t, []string{strings.Join(deltas, "")})
+		if streamed != whole {
+			t.Errorf("%q: the display depends on where the deltas fell:\n streamed: %q\n   in one: %q", deltas, streamed, whole)
+		}
+		if len(sSrcs) != 1 || len(wSrcs) != 1 || sSrcs[0] != wSrcs[0] || strings.Contains(sSrcs[0], "\n") {
+			t.Errorf("%q: emit was handed %q streamed and %q in one, not the graph's one line", deltas, sSrcs, wSrcs)
+		}
+		if !strings.HasPrefix(streamed, mark+"\n") {
+			t.Errorf("%q: the rest did not start on its own row: %q", deltas, streamed)
+		}
+	}
+}
+
+// drawAll streams deltas through the transducer, the last one final, and
+// answers what was displayed and what emit was handed.
+func drawAll(t *testing.T, deltas []string) (string, []string) {
+	var s stub
+	var st State
+	var out strings.Builder
+	for i, d := range deltas {
+		out.WriteString(Stream(t.Context(), d, i == len(deltas)-1, &st, s.emit))
+	}
+	if st.InFence || st.PendingClose || st.Buf != "" {
+		t.Errorf("%q: state left behind: %+v", deltas, st)
+	}
+	return out.String(), s.srcs
+}
+
+// A closer whose line has not ended yet is still this fence's closer: it
+// waits for its newline where closers are looked for, and the fence never
+// reaches into the next one.
+func TestACloserWithoutItsNewlineClosesItsOwnFence(t *testing.T) {
+	var s stub
+	var st State
+	deltas := []string{
+		"```dot\ngraph LR\n  A --> B\n```",
+		"\n\nThen:\n\n```dot\ndigraph { a -> b }\n```\n",
+		"Done.",
+	}
+	var out strings.Builder
+	for i, d := range deltas {
+		out.WriteString(Stream(t.Context(), d, i == len(deltas)-1, &st, s.emit))
+	}
+	if want := mark + "\n\nThen:\n\n" + mark + "\nDone."; out.String() != want {
+		t.Errorf("the fences ran together:\n got: %q\nwant: %q", out.String(), want)
+	}
+	if len(s.srcs) != 2 || s.srcs[0] != "graph LR\n  A --> B" || s.srcs[1] != "digraph { a -> b }" {
+		t.Errorf("emit was handed %q, not each fence's own source", s.srcs)
+	}
+}

@@ -2,3 +2,5 @@ bin/
 dist/
 demo/out/
 /drawer
+# written by claude --plugin-dir for the hooks module; .claude-plugin/types ignores itself
+/tsconfig.json

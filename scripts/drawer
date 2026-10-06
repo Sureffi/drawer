@@ -1,10 +1,15 @@
 #!/bin/sh
-# scripts/drawer — the plugin's two hooks, one script.
+# scripts/drawer — the plugin's hooks, one script.
 #
 #   drawer session    SessionStart: put the binary in place, then print
 #                     what a model should know — stdout of this event goes
 #                     into the model's context.
 #   drawer hook       MessageDisplay: the payload on stdin, the drawing out.
+#   drawer element N [I]
+#                     the hooks module's ui.render: one fence's DOT on
+#                     stdin, its drawing out as JSON, for a screen N
+#                     columns wide and a fence indented I columns (0 when
+#                     not given). Exits 1 when no binary is found.
 #
 # A plugin runs no install step, so the binary is put in place here, at
 # the first session after an install or an update, in the plugin's data
@@ -30,7 +35,25 @@
 # Claude Code puts CLAUDE_PLUGIN_ROOT (this checkout) and CLAUDE_PLUGIN_DATA
 # in a hook's environment, measured on 2.1.261, and so is every DRAWER_*
 # variable set for claude — settings.json's env, or the shell — which the
-# binary reads for itself.
+# binary reads for itself. A hooks module's children get neither plugin
+# variable (measured, 2.1.283): `element` finds the root from where this
+# script is, and the data directory from the root. Claude Code keeps
+# plugins under one base: CLAUDE_CODE_PLUGIN_CACHE_DIR when set, else
+# CONFIG/plugins or CONFIG/cowork_plugins, CONFIG being CLAUDE_CONFIG_DIR
+# or ~/.claude (read from 2.1.290). A root and its data directory:
+#
+#   cached       root BASE/cache/MARKETPLACE/PLUGIN/VERSION, data
+#                BASE/data/PLUGIN-MARKETPLACE, every character outside
+#                [A-Za-z0-9_-] a dash: a root whose third parent is named
+#                cache has its data beside that cache
+#   inline       a checkout loaded by --plugin-dir or CLAUDE_CODE_PLUGIN_DIRS,
+#                data BASE/data/drawer-inline
+#   directory    a directory marketplace's source folder, data
+#                BASE/data/PLUGIN-MARKETPLACE; the root does not name the
+#                marketplace, so `element` cannot derive it, and there the
+#                checkout carries bin/drawer or scripts/bin
+#
+# A root that is not cached is looked for as inline.
 #
 # The binary is exec'd, never run as a child: it reads the terminal's size
 # through its parent, and its parent has to be claude.
@@ -132,8 +155,42 @@ hook)
 	[ -x "$bin" ] || { echo '{}'; exit 0; }
 	exec "$bin" -hook
 	;;
+element)
+	cols=${2:-0}
+	indent=${3:-0}
+	draw() { exec "$1" -element -cols "$cols" -indent "$indent"; }
+	if [ -f "$root/go.mod" ] && [ -x "$root/bin/drawer" ]; then
+		draw "$root/bin/drawer"
+	fi
+	if [ -x "$root/scripts/bin/drawer-$plat" ]; then
+		draw "$root/scripts/bin/drawer-$plat"
+	fi
+	if [ -n "$data" ]; then
+		[ -x "$bin" ] && draw "$bin"
+	else
+		plugin=$(dirname "$root")
+		market=$(dirname "$plugin")
+		cache=$(dirname "$market")
+		if [ "$(basename "$cache")" = cache ]; then
+			name=$(printf '%s' "$(basename "$plugin")-$(basename "$market")" | tr -c 'A-Za-z0-9_-' -)
+			bin=$(dirname "$cache")/data/$name/drawer
+			[ -x "$bin" ] && draw "$bin"
+		elif [ -n "$CLAUDE_CODE_PLUGIN_CACHE_DIR" ]; then
+			bin=$CLAUDE_CODE_PLUGIN_CACHE_DIR/data/drawer-inline/drawer
+			[ -x "$bin" ] && draw "$bin"
+		else
+			config=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+			bin=$config/plugins/data/drawer-inline/drawer
+			[ -x "$bin" ] && draw "$bin"
+			bin=$config/cowork_plugins/data/drawer-inline/drawer
+			[ -x "$bin" ] && draw "$bin"
+		fi
+	fi
+	echo "drawer: no binary for $plat found from $root; run a session to put one in place" >&2
+	exit 1
+	;;
 *)
-	echo "usage: drawer session|hook" >&2
+	echo "usage: drawer session|hook|element COLUMNS [INDENT]" >&2
 	exit 2
 	;;
 esac

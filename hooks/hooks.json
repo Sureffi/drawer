@@ -1,5 +1,6 @@
 {
-  "description": "SessionStart puts the binary in place and tells the model a dot fence draws; MessageDisplay draws it.",
+  "description": "SessionStart puts the binary in place and tells the model a dot fence draws; MessageDisplay draws it in the live turn, and render.tsx's ui.render on every other screen where Claude Code loads hooks modules.",
+  "modules": ["./render.tsx"],
   "hooks": {
     "SessionStart": [
       {

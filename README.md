@@ -23,6 +23,13 @@ drawn in box drawing, which every terminal draws with its own hand.
 
 ![the same graph, in box drawing](demo/cells.png)
 
+A reply is drawn as you watch it stream. Claude Code shows replies in
+other places too: a fork's or a subagent's view, a session brought back
+with `--resume`, a background job. A hooks module draws those. Hooks
+modules are early access in Claude Code: where a build loads them, the
+module draws those screens; where it does not, the live turn still draws
+and those screens show the fence as source.
+
 ## settings
 
 Three environment variables, set for `claude` in `settings.json` or the shell:
@@ -60,10 +67,21 @@ the bundled Go Mono. Layout is measured in Courier, so use a monospace face.
 
 Claude Code's `MessageDisplay` hook hands a command each piece of an
 assistant message before it is displayed and takes back replacement text.
-drawer replaces a ```dot fence with the drawing. The transcript keeps the
-fence; only the display changes. Pieces arrive split wherever Claude Code
-splits them, one process each, so the fence is reassembled through a state
-file keyed by message id.
+drawer replaces a ```dot fence with the drawing, in a fence labelled
+`text`: Claude Code 2.1.280 and later paints an unlabelled fence in one
+colour, and `text` is a language its highlighter leaves alone. The
+transcript keeps the fence; only the display changes. Pieces arrive split
+wherever Claude Code splits them, one process each, so the fence is
+reassembled through a state file keyed by message id.
+
+That hook is asked only about the live turn of the main conversation.
+`hooks/render.tsx` is a hooks module whose `ui.render` hook, where Claude
+Code loads it, is asked about every assistant message, on every screen
+Claude Code draws one. Where the hook has drawn, the module is handed the
+drawing, finds no fence, and passes it on. Anywhere else it cuts the message at its graph fences, lets Claude
+Code draw the prose, and puts each graph where its fence was, as
+`drawer -element` draws it. A change of width asks again, and the graph is
+drawn again for the new width.
 
 `SessionStart` puts the binary in place and hands the model one line: a
 ```dot fence draws in place. Without the line the model writes mermaid.
@@ -80,6 +98,10 @@ ride through Claude Code as ordinary text. Under tmux the escape is wrapped
 in tmux's passthrough and `allow-passthrough` is turned on for the pane
 claude is in.
 
+The module needs none of that: it hands Claude Code the PNG as an `Image`.
+Claude Code draws one in kitty or ghostty, outside tmux and screen, and
+never in a background job. Everywhere else the module draws box drawing.
+
 A graph wider than the window is laid out top-down instead. One taller than
 120 rows is not drawn; the source shows under a notice saying why. A fence
 labelled `dot` or `graphviz` is drawn, and so is an unlabelled fence that
@@ -89,11 +111,17 @@ Where the terminal cannot show pictures the same graph is drawn in box drawing.
 
 ## known wrong
 
-- A drawing is correct at the width it was drawn for. Claude Code re-wraps
-  hook output on resize without asking again, so it shreds narrower and
-  comes back when the window does.
-- `--resume` shows every fence as source. The hook does not fire for a
-  replayed transcript.
+- A drawing the hook made is correct at the width it was drawn for. Claude
+  Code re-wraps hook output on resize without asking again, so it shreds
+  narrower and comes back when the window does. The module's drawings are
+  drawn again at the new width.
+- Where a Claude Code build does not load hooks modules, a fork's or a
+  subagent's view, `--resume` and a background job show every fence as
+  source.
+- Under tmux or screen, a graph the module draws is box drawing: Claude Code
+  draws no `Image` there. The hook's pictures still come through.
+- In a background job every graph is box drawing. The job's terminal is
+  Claude Code's own, which draws no pictures.
 - macOS runs the whole test suite in CI, but a runner has no terminal, so
   the terminal path on a Mac is unverified. If it is wrong, drawings fall
   back to box drawing at 100 columns.
@@ -115,25 +143,32 @@ Where the terminal cannot show pictures the same graph is drawn in box drawing.
 
     git clone https://github.com/sureffi/drawer && cd drawer
     scripts/check.sh
-    /plugin marketplace add /path/to/drawer     # in claude
-    /plugin install drawer@drawer
+    claude --plugin-dir /path/to/drawer
 
-Claude Code copies the tree into its cache but runs the hooks with the
-checkout as plugin root, so the checkout's `bin/drawer` is what the next
-reply runs and `scripts/check.sh` rebuilds it. A change to the wrapper or
-the manifests needs a reinstall.
+`--plugin-dir` loads the checkout as it stands, the module included, and
+in that session it stands in for an installed drawer. A checkout with
+`bin/drawer` built runs that binary, linked, so what `scripts/check.sh`
+rebuilds is what the next reply runs. One without it gets a binary in its
+data directory at `SessionStart`: the release binary downloaded, or a
+`go build`.
+
+`/plugin marketplace add` on a checkout installs the release zip the
+marketplace names, not the checkout.
 
 `scripts/check.sh` is every check in one command: build, vet, a vet
 cross-compiled for macOS, the import graph held to a table, the tests under
 `-race`, both rungs on a fixture, the theme files, the plugin manifests and
-wrapper, the pixels rung to a PNG, and recorded hook streams replayed. CI
-runs it on Linux and macOS on every push.
+wrapper, the module's door, the pixels rung to a PNG, and recorded hook
+streams replayed. Where `claude` is on the PATH it also validates the hooks
+and runs the module's laws in `tests/` with `claude plugin test`. CI runs it
+on Linux and macOS on every push.
 
 Offline, without a session:
 
     ./bin/drawer -dot FILE -size WxH -render cells     # draw a file
     ./bin/drawer -dot FILE -png OUT [-cell 10x24]      # the picture, to a file
     ./bin/drawer -deltas FILE -render cells            # replay a recorded turn; nonzero if damaged
+    ./bin/drawer -element -cols 80 < FILE              # the module's drawing, as JSON
     ./bin/drawer -context                              # the line the model is handed
     ./bin/drawer -doctor                               # what this terminal gets and why
 
@@ -141,7 +176,8 @@ Offline, without a session:
 that prose outside a fence comes back byte for byte and every fence comes
 back untouched or as one drawn block that fits its width.
 
-`scripts/drawer` is the plugin's two hooks. It puts the binary in place by
+`scripts/drawer` holds the plugin's three doors: `session` and `hook` for
+the command hooks, `element` for the module. It puts the binary in place by
 the first way that works: a checkout's `bin/drawer`, linked; the binaries
 shipped in the release zip; a download of the release binary for the
 platform, checked against the sha256 pinned in the script; or `go build`.
@@ -163,10 +199,12 @@ The tree, one binary and nine packages, every import pointing down:
     internal/layout      graphviz: the one door, its drawing as data, the scale to cells
     internal/grid        a row of terminal cells, and what text costs in one
     internal/term        the parent's terminal: how big it is, where its output goes
+    hooks/               the hook table, and the module that draws where no hook is asked
     scripts/             the hooks, the checks, the release
     themes/              two theme files to start from
     demo/                the session the README shows, and how it was made
     testdata/            a graph, and the recorded hook streams
+    tests/               the module's laws
 
 Windows does not build; the hook wire is Unix.
 

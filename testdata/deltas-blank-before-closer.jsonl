@@ -1,0 +1,3 @@
+{"delta": "Here:\n\n```dot\ndigraph {\n  a -> b\n}\n", "final": false, "message_id": "deltas-blank-before-closer.jsonl", "index": 0}
+{"delta": "\n```\n", "final": false, "message_id": "deltas-blank-before-closer.jsonl", "index": 1}
+{"delta": "\nAfter.\n", "final": true, "message_id": "deltas-blank-before-closer.jsonl", "index": 2}

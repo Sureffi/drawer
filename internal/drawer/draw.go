@@ -1,11 +1,20 @@
 // draw.go — the hook draws, and hands CC a finished picture.
 //
 // This is the whole output path. A ```dot fence goes
-// in; what comes back is a bare fence holding the drawing, and CC lays it
-// out as ordinary code-block text: two columns of indent, leading spaces
-// kept, ANSI colour kept, every unusual glyph kept. All of that was measured
-// through the display wire on CC 2.1.257 before this file was written, and
-// the shape below is exactly what survived.
+// in; what comes back is a fence labelled text holding the drawing, and CC
+// lays it out as ordinary code-block text: leading spaces kept, ANSI colour
+// kept, every unusual glyph kept. All of that was measured through the
+// display wire on CC 2.1.257 before this file was written, and the shape
+// below is exactly what survived.
+//
+// The fence is labelled text. Claude Code 2.1.280 and later colours a
+// fence that names no language like inline code: every run that is not a
+// space, in its `permission` colour, over whatever the rows asked for —
+// measured on 2.1.283, the dim structure and the uncoloured labels of a
+// glyph drawing came out in that colour, and only the strokes a graph
+// coloured kept theirs. A fence that names a language goes to the
+// highlighter instead, and `text` is a language it knows and colours
+// nothing in: the rows come out as they went in.
 //
 // The rungs, best first, the upper failing open to the lower:
 //
@@ -53,12 +62,23 @@ func (r run) drawBlock(ctx context.Context, src string, width int) []string {
 	// than to a notice.
 	if r.pickRung() == rungPixels {
 		if rows := r.drawPixels(ctx, src, width); rows != nil {
-			return bare(rows)
+			return fenced(rows)
 		}
 	}
+	if rows, _ := drawRows(ctx, src, width); rows != nil {
+		return fenced(rows)
+	}
+	return nil
+}
+
+// drawRows is the drawing as text: the glyphs, or a notice with the source
+// under it — which the second answer says — or nil where not even a notice
+// fits. Both doors draw text this way: the display hook in a fence, the
+// element door as runs.
+func drawRows(ctx context.Context, src string, width int) (rows []string, isNotice bool) {
 	if g, err := layout.Read(ctx, src); err == nil {
 		if rows := cells.Draw(g, width, grid.MaxRows); rows != nil {
-			return bare(grid.TrimBlank(rows))
+			return grid.TrimBlank(rows), false
 		}
 	}
 	// Nothing drew. Say why, and leave the source readable under the
@@ -68,20 +88,22 @@ func (r run) drawBlock(ctx context.Context, src string, width int) []string {
 	reason := notice.Reason(ctx, src, width, grid.MaxRows)
 	box := notice.Draw(reason, width, 8)
 	if box == nil {
-		return nil
+		return nil, false
 	}
-	rows := append(box, "")
-	rows = append(rows, strings.Split(strings.TrimSuffix(src, "\n"), "\n")...)
-	return bare(rows)
+	rows = append(box, "")
+	return append(rows, strings.Split(strings.TrimSuffix(src, "\n"), "\n")...), true
 }
 
-// fenceTick is the bare fence a drawing is handed back in.
-const fenceTick = "```"
+// The fence a drawing is handed back in: opened as text, closed bare.
+const (
+	fenceOpen = "```text"
+	fenceTick = "```"
+)
 
-// bare wraps rows in a bare fence: verbatim, monospace, no caption.
-func bare(rows []string) []string {
+// fenced wraps rows in the fence: verbatim, monospace, no caption.
+func fenced(rows []string) []string {
 	out := make([]string, 0, len(rows)+2)
-	out = append(out, fenceTick)
+	out = append(out, fenceOpen)
 	out = append(out, rows...)
 	out = append(out, fenceTick)
 	return out
