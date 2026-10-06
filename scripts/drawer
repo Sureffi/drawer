@@ -59,12 +59,12 @@
 # through its parent, and its parent has to be claude.
 
 # release: rewritten by scripts/release.sh; the pins for this version's binaries.
-release=0.3.0
+release=0.4.0
 release_url=https://github.com/sureffi/drawer/releases/download
-sha_darwin_amd64=896d9a5059557cf86fb3d1bd21d9a64e6e0a74f7439b3a791bfd58723fdc1f21
-sha_darwin_arm64=47b783bcbb7f17564ed559fbb0d0fedd629f247d7dce42aa47a2bd1c08da3627
-sha_linux_amd64=16ea858048b127b12419fe1bfe08b9824912cf27d0198edecbb7c6f1cab6b757
-sha_linux_arm64=1e380a7763e77332a9413608840f82da4a67c0177b026b4ba688246b39f11c0c
+sha_darwin_amd64=5d573d694efb7275dd8af70ff8e4941fe52a8ecbc5db704ce2338632ef15f94a
+sha_darwin_arm64=b54a7d4769b16e574fa6944f2eb9bb947eba839f18e3f903a2e5a14f40970eb0
+sha_linux_amd64=a7d4ad5a1d80ebae4afe29a72899bc4332ca26c1f8157701d2399fd84130ac5c
+sha_linux_arm64=69f7cd5d1714593a0c8c5f99769fd329283e243ecfdbdd83a0576a8776a45eb5
 # release end
 
 mode=$1
