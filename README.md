@@ -42,7 +42,8 @@ Three environment variables, set for `claude` in `settings.json` or the shell:
 - `DRAWER_THEME` names a theme file.
 - `DRAWER_TEE` records every payload the hook receives, for `drawer -deltas` to replay.
 
-`drawer -doctor` prints what this terminal gets and why. The binary is at
+`drawer -doctor` prints what this terminal gets and why. The binary the
+last session started with is linked at
 `~/.claude/plugins/data/drawer-drawer/drawer`.
 
 ## theme
@@ -83,8 +84,9 @@ Code draw the prose, and puts each graph where its fence was, as
 `drawer -element` draws it. A change of width asks again, and the graph is
 drawn again for the new width.
 
-`SessionStart` puts the binary in place and hands the model one line: a
-```dot fence draws in place. Without the line the model writes mermaid.
+`SessionStart` finds the binary or puts one in place, and hands the model
+one line: a ```dot fence draws in place. Without the line the model writes
+mermaid.
 
 Layout is graphviz, compiled to WebAssembly and embedded
 (`goccy/go-graphviz`). A layout takes about a millisecond.
@@ -125,6 +127,8 @@ Where the terminal cannot show pictures the same graph is drawn in box drawing.
 - macOS runs the whole test suite in CI, but a runner has no terminal, so
   the terminal path on a Mac is unverified. If it is wrong, drawings fall
   back to box drawing at 100 columns.
+- A session keeps the plugin version it started with. After an update,
+  sessions already running draw with the old version until they end.
 - Installed mid-session and reloaded with `/reload-plugins`, `SessionStart`
   does not fire, so the model is not told about the hook until a new session.
   A ```dot fence it writes anyway is drawn.
@@ -177,11 +181,14 @@ that prose outside a fence comes back byte for byte and every fence comes
 back untouched or as one drawn block that fits its width.
 
 `scripts/drawer` holds the plugin's three doors: `session` and `hook` for
-the command hooks, `element` for the module. It puts the binary in place by
-the first way that works: a checkout's `bin/drawer`, linked; the binaries
-shipped in the release zip; a download of the release binary for the
-platform, checked against the sha256 pinned in the script; or `go build`.
-An organisation that can only point a marketplace at git gets the download.
+the command hooks, `element` for the module. Each runs its own version's
+binary, the first that is there: a checkout's `bin/drawer`; the one shipped
+in the release zip; one downloaded at `SessionStart`, checked against the
+sha256 pinned in the script; or one built with `go build`. An organisation
+that can only point a marketplace at git gets the download. Every version
+shares the data directory, and a session keeps the version it started with,
+so a downloaded or built binary is named for its version, and no version
+runs another's.
 
 `scripts/release.sh VERSION` builds the four binaries, pins their sums into
 the wrapper, zips the plugin, points the marketplace at the zip, commits,

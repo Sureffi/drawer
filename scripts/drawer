@@ -1,9 +1,9 @@
 #!/bin/sh
 # scripts/drawer — the plugin's hooks, one script.
 #
-#   drawer session    SessionStart: put the binary in place, then print
-#                     what a model should know — stdout of this event goes
-#                     into the model's context.
+#   drawer session    SessionStart: find this version's binary or put one
+#                     in place, then print what a model should know —
+#                     stdout of this event goes into the model's context.
 #   drawer hook       MessageDisplay: the payload on stdin, the drawing out.
 #   drawer element N [I]
 #                     the hooks module's ui.render: one fence's DOT on
@@ -11,26 +11,38 @@
 #                     columns wide and a fence indented I columns (0 when
 #                     not given). Exits 1 when no binary is found.
 #
-# A plugin runs no install step, so the binary is put in place here, at
-# the first session after an install or an update, in the plugin's data
-# directory, which survives updates. Four ways it can get there, best
-# first, each falling to the next:
+# A plugin runs no install step, so the binary is found here, or put in
+# place at SessionStart. Four places it can come from, best first, each
+# falling to the next:
 #
-#   a built checkout   bin/drawer beside go.mod: a developer's tree, linked
-#                      so a rebuild is live in the next reply
-#   shipped            scripts/bin/drawer-OS-ARCH: the release zip
+#   a built checkout   bin/drawer beside go.mod: a developer's tree, run
+#                      where it is, so a rebuild is live in the next reply
+#   shipped            scripts/bin/drawer-OS-ARCH: the release zip, run
+#                      where it is
 #   downloaded         the release binary for this OS and ARCH, sha256
-#                      pinned below by scripts/release.sh
+#                      pinned below by scripts/release.sh, put in the data
+#                      directory as drawer-VERSION
 #   built              go build, where Go is on the PATH: a checkout with
-#                      no release for this platform, or none reachable
+#                      no release for this platform, or none reachable; put
+#                      in the data directory as drawer-VERSION
 #
-# A hook that finds no binary takes the first two itself. Installed
-# mid-session and reloaded, the hooks are registered but SessionStart is
-# not fired (measured, Claude Code 2.1.261), and a link or a copy costs
-# nothing; a download or a build is not what a hook with a reply on screen
-# does. Until one of them lands every hook fails open: {} is "display the
-# original", and a session without the line of context is a fence that
-# shows its source.
+# A version runs its own binary and no other. The data directory is shared
+# by every version of the plugin, and a session keeps the version it
+# started with until it ends. Read off a machine on 2026-10-08: 0.4.0
+# installed, sessions started under 0.1.0 still running, and data/drawer
+# holding 0.1.0's binary, put there by a 0.1.0 SessionStart, which every
+# 0.4.0 hook then ran. So nothing runs from a path another version writes:
+# the first two run inside the version's own tree, the last two are named
+# for the version. data/drawer is a link to the binary of the session that
+# started last, for `drawer -doctor`, and for versions before this rule,
+# which run it.
+#
+# Installed mid-session and reloaded, the hooks are registered but
+# SessionStart is not fired (measured, Claude Code 2.1.261): the first two
+# need nothing put in place, and a download or a build is not what a hook
+# with a reply on screen does. Until a binary is found every hook fails
+# open: {} is "display the original", and a session without the line of
+# context is a fence that shows its source.
 #
 # Claude Code puts CLAUDE_PLUGIN_ROOT (this checkout) and CLAUDE_PLUGIN_DATA
 # in a hook's environment, measured on 2.1.261, and so is every DRAWER_*
@@ -71,7 +83,6 @@ mode=$1
 root=${CLAUDE_PLUGIN_ROOT:-$(dirname "$0")/..}
 root=$(cd "$root" && pwd) # absolute: a link into it must hold from anywhere
 data=$CLAUDE_PLUGIN_DATA
-bin=$data/drawer
 
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 case $(uname -m) in
@@ -81,15 +92,25 @@ aarch64 | arm64) arch=arm64 ;;
 esac
 plat=$os-$arch
 
-# stamp is what put the binary there, so the same route at the same
-# version does no work twice.
-stamp=$data/drawer.from
-stamped() { [ -x "$bin" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$1" ]; }
-# place FILE HOW — the binary arrives beside itself and moves over, so a
+# own DATA prints this version's binary, the first of the four that is
+# there, the last two looked for in DATA; it fails when none is.
+own() {
+	if [ -f "$root/go.mod" ] && [ -x "$root/bin/drawer" ]; then
+		printf '%s\n' "$root/bin/drawer"
+	elif [ -x "$root/scripts/bin/drawer-$plat" ]; then
+		printf '%s\n' "$root/scripts/bin/drawer-$plat"
+	elif [ -n "$1" ] && [ -x "$1/drawer-$release" ]; then
+		printf '%s\n' "$1/drawer-$release"
+	else
+		return 1
+	fi
+}
+
+# place FILE — the binary arrives beside itself and moves over, so a
 # session mid-reply keeps the one it is running and two sessions starting
 # at once never share a half-written file.
 place() {
-	chmod +x "$1" && mv -f "$1" "$bin" && printf '%s\n' "$2" >"$stamp"
+	chmod +x "$1" && mv -f "$1" "$data/drawer-$release"
 }
 
 sha256() {
@@ -100,41 +121,28 @@ sha256() {
 	fi
 }
 
-# checkout: bin/drawer beside go.mod, linked, so what scripts/check.sh
-# builds is what the next reply runs.
-from_checkout() {
-	[ -f "$root/go.mod" ] && [ -x "$root/bin/drawer" ] || return 1
-	rm -f "$bin" && ln -s "$root/bin/drawer" "$bin" && printf 'checkout\n' >"$stamp"
-}
-
-from_shipped() {
-	f=$root/scripts/bin/drawer-$plat
-	[ -x "$f" ] || return 1
-	stamped "shipped $release $plat" && return 0
-	cp "$f" "$bin.$$" && place "$bin.$$" "shipped $release $plat"
-}
-
 from_release() {
 	eval "want=\$sha_${os}_${arch}"
 	[ -n "$want" ] || return 1
-	stamped "release $release $plat" && return 0
 	command -v curl >/dev/null 2>&1 || return 1
-	curl -fsSL --retry 2 --max-time 120 -o "$bin.$$" \
-		"$release_url/v$release/drawer-$plat" 2>/dev/null || { rm -f "$bin.$$"; return 1; }
-	if [ "$(sha256 "$bin.$$")" != "$want" ]; then
-		rm -f "$bin.$$"
+	tmp=$data/drawer-$release.$$
+	curl -fsSL --retry 2 --max-time 120 -o "$tmp" \
+		"$release_url/v$release/drawer-$plat" 2>/dev/null || { rm -f "$tmp"; return 1; }
+	if [ "$(sha256 "$tmp")" != "$want" ]; then
+		rm -f "$tmp"
 		echo "drawer: the downloaded binary is not the one pinned for v$release; not used" >&2
 		return 1
 	fi
-	place "$bin.$$" "release $release $plat"
+	place "$tmp"
 }
 
 from_build() {
 	[ -f "$root/go.mod" ] && command -v go >/dev/null 2>&1 || return 1
-	if (cd "$root" && go build -o "$bin.$$" ./cmd/drawer) >&2; then
-		place "$bin.$$" "built"
+	tmp=$data/drawer-$release.$$
+	if (cd "$root" && go build -o "$tmp" ./cmd/drawer) >&2; then
+		place "$tmp"
 	else
-		rm -f "$bin.$$"
+		rm -f "$tmp"
 		return 1
 	fi
 }
@@ -143,47 +151,39 @@ case $mode in
 session)
 	[ -n "$data" ] || exit 0
 	mkdir -p "$data"
-	from_checkout || from_shipped || from_release || from_build ||
-		echo "drawer: no binary for $plat could be put in place; a dot fence shows its source" >&2
-	[ -x "$bin" ] || exit 0
+	if ! bin=$(own "$data"); then
+		from_release || from_build
+		bin=$(own "$data") || {
+			echo "drawer: no binary for $plat could be put in place; a dot fence shows its source" >&2
+			exit 0
+		}
+	fi
+	ln -sfn "$bin" "$data/drawer"
 	exec "$bin" -context
 	;;
 hook)
-	if [ ! -x "$bin" ] && [ -n "$data" ]; then
-		mkdir -p "$data" && { from_checkout || from_shipped; } >/dev/null 2>&1
-	fi
-	[ -x "$bin" ] || { echo '{}'; exit 0; }
+	bin=$(own "$data") || { echo '{}'; exit 0; }
 	exec "$bin" -hook
 	;;
 element)
 	cols=${2:-0}
 	indent=${3:-0}
 	draw() { exec "$1" -element -cols "$cols" -indent "$indent"; }
-	if [ -f "$root/go.mod" ] && [ -x "$root/bin/drawer" ]; then
-		draw "$root/bin/drawer"
-	fi
-	if [ -x "$root/scripts/bin/drawer-$plat" ]; then
-		draw "$root/scripts/bin/drawer-$plat"
-	fi
 	if [ -n "$data" ]; then
-		[ -x "$bin" ] && draw "$bin"
+		bin=$(own "$data") && draw "$bin"
 	else
 		plugin=$(dirname "$root")
 		market=$(dirname "$plugin")
 		cache=$(dirname "$market")
 		if [ "$(basename "$cache")" = cache ]; then
 			name=$(printf '%s' "$(basename "$plugin")-$(basename "$market")" | tr -c 'A-Za-z0-9_-' -)
-			bin=$(dirname "$cache")/data/$name/drawer
-			[ -x "$bin" ] && draw "$bin"
+			bin=$(own "$(dirname "$cache")/data/$name") && draw "$bin"
 		elif [ -n "$CLAUDE_CODE_PLUGIN_CACHE_DIR" ]; then
-			bin=$CLAUDE_CODE_PLUGIN_CACHE_DIR/data/drawer-inline/drawer
-			[ -x "$bin" ] && draw "$bin"
+			bin=$(own "$CLAUDE_CODE_PLUGIN_CACHE_DIR/data/drawer-inline") && draw "$bin"
 		else
 			config=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
-			bin=$config/plugins/data/drawer-inline/drawer
-			[ -x "$bin" ] && draw "$bin"
-			bin=$config/cowork_plugins/data/drawer-inline/drawer
-			[ -x "$bin" ] && draw "$bin"
+			bin=$(own "$config/plugins/data/drawer-inline") && draw "$bin"
+			bin=$(own "$config/cowork_plugins/data/drawer-inline") && draw "$bin"
 		fi
 	fi
 	echo "drawer: no binary for $plat found from $root; run a session to put one in place" >&2

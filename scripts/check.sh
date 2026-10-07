@@ -127,7 +127,8 @@ stage "plugin: sh -n" sh -n scripts/drawer scripts/release.sh || true
 rm -rf bin/pdata
 session_speaks() {
   CLAUDE_PLUGIN_ROOT=. CLAUDE_PLUGIN_DATA=bin/pdata ./scripts/drawer session </dev/null |
-    grep -q '^drawer: a ```dot fence'
+    grep -q '^drawer: a ```dot fence' &&
+    [ "$(readlink bin/pdata/drawer)" = "$PWD/bin/drawer" ]
 }
 hook_draws() {
   printf '{"delta":"```dot\\ndigraph{a->b}\\n```\\n","final":true,"message_id":"chk","index":0}' |
@@ -136,9 +137,8 @@ hook_draws() {
 }
 stage "plugin: session" session_speaks || true
 stage "plugin: hook" hook_draws || true
-# The hook with no binary in place — the session that never ran, because
-# the plugin was installed mid-session and reloaded — puts the checkout's
-# binary there itself and draws through it.
+# The hook with no session before it — the plugin installed mid-session
+# and reloaded — draws with the checkout's binary, nothing put in place.
 rm -rf bin/pdata-cold
 hook_cold() {
   printf '{"delta":"```dot\\ndigraph{a->b}\\n```\\n","final":true,"message_id":"cold","index":0}' |
@@ -146,6 +146,25 @@ hook_cold() {
     grep -q displayContent
 }
 stage "plugin: hook, cold" hook_cold || true
+# A version runs its own binary, whatever another left in the shared data
+# directory: here a stand-in for an older version's, which draws nothing,
+# under the release zip's layout and under this checkout.
+rm -rf bin/pdata-old bin/pzip
+older_left() {
+  case $(uname -m) in x86_64 | amd64) a=amd64 ;; aarch64 | arm64) a=arm64 ;; *) a= ;; esac
+  p=$(uname -s | tr '[:upper:]' '[:lower:]')-$a
+  mkdir -p bin/pdata-old bin/pzip/scripts/bin &&
+    printf '#!/bin/sh\necho {}\n' >bin/pdata-old/drawer && chmod +x bin/pdata-old/drawer &&
+    printf 'shipped 0.1.0 %s\n' "$p" >bin/pdata-old/drawer.from &&
+    cp scripts/drawer bin/pzip/scripts/ &&
+    ln -s "$PWD/bin/drawer" "bin/pzip/scripts/bin/drawer-$p" || return 1
+  for r in bin/pzip .; do
+    printf '{"delta":"```dot\\ndigraph{a->b}\\n```\\n","final":true,"message_id":"old-%s","index":0}' "$r" |
+      CLAUDE_PLUGIN_ROOT=$r CLAUDE_PLUGIN_DATA=bin/pdata-old DRAWER_STATE=bin/pdata-old "$r/scripts/drawer" hook |
+      grep -q displayContent || { echo "under $r the older binary drew"; return 1; }
+  done
+}
+stage "plugin: hook, older binary left" older_left || true
 # The module's door: no plugin variable in sight, as a hooks module's child
 # has none, and the checkout's binary found from where the script is. The
 # kind is the terminal's: a picture in kitty, glyphs in a pipe. A notice is
@@ -160,14 +179,18 @@ element_draws() {
 }
 stage "plugin: element" element_draws || true
 # The same door in a plugin installed from git: the wrapper in Claude
-# Code's cache with no binary beside it, and the one the session hook
-# downloaded in the data directory the cache path names.
+# Code's cache with no binary beside it, and the one its session hook
+# downloaded, named for its version, in the data directory the cache path
+# names — beside an older version's, which draws nothing.
 rm -rf bin/pcfg
 element_from_data() {
   cached=bin/pcfg/plugins/cache/mk/drawer/0.0.0
-  mkdir -p "$cached/scripts" bin/pcfg/plugins/data/drawer-mk &&
+  pdata=bin/pcfg/plugins/data/drawer-mk
+  rel=$(sed -n 's/^release=//p' scripts/drawer)
+  mkdir -p "$cached/scripts" "$pdata" &&
     cp scripts/drawer "$cached/scripts/" &&
-    ln -s "$PWD/bin/drawer" bin/pcfg/plugins/data/drawer-mk/drawer &&
+    ln -s "$PWD/bin/drawer" "$pdata/drawer-$rel" &&
+    printf '#!/bin/sh\necho {\\"kind\\":\\"none\\"}\n' >"$pdata/drawer" && chmod +x "$pdata/drawer" &&
     printf 'digraph { a -> b }' | env -u CLAUDE_PLUGIN_ROOT -u CLAUDE_PLUGIN_DATA "$cached/scripts/drawer" element 80 | drew
 }
 stage "plugin: element, git install" element_from_data || true
